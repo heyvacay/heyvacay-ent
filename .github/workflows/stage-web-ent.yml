@@ -1,0 +1,145 @@
+name: Stage Web Enterprise - Deploy
+
+# Deploys HeyVacay Enterprise (stage.ent.heyvacay.co) to ECS.
+# Fires when a PR merges into `stage`, or on manual dispatch.
+#
+# Expected AWS resources (provision once via IAC, us-west-2):
+#   ECR repo + ECS service + task def : stage-heyvacay-ent-web
+#   ECS cluster                       : stage-heyvacay-cluster   (reuse existing)
+#   Task-def container name           : web
+#   OIDC deploy role ARN              : repo secret AWS_ROLE_ARN
+#   GitHub environment                : Stage-Heyvacay-Ent
+# The app ships no secrets/server env today, so no Secrets Manager step is needed.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [stage]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy (leave empty for merge SHA / current ref)'
+        required: false
+        type: string
+      skip_tests:
+        description: 'Skip tests (emergency deployment)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-west-2
+  ENVIRONMENT: stage
+
+jobs:
+  test:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name != 'pull_request' || github.event.pull_request.merged == true) &&
+      !github.event.inputs.skip_tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+
+  build-and-deploy:
+    name: Build and Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (
+        needs.test.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && needs.test.result == 'skipped')
+      ) &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == 'stage'
+        )
+      )
+    environment: Stage-Heyvacay-Ent
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Discover AWS Resources
+        id: discover-resources
+        run: |
+          echo "ecr-repository=${{ env.ENVIRONMENT }}-heyvacay-ent-web" >> $GITHUB_OUTPUT
+          echo "ecs-service=${{ env.ENVIRONMENT }}-heyvacay-ent-web" >> $GITHUB_OUTPUT
+          echo "ecs-cluster=${{ env.ENVIRONMENT }}-heyvacay-cluster" >> $GITHUB_OUTPUT
+          echo "ecs-task-definition=${{ env.ENVIRONMENT }}-heyvacay-ent-web" >> $GITHUB_OUTPUT
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ECR tag immutability: append run id so re-runs/retries get a unique tag.
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ steps.discover-resources.outputs.ecr-repository }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag || format('{0}-{1}', github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha, github.run_id) }}
+        run: |
+          if aws ecr describe-images --repository-name $ECR_REPOSITORY --image-ids imageTag=$IMAGE_TAG --region $AWS_REGION > /dev/null 2>&1; then
+            echo "Image $IMAGE_TAG already exists in ECR, skipping build."
+          else
+            docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile.prod .
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          fi
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition --task-definition ${{ steps.discover-resources.outputs.ecs-task-definition }} --query taskDefinition > task-definition.json
+
+      - name: Fill in the new image ID in the ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: web
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Register new task definition revision
+        id: register-task-def
+        run: |
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.task-def.outputs.task-definition }} \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task-def-arn=$NEW_TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS Service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ steps.discover-resources.outputs.ecs-cluster }} \
+            --service ${{ steps.discover-resources.outputs.ecs-service }} \
+            --task-definition ${{ steps.register-task-def.outputs.task-def-arn }} \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster ${{ steps.discover-resources.outputs.ecs-cluster }} \
+            --services ${{ steps.discover-resources.outputs.ecs-service }}
+          echo "✅ ECS service stable on new task definition"
