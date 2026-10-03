@@ -1,0 +1,29 @@
+# HeyVacay Enterprise — production image.
+# Multi-stage: build with full deps, ship only the standalone server bundle.
+
+# Step 1: Builder
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Step 2: Runner
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# next.config.ts output:'standalone' bundles the server + traced node_modules
+# into .next/standalone. Static assets and /public are copied alongside.
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]
