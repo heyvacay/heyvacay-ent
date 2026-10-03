@@ -1,0 +1,144 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ */
+/*  HeyVacay Enterprise — brand design tokens                          */
+/*  Signature cyan #23e3ef on deep navy. Premium, high-contrast SaaS.  */
+/* ------------------------------------------------------------------ */
+@theme {
+  --color-brand: #23e3ef;
+  --color-brand-dark: #10c3d4;
+  --color-brand-soft: rgba(35, 227, 239, 0.12);
+
+  --color-navy: #0a1426;
+  --color-navy-deep: #060d1b;
+  --color-surface: #0f1d35;
+  --color-surface-2: #14264a;
+
+  --color-mist: #e8f6f9;
+  --color-muted: #93a7c4;
+  --color-line: rgba(255, 255, 255, 0.08);
+
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display:
+    var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-glow: 0 0 60px -12px rgba(35, 227, 239, 0.45);
+  --shadow-card: 0 24px 60px -24px rgba(0, 0, 0, 0.7);
+
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-pulse-glow: pulseGlow 4s ease-in-out infinite;
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-14px);
+    }
+  }
+  @keyframes pulseGlow {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-navy);
+  color: var(--color-mist);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(35, 227, 239, 0.3);
+  color: #fff;
+}
+
+/* Thin, on-brand scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-navy-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: #1d3357;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #28466f;
+}
+
+/* ---- Reusable brand utilities ---- */
+.text-gradient {
+  background: linear-gradient(100deg, #ffffff 0%, var(--color-brand) 55%, #8ef3fa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(35, 227, 239, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(35, 227, 239, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+.glass {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.02)
+  );
+  backdrop-filter: blur(12px);
+}
+
+/* ---- Scroll reveal (driven by Reveal.tsx) ---- */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none;
+  }
+  .animate-float,
+  .animate-pulse-glow {
+    animation: none !important;
+  }
+}

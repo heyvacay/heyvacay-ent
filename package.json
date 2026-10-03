@@ -1,0 +1,30 @@
+{
+  "name": "heyvacay-ent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HeyVacay Enterprise — corporate travel + expense program (ent.heyvacay.co)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^15.5.18",
+    "react": "19.1.4",
+    "react-dom": "19.1.4"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.15",
+    "postcss": "^8",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5"
+  }
+}
