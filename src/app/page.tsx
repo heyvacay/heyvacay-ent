@@ -23,8 +23,8 @@ import {
   Wallet,
 } from '@/components/icons';
 
-const GET_STARTED_URL = '#get-started';
-const SIGN_IN_URL = '/signin';
+const GET_STARTED_URL = '/app';
+const SIGN_IN_URL = '/app';
 
 /* --------------------------- small building blocks --------------------------- */
 
