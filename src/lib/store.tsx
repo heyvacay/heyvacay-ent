@@ -15,7 +15,9 @@ import type {
   BudgetScope,
   Expense,
   ExpenseStatus,
+  IntegrationStatus,
   InventoryOption,
+  OnboardingProfile,
   Policy,
   Role,
   User,
@@ -79,6 +81,8 @@ export interface StoreApi {
   }) => void;
   setExpenseStatus: (id: string, status: ExpenseStatus) => void;
   redeemPoints: (userId: string, amount: number, reason: string) => void;
+  completeOnboarding: (profile: OnboardingProfile) => void;
+  setIntegrationStatus: (id: string, status: IntegrationStatus) => void;
   reset: () => void;
 }
 
@@ -98,7 +102,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           state: AppState;
           role: Role;
         };
-        if (parsed.state) setState(parsed.state);
+        if (parsed.state)
+          setState({
+            ...SEED,
+            ...parsed.state,
+            // back-fill slices added after this browser last saved
+            integrations: parsed.state.integrations ?? SEED.integrations,
+          });
         if (parsed.role) setRole(parsed.role);
       }
     } catch {
@@ -382,6 +392,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const completeOnboarding: StoreApi['completeOnboarding'] = useCallback(
+    (profile) => {
+      setState((s) => {
+        const newInvites = profile.invites
+          .map((e) => e.trim())
+          .filter(Boolean)
+          .filter(
+            (e) => !s.users.some((u) => u.email.toLowerCase() === e.toLowerCase())
+          )
+          .map((email) => ({
+            id: uid('u'),
+            name: email
+              .split('@')[0]
+              .replace(/[._]+/g, ' ')
+              .replace(/\b\w/g, (c) => c.toUpperCase()),
+            email,
+            role: 'employee' as const,
+            department: 'Unassigned',
+            title: 'Teammate',
+            status: 'invited' as const,
+            loyalty: [],
+            personalLinked: false,
+          }));
+        return {
+          ...s,
+          company: {
+            ...s.company,
+            name: profile.companyName || s.company.name,
+            currency: profile.currency || s.company.currency,
+          },
+          onboarding: profile,
+          users: [...s.users, ...newInvites],
+          integrations: s.integrations.map((i) =>
+            profile.integrations.includes(i.id)
+              ? { ...i, status: 'requested' as const }
+              : i
+          ),
+        };
+      });
+    },
+    []
+  );
+
+  const setIntegrationStatus: StoreApi['setIntegrationStatus'] = useCallback(
+    (id, status) => {
+      setState((s) => ({
+        ...s,
+        integrations: s.integrations.map((i) =>
+          i.id === id ? { ...i, status } : i
+        ),
+      }));
+    },
+    []
+  );
+
   const setActiveUser = useCallback((id: string) => {
     setState((s) => ({ ...s, activeUserId: id }));
   }, []);
@@ -418,6 +483,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     submitExpense,
     setExpenseStatus,
     redeemPoints,
+    completeOnboarding,
+    setIntegrationStatus,
     reset,
   };
 

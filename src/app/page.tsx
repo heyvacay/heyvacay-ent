@@ -23,7 +23,7 @@ import {
   Wallet,
 } from '@/components/icons';
 
-const GET_STARTED_URL = '/app';
+const GET_STARTED_URL = '/signup';
 const SIGN_IN_URL = '/app';
 
 /* --------------------------- small building blocks --------------------------- */
@@ -205,7 +205,7 @@ export default function Home() {
                       HeyVacay price
                     </span>
                     <span className="font-display text-lg font-bold text-brand">
-                      $611
+                      $716
                     </span>
                   </div>
                 </div>
@@ -216,16 +216,16 @@ export default function Home() {
                       Company saves
                     </p>
                     <p className="mt-1 font-display text-2xl font-extrabold text-white">
-                      <CountUp to={231} prefix="$" />
+                      <CountUp to={126} prefix="$" />
                     </p>
-                    <p className="text-xs text-brand">27% below market</p>
+                    <p className="text-xs text-brand">15% below market</p>
                   </div>
                   <div className="rounded-xl border border-line bg-navy/60 p-4 text-left">
                     <p className="text-xs uppercase tracking-wide text-muted">
                       Dana earns
                     </p>
                     <p className="mt-1 font-display text-2xl font-extrabold text-white">
-                      <CountUp to={462} />
+                      <CountUp to={252} />
                     </p>
                     <p className="text-xs text-brand">points · 2× savings</p>
                   </div>
@@ -255,7 +255,7 @@ export default function Home() {
           <div className="mt-14 grid gap-5 sm:grid-cols-3">
             {[
               {
-                stat: <CountUp to={28} suffix="%" />,
+                stat: <CountUp to={15} suffix="%" />,
                 label: 'Average savings vs. market on managed trips',
               },
               {
@@ -634,7 +634,7 @@ export default function Home() {
           <Reveal>
             <div className="grid gap-8 rounded-3xl border border-line bg-surface/50 px-8 py-10 text-center sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { n: <CountUp to={28} suffix="%" />, l: 'Average savings vs. market' },
+                { n: <CountUp to={15} suffix="%" />, l: 'Average savings vs. market' },
                 { n: <CountUp to={190} suffix="+" />, l: 'Countries of inventory' },
                 { n: <CountUp to={30} suffix="s" />, l: 'To set up a company' },
                 { n: <>$0</>, l: 'Cost to your company' },

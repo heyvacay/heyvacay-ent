@@ -129,6 +129,42 @@ export interface InventoryOption {
   carrier?: string;
 }
 
+export type IntegrationCategory =
+  | 'Accounting'
+  | 'HR / HRIS'
+  | 'Expense & cards'
+  | 'Identity'
+  | 'Comms';
+
+export type IntegrationStatus = 'available' | 'requested' | 'connected';
+
+export interface Integration {
+  id: string;
+  name: string;
+  category: IntegrationCategory;
+  blurb: string;
+  status: IntegrationStatus;
+}
+
+/** Captured by the guided sign-up flow and used to personalize the program. */
+export interface OnboardingProfile {
+  companyName: string;
+  workEmail: string;
+  teamSize: string;
+  hq: string;
+  currency: string;
+  tripsPerMonth: string;
+  books: 'flights' | 'hotels' | 'both';
+  geography: 'domestic' | 'international' | 'mixed';
+  annualSpend: number;
+  bookingTool: string;
+  expenseTool: string;
+  integrations: string[];
+  invites: string[];
+  estimatedSavings: number;
+  completedAt: string;
+}
+
 export interface AppState {
   company: Company;
   users: User[];
@@ -137,6 +173,8 @@ export interface AppState {
   bookings: Booking[];
   expenses: Expense[];
   points: PointsEntry[];
+  integrations: Integration[];
+  onboarding?: OnboardingProfile;
   /** who is signed in for the demo */
   activeUserId: string;
 }

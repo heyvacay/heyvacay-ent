@@ -13,7 +13,7 @@ const LINKS = [
 // Where existing users log in / where company signup begins. Point these at the
 // real platform routes once the app + auth are wired.
 const SIGN_IN_URL = '/app';
-const GET_STARTED_URL = '/app';
+const GET_STARTED_URL = '/signup';
 
 function Logo() {
   return (

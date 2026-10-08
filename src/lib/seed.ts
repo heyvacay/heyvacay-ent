@@ -2,6 +2,7 @@ import type {
   AppState,
   Booking,
   Expense,
+  Integration,
   InventoryOption,
   PointsEntry,
 } from './types';
@@ -156,6 +157,22 @@ const points: PointsEntry[] = [
   { id: 'pt_5', userId: 'u_leo', delta: 550, reason: 'Flight savings · JFK → LHR', bucket: 'self', bookingId: 'bk_5', createdAt: addDays(T, -2) },
 ];
 
+/** Catalog of integrations shown in onboarding and the Integrations page. */
+export const INTEGRATIONS: Integration[] = [
+  { id: 'quickbooks', name: 'QuickBooks', category: 'Accounting', blurb: 'Auto-post every expense to the right GL code — reconciled, no receipts chased.', status: 'available' },
+  { id: 'netsuite', name: 'NetSuite', category: 'Accounting', blurb: 'Sync trips and expenses straight into NetSuite.', status: 'available' },
+  { id: 'xero', name: 'Xero', category: 'Accounting', blurb: 'Reconcile travel spend to Xero automatically.', status: 'available' },
+  { id: 'bamboohr', name: 'BambooHR', category: 'HR / HRIS', blurb: 'Pull your org chart, departments, and new hires.', status: 'available' },
+  { id: 'rippling', name: 'Rippling', category: 'HR / HRIS', blurb: 'Keep people, roles, and departments in sync.', status: 'available' },
+  { id: 'gusto', name: 'Gusto', category: 'HR / HRIS', blurb: 'Import your team roster in one click.', status: 'available' },
+  { id: 'expensify', name: 'Expensify', category: 'Expense & cards', blurb: 'Bring your existing expense flow — or retire it.', status: 'available' },
+  { id: 'ramp', name: 'Ramp', category: 'Expense & cards', blurb: 'Match card swipes to the right trip automatically.', status: 'available' },
+  { id: 'brex', name: 'Brex', category: 'Expense & cards', blurb: 'Reconcile card spend against bookings.', status: 'available' },
+  { id: 'okta', name: 'Okta', category: 'Identity', blurb: 'SSO and SCIM provisioning for your whole team.', status: 'available' },
+  { id: 'google', name: 'Google Workspace', category: 'Identity', blurb: 'One-click SSO with Google.', status: 'available' },
+  { id: 'slack', name: 'Slack', category: 'Comms', blurb: 'Approvals and trip alerts right in Slack.', status: 'available' },
+];
+
 export const SEED: AppState = {
   company,
   users,
@@ -164,6 +181,7 @@ export const SEED: AppState = {
   bookings,
   expenses,
   points,
+  integrations: INTEGRATIONS,
   activeUserId: 'u_admin',
 };
 
