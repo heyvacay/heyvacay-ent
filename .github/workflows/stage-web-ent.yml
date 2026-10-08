@@ -7,8 +7,9 @@ name: Stage Web Enterprise - Deploy
 #   ECR repo + ECS service + task def : stage-heyvacay-ent
 #   ECS cluster                       : stage-heyvacay-cluster   (shared)
 #   Task-def container name           : ent
-#   OIDC deploy role ARN              : repo secret AWS_ROLE_ARN
-#                                       (= terraform output ent_github_actions_role_arn)
+#   OIDC deploy role ARN              : hardcoded below (= terraform output ent_github_actions_role_arn)
+#                                       (an ARN is an identifier, not a credential; the IAM trust
+#                                        policy + GitHub OIDC are the actual access control)
 #   GitHub environment                : Stage-Heyvacay-Ent
 # The app ships no secrets/server env today, so no Secrets Manager step is needed.
 
@@ -82,7 +83,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::256309399831:role/stage-heyvacay-ent-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Discover AWS Resources
