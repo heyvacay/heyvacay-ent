@@ -9,6 +9,9 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+# Ensure /app/public exists even when the project ships no public/ dir,
+# so the runner COPY below never fails.
+RUN mkdir -p /app/public
 
 # Step 2: Runner
 FROM node:20-alpine AS runner
