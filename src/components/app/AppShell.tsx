@@ -16,6 +16,7 @@ import {
   Calendar,
   Sparkles,
   Building,
+  Globe,
 } from '@/components/icons';
 
 const ADMIN_NAV = [
@@ -25,6 +26,7 @@ const ADMIN_NAV = [
   { href: '/app/policies', label: 'Policies', icon: Shield },
   { href: '/app/bookings', label: 'Bookings', icon: Plane },
   { href: '/app/expenses', label: 'Expenses', icon: Receipt },
+  { href: '/app/integrations', label: 'Integrations', icon: Globe },
 ];
 
 const EMPLOYEE_NAV = [
