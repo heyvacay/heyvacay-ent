@@ -83,6 +83,9 @@ export interface StoreApi {
   redeemPoints: (userId: string, amount: number, reason: string) => void;
   completeOnboarding: (profile: OnboardingProfile) => void;
   setIntegrationStatus: (id: string, status: IntegrationStatus) => void;
+  setGlMapping: (category: string, account: string) => void;
+  syncExpense: (id: string) => void;
+  syncAllApproved: () => void;
   reset: () => void;
 }
 
@@ -108,6 +111,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...parsed.state,
             // back-fill slices added after this browser last saved
             integrations: parsed.state.integrations ?? SEED.integrations,
+            accountingMap: parsed.state.accountingMap ?? SEED.accountingMap,
           });
         if (parsed.role) setRole(parsed.role);
       }
@@ -447,6 +451,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setGlMapping: StoreApi['setGlMapping'] = useCallback(
+    (category, account) => {
+      setState((s) => ({
+        ...s,
+        accountingMap: { ...s.accountingMap, [category]: account },
+      }));
+    },
+    []
+  );
+
+  const syncExpense: StoreApi['syncExpense'] = useCallback((id) => {
+    setState((s) => ({
+      ...s,
+      expenses: s.expenses.map((e) =>
+        e.id === id
+          ? { ...e, synced: true, glCode: e.glCode ?? s.accountingMap[e.category] }
+          : e
+      ),
+    }));
+  }, []);
+
+  const syncAllApproved: StoreApi['syncAllApproved'] = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      expenses: s.expenses.map((e) =>
+        (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
+          ? { ...e, synced: true, glCode: e.glCode ?? s.accountingMap[e.category] }
+          : e
+      ),
+    }));
+  }, []);
+
   const setActiveUser = useCallback((id: string) => {
     setState((s) => ({ ...s, activeUserId: id }));
   }, []);
@@ -485,6 +521,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     redeemPoints,
     completeOnboarding,
     setIntegrationStatus,
+    setGlMapping,
+    syncExpense,
+    syncAllApproved,
     reset,
   };
 
