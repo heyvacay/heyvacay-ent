@@ -17,10 +17,12 @@ import {
   Sparkles,
   Building,
   Globe,
+  TrendUp,
 } from '@/components/icons';
 
 const ADMIN_NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: ChartBar },
+  { href: '/app/reports', label: 'Reports', icon: TrendUp },
   { href: '/app/people', label: 'People', icon: Users },
   { href: '/app/budgets', label: 'Budgets', icon: Wallet },
   { href: '/app/policies', label: 'Policies', icon: Shield },

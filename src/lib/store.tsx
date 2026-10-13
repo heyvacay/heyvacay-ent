@@ -112,6 +112,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // back-fill slices added after this browser last saved
             integrations: parsed.state.integrations ?? SEED.integrations,
             accountingMap: parsed.state.accountingMap ?? SEED.accountingMap,
+            history: parsed.state.history ?? SEED.history,
           });
         if (parsed.role) setRole(parsed.role);
       }
