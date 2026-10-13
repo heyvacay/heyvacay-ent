@@ -181,6 +181,8 @@ export interface AppState {
   onboarding?: OnboardingProfile;
   /** Expense category → GL account, used when posting to accounting. */
   accountingMap: Record<string, string>;
+  /** Trailing monthly spend & savings, for the Reports charts. */
+  history: { month: string; spend: number; savings: number }[];
   /** who is signed in for the demo */
   activeUserId: string;
 }

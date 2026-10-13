@@ -139,6 +139,13 @@ export const Lock = (p: IconProps) => (
   </Base>
 );
 
+export const TrendUp = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M4 18 10 12l3 3 7-7" />
+    <path d="M15 6h6v6" />
+  </Base>
+);
+
 export const Route = (p: IconProps) => (
   <Base {...p}>
     <circle cx="6" cy="18" r="2.5" />
