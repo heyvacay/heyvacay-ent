@@ -7,7 +7,7 @@ import { Check, Globe } from '@/components/icons';
 import type { Integration } from '@/lib/types';
 
 export default function IntegrationsPage() {
-  const { state, setIntegrationStatus } = useStore();
+  const { state } = useStore();
 
   const connected = state.integrations.filter((i) => i.status === 'connected').length;
   const requested = state.integrations.filter((i) => i.status === 'requested').length;
@@ -66,23 +66,17 @@ export default function IntegrationsPage() {
                     </div>
                     <p className="mt-1 text-sm text-slate-400">{it.blurb}</p>
                     <div className="mt-3">
-                      {it.status === 'connected' ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setIntegrationStatus(it.id, 'available')}
-                        >
-                          Disconnect
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant={it.status === 'requested' ? 'outline' : 'primary'}
-                          onClick={() => setIntegrationStatus(it.id, 'connected')}
-                        >
-                          {it.status === 'requested' ? 'Finish setup' : 'Connect'}
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        variant={it.status === 'connected' ? 'outline' : 'primary'}
+                        href={`/app/integrations/${it.id}`}
+                      >
+                        {it.status === 'connected'
+                          ? 'Manage'
+                          : it.status === 'requested'
+                            ? 'Finish setup'
+                            : 'Set up'}
+                      </Button>
                     </div>
                   </div>
                 </Card>

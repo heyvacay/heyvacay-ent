@@ -173,6 +173,19 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'slack', name: 'Slack', category: 'Comms', blurb: 'Approvals and trip alerts right in Slack.', status: 'available' },
 ];
 
+/** Integration ids that post expenses to a general ledger. */
+export const ACCOUNTING_IDS = ['quickbooks', 'netsuite', 'xero'];
+
+/** Default expense category → GL account mapping (editable per company). */
+export const DEFAULT_GL: Record<string, string> = {
+  Meals: '6420 · Meals & Entertainment',
+  'Ground transport': '6310 · Travel — Ground',
+  Lodging: '6320 · Travel — Lodging',
+  Airfare: '6300 · Travel — Airfare',
+  Supplies: '6500 · Office Supplies',
+  Other: '6900 · Other Expenses',
+};
+
 export const SEED: AppState = {
   company,
   users,
@@ -182,6 +195,7 @@ export const SEED: AppState = {
   expenses,
   points,
   integrations: INTEGRATIONS,
+  accountingMap: DEFAULT_GL,
   activeUserId: 'u_admin',
 };
 

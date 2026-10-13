@@ -14,6 +14,8 @@ import {
   StatCard,
 } from '@/components/app/ui';
 import { money2, shortDate, todayISO } from '@/lib/format';
+import { ACCOUNTING_IDS } from '@/lib/seed';
+import { Check, Globe } from '@/components/icons';
 import type { ExpenseCategory, ExpenseStatus } from '@/lib/types';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -33,9 +35,21 @@ function StatusBadge({ status }: { status: ExpenseStatus }) {
 }
 
 export default function ExpensesPage() {
-  const { state, role, activeUser, userById, submitExpense, setExpenseStatus } =
-    useStore();
+  const {
+    state,
+    role,
+    activeUser,
+    userById,
+    submitExpense,
+    setExpenseStatus,
+    syncExpense,
+    syncAllApproved,
+  } = useStore();
   const isAdmin = role === 'admin';
+  const accounting = state.integrations.find(
+    (i) => ACCOUNTING_IDS.includes(i.id) && i.status === 'connected'
+  );
+  const showPosting = isAdmin && !!accounting;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     merchant: '',
@@ -55,6 +69,9 @@ export default function ExpensesPage() {
   const approvedTotal = visible
     .filter((e) => e.status === 'approved' || e.status === 'reimbursed')
     .reduce((s, e) => s + e.amount, 0);
+  const postable = visible.filter(
+    (e) => (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
+  );
 
   const submit = () => {
     if (!form.merchant.trim() || !form.amount) return;
@@ -99,6 +116,32 @@ export default function ExpensesPage() {
         <StatCard label="Pending amount" value={money2(pendingTotal)} />
         <StatCard accent label="Approved" value={money2(approvedTotal)} />
       </div>
+
+      {showPosting && accounting && (
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-brand/30 bg-brand/8 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-dark">
+              <Globe className="h-5 w-5" />
+            </span>
+            <div className="text-sm">
+              <p className="font-semibold text-slate-800">
+                Posting to {accounting.name}
+              </p>
+              <p className="text-slate-500">
+                Approved expenses post to the right GL code automatically — no
+                receipts chased.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={syncAllApproved}
+            disabled={postable.length === 0}
+          >
+            {postable.length ? `Post ${postable.length} approved` : 'All posted'}
+          </Button>
+        </div>
+      )}
 
       {open && (
         <Card className="my-6">
@@ -191,6 +234,9 @@ export default function ExpensesPage() {
                     <th className="px-5 py-3 font-semibold">Date</th>
                     <th className="px-5 py-3 font-semibold">Amount</th>
                     <th className="px-5 py-3 font-semibold">Status</th>
+                    {showPosting && (
+                      <th className="px-5 py-3 font-semibold">Posting</th>
+                    )}
                     {isAdmin && (
                       <th className="px-5 py-3 font-semibold text-right sm:px-6">
                         Action
@@ -230,6 +276,36 @@ export default function ExpensesPage() {
                       <td className="px-5 py-3">
                         <StatusBadge status={e.status} />
                       </td>
+                      {showPosting && (
+                        <td className="px-5 py-3">
+                          {e.synced ? (
+                            <div>
+                              <Badge color="green">
+                                <Check className="h-3 w-3" /> Posted
+                              </Badge>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {e.glCode ?? state.accountingMap[e.category]}
+                              </p>
+                            </div>
+                          ) : e.status === 'approved' ||
+                            e.status === 'reimbursed' ? (
+                            <div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => syncExpense(e.id)}
+                              >
+                                Post
+                              </Button>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {state.accountingMap[e.category]}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
+                      )}
                       {isAdmin && (
                         <td className="px-5 py-3 sm:px-6">
                           {e.status === 'submitted' ? (

@@ -102,6 +102,10 @@ export interface Expense {
   hasReceipt: boolean;
   note?: string;
   tripId?: string;
+  /** GL account the expense posts to (set when synced to accounting). */
+  glCode?: string;
+  /** true once pushed to the connected accounting integration. */
+  synced?: boolean;
 }
 
 export type PointsBucket = 'self' | 'booker';
@@ -175,6 +179,8 @@ export interface AppState {
   points: PointsEntry[];
   integrations: Integration[];
   onboarding?: OnboardingProfile;
+  /** Expense category → GL account, used when posting to accounting. */
+  accountingMap: Record<string, string>;
   /** who is signed in for the demo */
   activeUserId: string;
 }
