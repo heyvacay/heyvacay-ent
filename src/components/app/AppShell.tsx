@@ -18,11 +18,13 @@ import {
   Building,
   Globe,
   TrendUp,
+  Bell,
 } from '@/components/icons';
 
 const ADMIN_NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: ChartBar },
   { href: '/app/reports', label: 'Reports', icon: TrendUp },
+  { href: '/app/approvals', label: 'Approvals', icon: Bell },
   { href: '/app/people', label: 'People', icon: Users },
   { href: '/app/budgets', label: 'Budgets', icon: Wallet },
   { href: '/app/policies', label: 'Policies', icon: Shield },
