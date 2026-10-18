@@ -131,6 +131,21 @@ export interface InventoryOption {
   star?: number;
   cabin?: string;
   carrier?: string;
+  // hotel display
+  imageUrl?: string;
+  rating?: number;
+  reviews?: number;
+  location?: string;
+  nights?: number;
+  // flight display
+  airline?: string;
+  airlineIata?: string;
+  departAt?: string;
+  arriveAt?: string;
+  originIata?: string;
+  destIata?: string;
+  stops?: number;
+  durationMins?: number;
 }
 
 export type IntegrationCategory =
