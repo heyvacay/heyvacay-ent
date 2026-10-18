@@ -214,21 +214,49 @@ export const SEED: AppState = {
 };
 
 /** Sample search results for the booking flow (mock inventory). */
+const IATA: Record<string, string> = {
+  'new york': 'JFK',
+  austin: 'AUS',
+  london: 'LHR',
+  chicago: 'ORD',
+  seattle: 'SEA',
+  'los angeles': 'LAX',
+  boston: 'BOS',
+  miami: 'MIA',
+  denver: 'DEN',
+  'san francisco': 'SFO',
+};
+function destCode(d: string): string {
+  return (
+    IATA[d.toLowerCase()] ||
+    d.replace(/[^a-z]/gi, '').slice(0, 3).toUpperCase() ||
+    'JFK'
+  );
+}
+
 export function inventoryFor(
   type: 'hotel' | 'flight',
   destination: string
 ): InventoryOption[] {
   const d = destination.trim() || 'New York';
   if (type === 'flight') {
+    const dest = destCode(d);
+    const base = {
+      type: 'flight' as const,
+      cabin: 'Economy',
+      originIata: 'SFO',
+      destIata: dest,
+    };
     return [
-      { id: 'inv_f1', type: 'flight', title: `Nonstop to ${d}`, detail: 'United · Economy · 1 stop savings fare', carrier: 'United', cabin: 'Economy', marketPrice: 612, price: 468 },
-      { id: 'inv_f2', type: 'flight', title: `Nonstop to ${d}`, detail: 'Delta · Economy · refundable', carrier: 'Delta', cabin: 'Economy', marketPrice: 689, price: 556 },
-      { id: 'inv_f3', type: 'flight', title: `1 stop to ${d}`, detail: 'Alaska · Economy · lowest fare', carrier: 'Alaska', cabin: 'Economy', marketPrice: 451, price: 362 },
+      { ...base, id: 'inv_f1', title: `San Francisco → ${d}`, detail: 'Economy · round trip', carrier: 'United', airline: 'United Airlines', airlineIata: 'UA', departAt: '2026-06-02T08:15:00', arriveAt: '2026-06-02T16:40:00', stops: 0, durationMins: 325, marketPrice: 612, price: 468 },
+      { ...base, id: 'inv_f2', title: `San Francisco → ${d}`, detail: 'Economy · refundable · round trip', carrier: 'Delta', airline: 'Delta Air Lines', airlineIata: 'DL', departAt: '2026-06-02T11:05:00', arriveAt: '2026-06-02T19:20:00', stops: 0, durationMins: 315, marketPrice: 689, price: 556 },
+      { ...base, id: 'inv_f3', title: `San Francisco → ${d}`, detail: 'Economy · lowest fare · round trip', carrier: 'Alaska', airline: 'Alaska Airlines', airlineIata: 'AS', departAt: '2026-06-02T06:40:00', arriveAt: '2026-06-02T17:10:00', stops: 1, durationMins: 450, marketPrice: 451, price: 362 },
     ];
   }
+  const base = { type: 'hotel' as const, nights: 3 };
   return [
-    { id: 'inv_h1', type: 'hotel', title: `The Standard, ${d}`, detail: '3 nights · King · refundable', star: 4, marketPrice: 1290, price: 1044 },
-    { id: 'inv_h2', type: 'hotel', title: `Kimpton, ${d}`, detail: '3 nights · Queen · breakfast', star: 4, marketPrice: 1110, price: 912 },
-    { id: 'inv_h3', type: 'hotel', title: `Pod Hotel, ${d}`, detail: '3 nights · Double · value rate', star: 3, marketPrice: 690, price: 561 },
+    { ...base, id: 'inv_h1', title: `The Standard, ${d}`, detail: '3 nights · King · free cancellation', star: 4, rating: 9.1, reviews: 1240, location: `Downtown ${d}`, imageUrl: 'https://picsum.photos/seed/hvstandard/640/480', marketPrice: 1290, price: 1044 },
+    { ...base, id: 'inv_h2', title: `Kimpton ${d}`, detail: '3 nights · Queen · breakfast included', star: 4, rating: 8.8, reviews: 980, location: `Midtown ${d}`, imageUrl: 'https://picsum.photos/seed/hvkimpton/640/480', marketPrice: 1110, price: 912 },
+    { ...base, id: 'inv_h3', title: `Pod Hotel ${d}`, detail: '3 nights · Double · value rate', star: 3, rating: 8.3, reviews: 2100, location: `${d} Center`, imageUrl: 'https://picsum.photos/seed/hvpod/640/480', marketPrice: 690, price: 561 },
   ];
 }
