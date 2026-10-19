@@ -24,13 +24,9 @@ import type {
 } from './types';
 import { SEED } from './seed';
 import { uid } from './format';
+import { rewardsFor } from './rewards';
 
 const STORAGE_KEY = 'hv_ent_demo_v1';
-
-/** Points multiplier on savings, by product. Mirrors the rewards copy. */
-function multiplier(type: 'hotel' | 'flight'): number {
-  return type === 'flight' ? 2 : 1;
-}
 
 export interface PolicyFlag {
   policy: Policy;
@@ -260,8 +256,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const book: StoreApi['book'] = useCallback(
     ({ opt, travelerId, startDate, endDate }) => {
-      const savings = Math.max(0, opt.marketPrice - opt.price);
-      const pointsEarned = Math.round(savings * multiplier(opt.type));
+      const { savings, points: pointsEarned } = rewardsFor(opt);
       const flags = evaluatePolicies(opt, startDate);
       const needsApproval = flags.some(
         (f) => f.policy.action === 'approve' || f.policy.action === 'block'
