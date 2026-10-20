@@ -176,11 +176,15 @@ export interface InventoryOption {
   cabin?: string;
   carrier?: string;
   // hotel display
+  hid?: string;
   imageUrl?: string;
+  images?: string[];
   rating?: number;
   reviews?: number;
   location?: string;
   nights?: number;
+  freeCancellation?: boolean;
+  competitorSource?: string;
   // flight display
   airline?: string;
   airlineIata?: string;

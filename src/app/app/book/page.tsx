@@ -18,12 +18,12 @@ import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker'
 import { format as fmtDate, parseISO } from 'date-fns';
 import {
   searchFlights,
-  searchHotels,
   placesFlights,
   placesHotels,
   type FlightPlace,
   type HotelPlace,
 } from '@/lib/search';
+import { useRouter } from 'next/navigation';
 import {
   Plane,
   Receipt,
@@ -538,6 +538,7 @@ type HotelSug = HotelPlace & Suggestion;
 export default function BookPage() {
   const { state, role, activeUser, evaluatePolicies, book, pointsBalance } =
     useStore();
+  const router = useRouter();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
   const [type, setType] = useState<BookingType>('flight');
@@ -645,17 +646,24 @@ export default function BookPage() {
       } else {
         let p = hotelPlace;
         if (!p && hotelText.trim()) p = (await placesHotels(hotelText))[0] ?? null;
-        if (!p) throw new Error('Pick a destination city to search.');
+        if (!p) throw new Error('Pick a destination to search.');
         setHotelPlace(p);
         if (new Date(end) <= new Date(start))
           throw new Error('Check-out must be after check-in.');
-        const r = await searchHotels({
-          regionId: p.regionId,
-          checkin: start,
-          checkout: end,
-          adults: 1,
-        });
-        setResults(r);
+        // Hotels get their own results page (like HeyVacay.co).
+        const q = new URLSearchParams();
+        q.set('checkin', start);
+        q.set('checkout', end);
+        q.set('adults', '1');
+        q.set('label', p.label);
+        if (p.regionId) q.set('regionId', String(p.regionId));
+        else if (p.lat != null && p.lng != null) {
+          q.set('lat', String(p.lat));
+          q.set('lng', String(p.lng));
+        }
+        if (p.hid) q.set('hid', String(p.hid));
+        router.push(`/app/hotels?${q.toString()}`);
+        return;
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed. Try again.');
@@ -876,7 +884,10 @@ export default function BookPage() {
                 setHotelPlace(null);
               }}
               fetcher={async (q) =>
-                (await placesHotels(q)).map((p) => ({ ...p, key: String(p.regionId) }))
+                (await placesHotels(q)).map((p) => ({
+                  ...p,
+                  key: p.type === 'region' ? `r${p.regionId}` : `h${p.hid}`,
+                }))
               }
               onPick={(s) => setHotelPlace(s)}
             />
