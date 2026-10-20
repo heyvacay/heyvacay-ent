@@ -210,10 +210,8 @@ export async function searchHotels(args: HotelSearchArgs): Promise<InventoryOpti
       const original = num(pt.show_amount);
 
       let marketPrice = allInCurrent;
-      let refSource: string | undefined;
       if (competitorLowest != null && competitorLowest > allInCurrent) {
         marketPrice = Math.round(competitorLowest);
-        refSource = h.competitor?.lowestSource;
       } else {
         const synthetic =
           competitive != null ? Math.ceil(competitive + pap) : original != null ? Math.ceil(original + pap) : undefined;
@@ -227,7 +225,7 @@ export async function searchHotels(args: HotelSearchArgs): Promise<InventoryOpti
         id: h.id || h.hid,
         type: 'hotel',
         title: h.hotelInfo.name,
-        detail: refSource ? `Lowest online via ${refSource}` : `${nights} night${nights === 1 ? '' : 's'}`,
+        detail: `${nights} night${nights === 1 ? '' : 's'}`,
         marketPrice,
         price: allInCurrent,
         star: h.hotelInfo.star_rating || undefined,

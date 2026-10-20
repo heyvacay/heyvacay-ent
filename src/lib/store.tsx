@@ -181,7 +181,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       for (const p of state.policies.filter((x) => x.enabled)) {
         if (p.type === 'max_nightly' && opt.type === 'hotel') {
-          const nightly = opt.price / 3;
+          const nightly = opt.price / (opt.nights || 1);
           if (nightly > Number(p.value))
             flags.push({
               policy: p,
