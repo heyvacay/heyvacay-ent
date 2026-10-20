@@ -56,6 +56,16 @@ interface RawAirline {
   name: string;
   iataCode: string | null;
 }
+interface RawSegment {
+  originIata: string;
+  destinationIata: string;
+  departingAt: string;
+  arrivingAt: string;
+  durationMinutes: number | null;
+  marketingCarrier?: RawAirline;
+  flightNumber?: string | null;
+  aircraft?: string | null;
+}
 interface RawSlice {
   originIata: string;
   destinationIata: string;
@@ -63,6 +73,7 @@ interface RawSlice {
   arrivingAt: string;
   durationMinutes: number | null;
   stops: number;
+  segments?: RawSegment[];
 }
 interface RawFlightOffer {
   id: string;
@@ -71,6 +82,12 @@ interface RawFlightOffer {
   cabinClass: string;
   owner: RawAirline;
   slices: RawSlice[];
+  conditions?: {
+    changeable?: boolean | null;
+    refundable?: boolean | null;
+    carryOn?: number | null;
+    checked?: number | null;
+  };
 }
 
 export interface FlightSearchArgs {
@@ -128,6 +145,28 @@ export async function searchFlights(args: FlightSearchArgs): Promise<InventoryOp
         destIata: out.destinationIata,
         stops: out.stops,
         durationMins: out.durationMinutes ?? undefined,
+        details: {
+          kind: 'flight',
+          cabin,
+          conditions: o.conditions,
+          slices: (o.slices ?? []).map((s) => ({
+            originIata: s.originIata,
+            destIata: s.destinationIata,
+            durationMins: s.durationMinutes ?? undefined,
+            stops: s.stops,
+            segments: (s.segments ?? []).map((sg) => ({
+              originIata: sg.originIata,
+              destIata: sg.destinationIata,
+              departAt: sg.departingAt,
+              arriveAt: sg.arrivingAt,
+              durationMins: sg.durationMinutes ?? undefined,
+              carrier: sg.marketingCarrier?.name,
+              carrierIata: sg.marketingCarrier?.iataCode ?? undefined,
+              flightNumber: sg.flightNumber ?? undefined,
+              aircraft: sg.aircraft ?? undefined,
+            })),
+          })),
+        },
       };
     })
     .filter((x): x is InventoryOption => x !== null);
@@ -156,6 +195,7 @@ interface RawHotel {
     images?: string[];
     rating?: number;
     totalReviews?: number;
+    amenity_groups?: { group_name?: string; amenities?: string[] }[];
   };
   rates?: RawRate[];
   competitor?: { lowest?: number; lowestSource?: string };
@@ -218,8 +258,15 @@ export async function searchHotels(args: HotelSearchArgs): Promise<InventoryOpti
         if (synthetic != null && synthetic > allInCurrent) marketPrice = synthetic;
       }
 
-      const img = h.hotelInfo.images?.[0]?.replace('{size}', '640x400');
+      const images = (h.hotelInfo.images ?? [])
+        .slice(0, 6)
+        .map((i) => i.replace('{size}', '640x400'));
       const loc = h.hotelInfo.region?.name || h.hotelInfo.address || undefined;
+      const amenities = Array.from(
+        new Set(
+          (h.hotelInfo.amenity_groups ?? []).flatMap((g) => g.amenities ?? [])
+        )
+      ).slice(0, 12);
 
       return {
         id: h.id || h.hid,
@@ -229,11 +276,19 @@ export async function searchHotels(args: HotelSearchArgs): Promise<InventoryOpti
         marketPrice,
         price: allInCurrent,
         star: h.hotelInfo.star_rating || undefined,
-        imageUrl: img,
+        imageUrl: images[0],
         rating: num(h.hotelInfo.rating),
         reviews: num(h.hotelInfo.totalReviews),
         location: loc,
         nights,
+        details: {
+          kind: 'hotel',
+          images,
+          amenities,
+          address: h.hotelInfo.address,
+          rating: num(h.hotelInfo.rating),
+          reviews: num(h.hotelInfo.totalReviews),
+        },
       };
     })
     .filter((x): x is InventoryOption => x !== null);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '@/lib/store';
 import {
   Button,
@@ -32,7 +32,12 @@ import {
   MapPin,
   Sparkles,
 } from '@/components/icons';
-import type { BookingType, InventoryOption } from '@/lib/types';
+import type {
+  BookingType,
+  InventoryOption,
+  FlightDetails,
+  HotelDetails,
+} from '@/lib/types';
 import type { PolicyFlag } from '@/lib/store';
 
 /** Why-book-here perks shown on the employee home before a search. */
@@ -161,6 +166,247 @@ function AirlineBadge({ iata }: { iata?: string }) {
     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-xs font-bold text-brand-dark">
       {iata ?? <Plane className="h-4 w-4" />}
     </span>
+  );
+}
+
+/* ---------------- details view ---------------- */
+
+function layoverLabel(aIso: string, bIso: string): string {
+  const mins = Math.round(
+    (new Date(bIso).getTime() - new Date(aIso).getTime()) / 60000
+  );
+  return Number.isFinite(mins) && mins > 0 ? durLabel(mins) : '';
+}
+
+function Chip({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+      {children}
+    </span>
+  );
+}
+
+function CondChip({ label, val }: { label: string; val?: boolean | null }) {
+  if (val == null) return null;
+  return (
+    <span
+      className={cn(
+        'rounded-full px-2.5 py-1 text-xs font-medium',
+        val ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+      )}
+    >
+      {val ? '✓' : '✕'} {label}
+    </span>
+  );
+}
+
+function FlightDetailBody({ d }: { d: FlightDetails }) {
+  const multi = d.slices.length > 1;
+  return (
+    <div className="space-y-5">
+      {d.slices.map((slice, si) => (
+        <div key={si}>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-800">
+              {multi ? (si === 0 ? 'Outbound' : 'Return') : 'Itinerary'} ·{' '}
+              {slice.originIata} → {slice.destIata}
+            </p>
+            <p className="text-xs text-slate-400">
+              {durLabel(slice.durationMins)} · {stopsLabel(slice.stops)}
+            </p>
+          </div>
+          <div className="space-y-2">
+            {slice.segments.map((sg, gi) => (
+              <div key={gi}>
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-800">
+                      <AirlineBadge iata={sg.carrierIata} />
+                      {sg.carrier}
+                      {sg.flightNumber && (
+                        <span className="text-xs text-slate-400">
+                          {sg.carrierIata}
+                          {sg.flightNumber}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {durLabel(sg.durationMins)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-sm">
+                    <div className="text-right">
+                      <div className="font-semibold text-slate-900">
+                        {fmtTime(sg.departAt)}
+                      </div>
+                      <div className="text-xs text-slate-400">{sg.originIata}</div>
+                    </div>
+                    <div className="flex-1 border-t border-dashed border-slate-200" />
+                    <div className="text-left">
+                      <div className="font-semibold text-slate-900">
+                        {fmtTime(sg.arriveAt)}
+                      </div>
+                      <div className="text-xs text-slate-400">{sg.destIata}</div>
+                    </div>
+                  </div>
+                  {sg.aircraft && (
+                    <p className="mt-1 text-xs text-slate-400">{sg.aircraft}</p>
+                  )}
+                </div>
+                {gi < slice.segments.length - 1 && (
+                  <p className="py-1 pl-3 text-xs font-medium text-amber-600">
+                    Layover{' '}
+                    {layoverLabel(sg.arriveAt, slice.segments[gi + 1].departAt)} in{' '}
+                    {sg.destIata}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {d.cabin && (
+        <p className="text-xs text-slate-500">
+          Cabin: <span className="font-medium text-slate-700">{d.cabin}</span>
+        </p>
+      )}
+      {d.conditions && (
+        <div className="flex flex-wrap gap-2">
+          <CondChip label="Changeable" val={d.conditions.changeable} />
+          <CondChip label="Refundable" val={d.conditions.refundable} />
+          {d.conditions.carryOn != null && (
+            <Chip>{d.conditions.carryOn} carry-on</Chip>
+          )}
+          {d.conditions.checked != null && (
+            <Chip>
+              {d.conditions.checked} checked bag
+              {d.conditions.checked === 1 ? '' : 's'}
+            </Chip>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotelDetailBody({ d, opt }: { d: HotelDetails; opt: InventoryOption }) {
+  return (
+    <div className="space-y-3">
+      <HotelImage src={d.images[0] || opt.imageUrl} alt={opt.title} />
+      {d.images.length > 1 && (
+        <div className="grid grid-cols-4 gap-2">
+          {d.images.slice(1, 5).map((src, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={src}
+              alt=""
+              className="h-16 w-full rounded-lg object-cover"
+            />
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Stars n={opt.star} />
+        {opt.rating != null && (
+          <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-xs font-bold text-brand-dark">
+            {opt.rating.toFixed(1)}
+          </span>
+        )}
+        {d.reviews != null && (
+          <span className="text-xs text-slate-400">{num(d.reviews)} reviews</span>
+        )}
+      </div>
+      {d.address && <p className="text-sm text-slate-500">{d.address}</p>}
+      {d.amenities.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {d.amenities.map((a) => (
+            <Chip key={a}>{a}</Chip>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailsModal({
+  opt,
+  signal,
+  onClose,
+  onSelect,
+}: {
+  opt: InventoryOption;
+  signal: { flags: PolicyFlag[]; savings: number; points: number };
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  const d = opt.details;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-lg overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-lg font-bold text-slate-900">
+              {opt.title}
+            </h2>
+            <p className="truncate text-xs text-slate-400">
+              {opt.location ? `${opt.location} · ` : ''}
+              {opt.detail}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-4">
+          {d?.kind === 'flight' && <FlightDetailBody d={d} />}
+          {d?.kind === 'hotel' && <HotelDetailBody d={d} opt={opt} />}
+          <div className="rounded-xl bg-slate-50 p-3">
+            <Signals
+              flags={signal.flags}
+              savings={signal.savings}
+              points={signal.points}
+            />
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              {signal.savings > 0 && (
+                <span className="text-sm text-slate-400 line-through">
+                  {money(opt.marketPrice)}
+                </span>
+              )}
+              <span className="font-display text-xl font-bold text-slate-900">
+                {money(opt.price)}
+              </span>
+            </div>
+            {opt.type === 'hotel' && (
+              <p className="text-xs text-slate-400">
+                {money(Math.round(opt.price / (opt.nights || 1)))}/night · incl.
+                taxes
+              </p>
+            )}
+          </div>
+          <Button onClick={onSelect}>
+            {opt.type === 'flight' ? 'Select' : 'Reserve'}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -319,6 +565,7 @@ export default function BookPage() {
     pending: boolean;
     points: number;
   } | null>(null);
+  const [detailOpt, setDetailOpt] = useState<InventoryOption | null>(null);
 
   const switchType = (t: BookingType) => {
     setType(t);
@@ -837,6 +1084,13 @@ export default function BookPage() {
                     >
                       Select
                     </Button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailOpt(opt)}
+                      className="text-xs font-medium text-brand-dark hover:underline"
+                    >
+                      View details
+                    </button>
                   </div>
                 </div>
                 <div className="border-t border-slate-100 pt-3">
@@ -894,9 +1148,18 @@ export default function BookPage() {
                           {money(perNight)}/night · incl. taxes
                         </p>
                       </div>
-                      <Button size="sm" onClick={() => confirm(opt)}>
-                        Reserve
-                      </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <Button size="sm" onClick={() => confirm(opt)}>
+                          Reserve
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={() => setDetailOpt(opt)}
+                          className="text-xs font-medium text-brand-dark hover:underline"
+                        >
+                          View details
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -904,6 +1167,19 @@ export default function BookPage() {
             })}
           </div>
         </div>
+      )}
+
+      {detailOpt && (
+        <DetailsModal
+          opt={detailOpt}
+          signal={sig(detailOpt)}
+          onClose={() => setDetailOpt(null)}
+          onSelect={() => {
+            const o = detailOpt;
+            setDetailOpt(null);
+            confirm(o);
+          }}
+        />
       )}
     </div>
   );

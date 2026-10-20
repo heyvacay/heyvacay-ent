@@ -120,7 +120,51 @@ export interface PointsEntry {
   createdAt: string;
 }
 
-/** A bookable option returned by the (mock) search. */
+/** One flown leg within a flight slice, for the details view. */
+export interface FlightSegmentLite {
+  originIata: string;
+  destIata: string;
+  departAt: string;
+  arriveAt: string;
+  durationMins?: number;
+  carrier?: string;
+  carrierIata?: string;
+  flightNumber?: string;
+  aircraft?: string;
+}
+
+export interface FlightSliceLite {
+  originIata: string;
+  destIata: string;
+  durationMins?: number;
+  stops: number;
+  segments: FlightSegmentLite[];
+}
+
+export interface FlightDetails {
+  kind: 'flight';
+  cabin?: string;
+  slices: FlightSliceLite[];
+  conditions?: {
+    changeable?: boolean | null;
+    refundable?: boolean | null;
+    carryOn?: number | null;
+    checked?: number | null;
+  };
+}
+
+export interface HotelDetails {
+  kind: 'hotel';
+  images: string[];
+  amenities: string[];
+  address?: string;
+  rating?: number;
+  reviews?: number;
+}
+
+export type OptionDetails = FlightDetails | HotelDetails;
+
+/** A bookable option returned by search. */
 export interface InventoryOption {
   id: string;
   type: BookingType;
@@ -146,6 +190,8 @@ export interface InventoryOption {
   destIata?: string;
   stops?: number;
   durationMins?: number;
+  // rich payload for the "View details" view
+  details?: OptionDetails;
 }
 
 export type IntegrationCategory =
