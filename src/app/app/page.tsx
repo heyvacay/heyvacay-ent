@@ -8,7 +8,7 @@ export default function AppIndex() {
   const { role } = useStore();
   const router = useRouter();
   useEffect(() => {
-    router.replace(role === 'admin' ? '/app/dashboard' : '/app/me');
+    router.replace(role === 'admin' ? '/app/dashboard' : '/app/book');
   }, [role, router]);
   return (
     <div className="grid place-items-center py-20">

@@ -19,6 +19,7 @@ import {
   Globe,
   TrendUp,
   Bell,
+  MapPin,
 } from '@/components/icons';
 
 const ADMIN_NAV = [
@@ -34,11 +35,11 @@ const ADMIN_NAV = [
 ];
 
 const EMPLOYEE_NAV = [
-  { href: '/app/me', label: 'My dashboard', icon: ChartBar },
-  { href: '/app/book', label: 'Book travel', icon: Plane },
+  { href: '/app/book', label: 'Home', icon: MapPin },
   { href: '/app/trips', label: 'My trips', icon: Calendar },
   { href: '/app/rewards', label: 'Rewards', icon: Gift },
   { href: '/app/expenses', label: 'Expenses', icon: Receipt },
+  { href: '/app/me', label: 'My dashboard', icon: ChartBar },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {

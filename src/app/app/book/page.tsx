@@ -12,7 +12,7 @@ import {
   EmptyState,
   cn,
 } from '@/components/app/ui';
-import { money, num, todayISO, addDays } from '@/lib/format';
+import { money, num, todayISO, addDays, daysUntil, dateRange } from '@/lib/format';
 import { rewardsFor } from '@/lib/rewards';
 import {
   searchFlights,
@@ -22,9 +22,37 @@ import {
   type FlightPlace,
   type HotelPlace,
 } from '@/lib/search';
-import { Plane, Receipt, Check, Shield, Gift, Building, MapPin } from '@/components/icons';
+import {
+  Plane,
+  Receipt,
+  Check,
+  Shield,
+  Gift,
+  Building,
+  MapPin,
+  Sparkles,
+} from '@/components/icons';
 import type { BookingType, InventoryOption } from '@/lib/types';
 import type { PolicyFlag } from '@/lib/store';
+
+/** Why-book-here perks shown on the employee home before a search. */
+const PERKS = [
+  {
+    Icon: Check,
+    t: 'In policy, automatically',
+    d: 'Every result flags what needs approval before you book.',
+  },
+  {
+    Icon: Gift,
+    t: 'Points you keep',
+    d: 'Earn on every trip and spend them on your own HeyVacay getaways.',
+  },
+  {
+    Icon: Sparkles,
+    t: 'Always below market',
+    d: 'The same live inventory as HeyVacay.co, at corporate rates.',
+  },
+];
 
 /* ---------------- helpers ---------------- */
 
@@ -260,7 +288,8 @@ type FlightSug = FlightPlace & Suggestion;
 type HotelSug = HotelPlace & Suggestion;
 
 export default function BookPage() {
-  const { state, role, activeUser, evaluatePolicies, book } = useStore();
+  const { state, role, activeUser, evaluatePolicies, book, pointsBalance } =
+    useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
   const [type, setType] = useState<BookingType>('flight');
@@ -296,6 +325,34 @@ export default function BookPage() {
     setResults(null);
     setError(null);
   };
+
+  // Enterprise context for the home (the "changes for company policies" twist).
+  const firstName = activeUser.name.split(' ')[0];
+  const myTrips = state.bookings.filter(
+    (b) => b.travelerId === activeUser.id && b.status !== 'cancelled'
+  );
+  const mySaved = myTrips.reduce((s, b) => s + b.savings, 0);
+  const myPoints = pointsBalance(activeUser.id);
+  const nextTrip = myTrips
+    .filter((b) => daysUntil(b.startDate) >= 0)
+    .sort((a, b) => (a.startDate < b.startDate ? -1 : 1))[0];
+  const policyChips = state.policies
+    .filter((p) => p.enabled)
+    .map((p) => {
+      switch (p.type) {
+        case 'max_hotel_star':
+          return `Up to ${p.value}★ hotels`;
+        case 'max_nightly':
+          return `≤ ${money(Number(p.value))}/night`;
+        case 'max_cabin':
+          return `${String(p.value)} cabin max`;
+        case 'advance_days':
+          return `Book ${p.value}+ days ahead`;
+        default:
+          return undefined;
+      }
+    })
+    .filter((x): x is string => Boolean(x));
 
   const sig = (opt: InventoryOption) => {
     const flags = evaluatePolicies(opt, start);
@@ -412,37 +469,52 @@ export default function BookPage() {
     );
   }
 
-  /* ----- search + results ----- */
+  /* ----- search home + results ----- */
   return (
     <div>
-      <PageHeader
-        title="Book travel"
-        subtitle="Same live inventory as HeyVacay — always below market. Every result shows if it's in policy, what it saves, and the points you earn."
-      />
+      {/* hero — the employee home: search first, with a HeyVacay feel */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-6 text-white ring-1 ring-white/10 sm:p-8">
+        <span className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand/25 blur-3xl" />
+        <span className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-brand/10 blur-3xl" />
 
-      {/* search bar */}
-      <Card>
-        <div className="mb-4 inline-flex rounded-lg bg-slate-100 p-1">
-          {(['flight', 'hotel'] as BookingType[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => switchType(t)}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-semibold capitalize transition-colors',
-                type === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-              )}
-            >
-              {t === 'flight' ? (
-                <Plane className="h-4 w-4" />
-              ) : (
-                <Receipt className="h-4 w-4" />
-              )}
-              {t === 'flight' ? 'Flights' : 'Hotels'}
-            </button>
-          ))}
-        </div>
+        <div className="relative">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand">
+            {state.company.name} · corporate travel
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">
+            Where to, {firstName}?
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-mist/80 sm:text-base">
+            Search live flights and hotels — always below market, always in your
+            company&apos;s policy. Every trip earns points you keep.
+          </p>
 
-        {type === 'flight' ? (
+          {/* product switcher */}
+          <div className="mt-6 inline-flex rounded-full bg-white/10 p-1 ring-1 ring-white/15 backdrop-blur">
+            {(['flight', 'hotel'] as BookingType[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => switchType(t)}
+                className={cn(
+                  'flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold capitalize transition-colors',
+                  type === t
+                    ? 'bg-white text-navy shadow-sm'
+                    : 'text-white/70 hover:text-white'
+                )}
+              >
+                {t === 'flight' ? (
+                  <Plane className="h-4 w-4" />
+                ) : (
+                  <Receipt className="h-4 w-4" />
+                )}
+                {t === 'flight' ? 'Flights' : 'Hotels'}
+              </button>
+            ))}
+          </div>
+
+          {/* search card floating over the hero */}
+          <div className="mt-4 rounded-2xl bg-white p-4 text-slate-900 shadow-xl ring-1 ring-black/5 sm:p-5">
+            {type === 'flight' ? (
           <>
             <div className="mb-3 inline-flex rounded-lg bg-slate-100 p-1 text-sm">
               {(
@@ -577,17 +649,97 @@ export default function BookPage() {
           </div>
         )}
 
-        <Button className="mt-4" onClick={runSearch} disabled={loading}>
-          {loading ? (
-            <span className="inline-flex items-center gap-2">
-              <Spinner className="h-4 w-4 border-white/40 border-t-white" />
-              Searching…
-            </span>
-          ) : (
-            `Search ${type === 'flight' ? 'flights' : 'hotels'}`
-          )}
-        </Button>
-      </Card>
+            <Button className="mt-4" onClick={runSearch} disabled={loading}>
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="h-4 w-4 border-white/40 border-t-white" />
+                  Searching…
+                </span>
+              ) : (
+                `Search ${type === 'flight' ? 'flights' : 'hotels'}`
+              )}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* enterprise context — shown on the home before a search runs */}
+      {!loading && !error && !results && (
+        <div className="mt-6 grid gap-5 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <h2 className="font-display text-lg font-bold text-slate-900">
+              Your travel at a glance
+            </h2>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-brand/10 p-4">
+                <p className="text-xs font-semibold text-brand-dark">Your points</p>
+                <p className="font-display text-2xl font-bold text-brand-dark">
+                  {num(myPoints)}
+                </p>
+                <p className="text-xs text-slate-400">yours to keep</p>
+              </div>
+              <div className="rounded-xl bg-emerald-50 p-4">
+                <p className="text-xs font-semibold text-emerald-600">
+                  Saved the company
+                </p>
+                <p className="font-display text-2xl font-bold text-emerald-700">
+                  {money(mySaved)}
+                </p>
+                <p className="text-xs text-slate-400">across your trips</p>
+              </div>
+              <div className="col-span-2 rounded-xl bg-slate-50 p-4 sm:col-span-1">
+                <p className="text-xs font-semibold text-slate-500">Next trip</p>
+                {nextTrip ? (
+                  <>
+                    <p className="truncate font-semibold text-slate-800">
+                      {nextTrip.title}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {dateRange(nextTrip.startDate, nextTrip.endDate)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-400">Nothing booked yet.</p>
+                )}
+              </div>
+            </div>
+            {policyChips.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+                  <Shield className="h-3.5 w-3.5 text-brand-dark" /> Your policy
+                </span>
+                {policyChips.map((c) => (
+                  <span
+                    key={c}
+                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card>
+            <h2 className="font-display text-lg font-bold text-slate-900">
+              Why book here
+            </h2>
+            <ul className="mt-4 space-y-3 text-sm">
+              {PERKS.map(({ Icon, t, d }) => (
+                <li key={t} className="flex gap-3">
+                  <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block font-semibold text-slate-800">{t}</span>
+                    <span className="block text-xs text-slate-400">{d}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      )}
 
       {error && (
         <Card className="mt-6 border-amber-200 bg-amber-50">
