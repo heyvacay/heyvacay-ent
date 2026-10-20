@@ -14,6 +14,8 @@ import {
 } from '@/components/app/ui';
 import { money, num, todayISO, addDays, daysUntil, dateRange } from '@/lib/format';
 import { rewardsFor } from '@/lib/rewards';
+import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
+import { format as fmtDate, parseISO } from 'date-fns';
 import {
   searchFlights,
   searchHotels,
@@ -573,6 +575,12 @@ export default function BookPage() {
     setError(null);
   };
 
+  // Dates flow through the app as ISO 'yyyy-MM-dd' strings; the calendar works
+  // in Date objects, so convert at the boundary.
+  const toISO = (d: Date) => fmtDate(d, 'yyyy-MM-dd');
+  const dStart = start ? parseISO(start) : undefined;
+  const dEnd = end ? parseISO(end) : undefined;
+
   // Enterprise context for the home (the "changes for company policies" twist).
   const firstName = activeUser.name.split(' ')[0];
   const myTrips = state.bookings.filter(
@@ -811,21 +819,24 @@ export default function BookPage() {
                 }
                 onPick={(s) => setDest(s)}
               />
-              <Field label="Depart">
-                <Input
-                  type="date"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                />
-              </Field>
-              <Field label="Return">
-                <Input
-                  type="date"
-                  value={end}
-                  disabled={!roundTrip}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
-              </Field>
+              {roundTrip ? (
+                <Field label="Dates">
+                  <HvRangeField
+                    value={{ from: dStart, to: dEnd }}
+                    onChange={(r) => {
+                      if (r?.from) setStart(toISO(r.from));
+                      if (r?.to) setEnd(toISO(r.to));
+                    }}
+                  />
+                </Field>
+              ) : (
+                <Field label="Depart">
+                  <HvDateField
+                    value={dStart}
+                    onChange={(d) => d && setStart(toISO(d))}
+                  />
+                </Field>
+              )}
               <Field label="Cabin">
                 <Select value={cabin} onChange={(e) => setCabin(e.target.value)}>
                   <option value="economy">Economy</option>
@@ -869,11 +880,15 @@ export default function BookPage() {
               }
               onPick={(s) => setHotelPlace(s)}
             />
-            <Field label="Check in">
-              <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-            </Field>
-            <Field label="Check out">
-              <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            <Field label="Dates">
+              <HvRangeField
+                value={{ from: dStart, to: dEnd }}
+                maxRangeDays={30}
+                onChange={(r) => {
+                  if (r?.from) setStart(toISO(r.from));
+                  if (r?.to) setEnd(toISO(r.to));
+                }}
+              />
             </Field>
             <Field label="Guest">
               {canBookForOthers ? (
