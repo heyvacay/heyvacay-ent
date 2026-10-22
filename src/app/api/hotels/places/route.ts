@@ -26,25 +26,49 @@ type SuggestResult =
   | { kind: 'region'; data: SuggestRegion }
   | { kind: 'hotel'; data: SuggestHotel };
 
-// Region types that represent a real destination (strips supplier junk like
-// transit stops), mirroring the consumer's isDestinationRegionType.
-const DEST_REGION_TYPES = new Set([
+// Region-type keywords that represent a real destination — matched as
+// case-insensitive substrings (so "City", "Austin (City)", "multi_city_vicinity"
+// all pass), exactly like the consumer's isDestinationRegionType. Strips supplier
+// junk like transit entrances / stations / POIs / airports.
+const DEST_REGION_KEYWORDS = [
   'city',
   'region',
-  'province_state',
   'province',
   'state',
   'country',
   'continent',
-  'neighbourhood',
   'neighborhood',
+  'neighbourhood',
   'district',
-  'google',
-  'multi_city_vicinity',
-  'municipality',
+  'vicinity',
   'island',
-  'metropolitan_area',
+];
+const isDestinationRegionType = (type?: string): boolean => {
+  const t = (type ?? '').toLowerCase();
+  return t.length > 0 && DEST_REGION_KEYWORDS.some((k) => t.includes(k));
+};
+
+// Suggestion ranking — mirrors the consumer so a city that matches the query as
+// an exact/prefix gets pinned above hotels, otherwise match strength wins.
+const NOISE = new Set([
+  'hotel', 'hotels', 'inn', 'resort', 'resorts', 'suite', 'suites',
+  'motel', 'lodge', 'hostel', 'the', 'and', 'of', 'a', 'an',
 ]);
+const norm = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+function scoreName(name: string, query: string): number {
+  const n = norm(name);
+  const q = norm(query);
+  if (!q || !n) return 0;
+  const exact = (nn: string, qq: string) =>
+    !qq ? 0 : nn === qq ? 1000 : nn.startsWith(qq) ? 900 : nn.includes(qq) ? 800 : 0;
+  const tokens = q.split(/\s+/).filter(Boolean).filter((t) => !NOISE.has(t));
+  const base = Math.max(exact(n, q), exact(n, tokens.join(' ')));
+  if (base > 0) return base;
+  if (tokens.length === 0) return 0;
+  const matched = tokens.filter((t) => n.includes(t)).length;
+  return matched === 0 ? 0 : Math.round((matched / tokens.length) * 700);
+}
 
 /**
  * Destination typeahead for hotels → proxies /hotels/global-suggest and returns
@@ -69,10 +93,10 @@ export async function GET(req: Request) {
     const regions = raw
       .filter(
         (r): r is { kind: 'region'; data: SuggestRegion } =>
-          r.kind === 'region' && r.data?.id != null
+          r.kind === 'region' &&
+          r.data?.id != null &&
+          isDestinationRegionType(r.data.type)
       )
-      .filter((r) => !r.data.type || DEST_REGION_TYPES.has(r.data.type))
-      .slice(0, 6)
       .map((r) => {
         const d = r.data;
         return {
@@ -92,7 +116,6 @@ export async function GET(req: Request) {
         (r): r is { kind: 'hotel'; data: SuggestHotel } =>
           r.kind === 'hotel' && r.data?.hid != null
       )
-      .slice(0, 6)
       .map((r) => {
         const d = r.data;
         return {
@@ -109,9 +132,24 @@ export async function GET(req: Request) {
         };
       });
 
-    // Regions first (destinations), then specific hotels — same priority order
-    // the consumer uses for a city-style query.
-    return NextResponse.json({ results: [...regions, ...hotels] });
+    // Rank with the consumer's priorities: a region whose name matches the query
+    // exactly or as a prefix leads (placeLead); otherwise raw match strength wins
+    // (so a specific hotel can outrank a weak city match); regions break ties.
+    const ranked = [...regions, ...hotels]
+      .map((item, i) => {
+        const tier = item.type === 'region' ? 0 : 2;
+        const s = scoreName(item.label, q);
+        const placeLead = tier <= 1 && s >= 900 ? 1 : 0;
+        return { item, i, tier, s, placeLead };
+      })
+      .sort(
+        (a, b) =>
+          b.placeLead - a.placeLead || b.s - a.s || a.tier - b.tier || a.i - b.i
+      )
+      .slice(0, 10)
+      .map((x) => x.item);
+
+    return NextResponse.json({ results: ranked });
   } catch {
     return NextResponse.json({ results: [] });
   }

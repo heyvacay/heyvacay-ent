@@ -129,6 +129,7 @@ export interface FlightSegmentLite {
   durationMins?: number;
   carrier?: string;
   carrierIata?: string;
+  carrierLogo?: string;
   flightNumber?: string;
   aircraft?: string;
 }
@@ -188,6 +189,7 @@ export interface InventoryOption {
   // flight display
   airline?: string;
   airlineIata?: string;
+  airlineLogo?: string;
   departAt?: string;
   arriveAt?: string;
   originIata?: string;

@@ -24,17 +24,19 @@ export async function POST(req: Request) {
   }
   const adults = Number(incoming.adults) || 1;
 
+  // Exactly the fields the consumer sends (no currency) — extra keys can trip
+  // the supplier's param validation.
   const payload = {
     hid,
     checkin,
     checkout,
     guests: [{ adults, children: [] as number[] }],
-    residency: 'US',
-    currency: 'USD',
     language: 'en',
+    residency: 'US',
   };
 
-  try {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const attempt = async () => {
     const res = await fetch(`${API_BASE_URL}/hotels/details`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -42,13 +44,31 @@ export async function POST(req: Request) {
       cache: 'no-store',
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: `Hotel details failed (${res.status}).` },
-        { status: 502 }
-      );
+    return { res, data };
+  };
+
+  try {
+    // The supplier returns transient errors (rate-limit, empty body) as a 200
+    // with {status:'error'} or no hotel. The consumer retries those up to 4×;
+    // mirror that so a hiccup doesn't surface as "could not load this hotel".
+    let last: Awaited<ReturnType<typeof attempt>> | null = null;
+    for (let i = 0; i < 4; i++) {
+      last = await attempt();
+      const d = last.data;
+      const transient =
+        !last.res.ok ||
+        d?.status === 'error' ||
+        (d?.error && d.error !== 'invalid_params') ||
+        typeof d?.hotel?.name !== 'string' ||
+        !d.hotel.name.trim();
+      if (!transient) return NextResponse.json(d);
+      if (last.res.status === 404 || d?.error === 'invalid_params') break;
+      if (i < 3) await sleep(400 * (i + 1));
     }
-    return NextResponse.json(data ?? {});
+    return NextResponse.json(
+      { error: 'Could not load this hotel.', detail: last?.data ?? null },
+      { status: 502 }
+    );
   } catch (err) {
     return NextResponse.json(
       { error: 'Could not reach the hotel details service.', detail: String(err) },

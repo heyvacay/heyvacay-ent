@@ -163,7 +163,22 @@ function HotelImage({ src, alt }: { src?: string; alt: string }) {
   );
 }
 
-function AirlineBadge({ iata }: { iata?: string }) {
+function AirlineBadge({ iata, logo }: { iata?: string; logo?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (logo && !failed) {
+    return (
+      // Airline logos come from Duffel's CDN; plain img avoids remote-domain config.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logo}
+        alt={iata ?? 'Airline'}
+        width={36}
+        height={36}
+        onError={() => setFailed(true)}
+        className="h-9 w-9 shrink-0 rounded-full object-contain"
+      />
+    );
+  }
   return (
     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-xs font-bold text-brand-dark">
       {iata ?? <Plane className="h-4 w-4" />}
@@ -223,7 +238,7 @@ function FlightDetailBody({ d }: { d: FlightDetails }) {
                 <div className="rounded-xl border border-slate-200 p-3">
                   <div className="flex items-center justify-between">
                     <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-800">
-                      <AirlineBadge iata={sg.carrierIata} />
+                      <AirlineBadge iata={sg.carrierIata} logo={sg.carrierLogo} />
                       {sg.carrier}
                       {sg.flightNumber && (
                         <span className="text-xs text-slate-400">
@@ -1050,7 +1065,7 @@ export default function BookPage() {
               <Card key={opt.id} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex items-center gap-3 sm:w-44">
-                    <AirlineBadge iata={opt.airlineIata} />
+                    <AirlineBadge iata={opt.airlineIata} logo={opt.airlineLogo} />
                     <span className="text-sm font-medium text-slate-800">
                       {opt.airline}
                     </span>

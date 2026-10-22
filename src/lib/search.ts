@@ -58,6 +58,7 @@ export async function placesHotels(q: string): Promise<HotelPlace[]> {
 interface RawAirline {
   name: string;
   iataCode: string | null;
+  logoSymbolUrl?: string | null;
 }
 interface RawSegment {
   originIata: string;
@@ -129,6 +130,9 @@ export async function searchFlights(args: FlightSearchArgs): Promise<InventoryOp
       const price = Math.ceil(Number(o.grandTotal));
       if (!Number.isFinite(price) || price <= 0) return null;
       const cabin = cabinLabel(o.cabinClass);
+      // The card shows the marketing carrier of the first segment (matches the
+      // consumer), falling back to the offer owner.
+      const carrier = out.segments?.[0]?.marketingCarrier ?? o.owner;
       return {
         id: o.id,
         type: 'flight',
@@ -139,9 +143,10 @@ export async function searchFlights(args: FlightSearchArgs): Promise<InventoryOp
         marketPrice: price,
         price,
         cabin,
-        carrier: o.owner?.name,
-        airline: o.owner?.name,
-        airlineIata: o.owner?.iataCode ?? undefined,
+        carrier: carrier?.name,
+        airline: carrier?.name,
+        airlineIata: carrier?.iataCode ?? undefined,
+        airlineLogo: carrier?.logoSymbolUrl ?? undefined,
         departAt: out.departingAt,
         arriveAt: out.arrivingAt,
         originIata: out.originIata,
@@ -165,6 +170,7 @@ export async function searchFlights(args: FlightSearchArgs): Promise<InventoryOp
               durationMins: sg.durationMinutes ?? undefined,
               carrier: sg.marketingCarrier?.name,
               carrierIata: sg.marketingCarrier?.iataCode ?? undefined,
+              carrierLogo: sg.marketingCarrier?.logoSymbolUrl ?? undefined,
               flightNumber: sg.flightNumber ?? undefined,
               aircraft: sg.aircraft ?? undefined,
             })),
