@@ -17,7 +17,6 @@ import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
 import {
-  searchFlights,
   placesFlights,
   placesHotels,
   type FlightPlace,
@@ -651,15 +650,15 @@ export default function BookPage() {
         if (!o || !d) throw new Error('Pick an origin and destination airport to search.');
         setOrigin(o);
         setDest(d);
-        const r = await searchFlights({
-          origin: o.code,
-          destination: d.code,
-          departDate: start,
-          returnDate: roundTrip ? end : undefined,
-          cabinClass: cabin,
-          adults: 1,
-        });
-        setResults(r);
+        // Flights get their own results page (like HeyVacay.co).
+        const q = new URLSearchParams();
+        q.set('origin', o.code);
+        q.set('destination', d.code);
+        q.set('depart', start);
+        if (roundTrip) q.set('return', end);
+        q.set('cabin', cabin);
+        router.push(`/app/flights?${q.toString()}`);
+        return;
       } else {
         let p = hotelPlace;
         if (!p && hotelText.trim()) p = (await placesHotels(hotelText))[0] ?? null;
