@@ -15,9 +15,9 @@ import {
 import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import { HotelCarousel } from '@/components/hotels/HotelCarousel';
-import { Button, Card, cn } from '@/components/app/ui';
-import { money, num } from '@/lib/format';
-import { Check, Shield, Gift, MapPin, Building, Sparkles } from '@/components/icons';
+import { Button, Card, Field, Select, cn } from '@/components/app/ui';
+import { money, num, dateRange } from '@/lib/format';
+import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet } from '@/components/icons';
 import { X } from 'lucide-react';
 
 function Stars({ n = 0 }: { n?: number }) {
@@ -34,7 +34,11 @@ function Stars({ n = 0 }: { n?: number }) {
 
 export default function HotelDetail({ hid }: { hid: string }) {
   const params = useSearchParams();
-  const { activeUser, evaluatePolicies, book } = useStore();
+  const { state, role, activeUser, evaluatePolicies, book, spentForScope } =
+    useStore();
+  const canBookForOthers = role === 'admin' || role === 'booker';
+  const [travelerId, setTravelerId] = useState(activeUser.id);
+  const [review, setReview] = useState(false);
 
   const checkin = params.get('checkin') || '';
   const checkout = params.get('checkout') || '';
@@ -111,10 +115,19 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const perNight = price ? Math.round(price / nights) : 0;
 
   const reserve = () => {
-    book({ opt, travelerId: activeUser.id, startDate: checkin, endDate: checkout });
+    book({ opt, travelerId, startDate: checkin, endDate: checkout });
     setConfirmed({ pending: needsApproval, points });
+    setReview(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Budget check for the chosen traveler.
+  const empBudget = state.budgets.find(
+    (b) => b.scope === 'employee' && b.refId === travelerId
+  );
+  const budgetLimit = empBudget?.limit;
+  const spent = empBudget ? spentForScope('employee', travelerId) : 0;
+  const overBudget = budgetLimit != null ? spent + price > budgetLimit : false;
 
   if (confirmed) {
     return (
@@ -350,7 +363,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
                         <p className="font-display font-bold text-slate-900">
                           {money(Math.ceil(r.price))}
                         </p>
-                        <Button size="sm" variant="outline" onClick={reserve}>
+                        <Button size="sm" variant="outline" onClick={() => setReview(true)}>
                           Reserve
                         </Button>
                       </div>
@@ -423,9 +436,14 @@ export default function HotelDetail({ hid }: { hid: string }) {
               <p className="inline-flex items-center gap-1 font-semibold text-brand-dark">
                 <Gift className="h-3.5 w-3.5" /> Earn +{num(points)} points
               </p>
+              {overBudget && budgetLimit != null && (
+                <p className="inline-flex items-center gap-1 font-semibold text-amber-600">
+                  <Wallet className="h-3.5 w-3.5" /> Over the {money(budgetLimit)} travel budget
+                </p>
+              )}
             </div>
 
-            <Button className="w-full" onClick={reserve} disabled={!price}>
+            <Button className="w-full" onClick={() => setReview(true)} disabled={!price}>
               {needsApproval ? 'Request this stay' : 'Reserve'}
             </Button>
             <p className="mt-2 text-center text-[11px] text-slate-400">
@@ -434,6 +452,108 @@ export default function HotelDetail({ hid }: { hid: string }) {
           </Card>
         </div>
       </div>
+
+      {/* review / checkout */}
+      {review && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"
+          onClick={() => setReview(false)}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-md overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h2 className="font-display text-lg font-bold text-slate-900">
+                Review &amp; book
+              </h2>
+              <button
+                onClick={() => setReview(false)}
+                aria-label="Close"
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <div>
+                <p className="font-semibold text-slate-800">{name}</p>
+                <p className="text-sm text-slate-400">
+                  {dateRange(checkin, checkout)} · {nights} night
+                  {nights === 1 ? '' : 's'}
+                </p>
+              </div>
+
+              {canBookForOthers && (
+                <Field label="Guest">
+                  <Select
+                    value={travelerId}
+                    onChange={(e) => setTravelerId(e.target.value)}
+                  >
+                    {state.users
+                      .filter((u) => u.status === 'active')
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
+              )}
+
+              <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Total ({nights}n)</span>
+                  <span className="font-semibold text-slate-900">{money(price)}</span>
+                </div>
+                {savings > 0 && (
+                  <div className="mt-1 flex justify-between">
+                    <span className="text-slate-500">Saved vs market</span>
+                    <span className="font-semibold text-emerald-600">{money(savings)}</span>
+                  </div>
+                )}
+                <div className="mt-1 flex justify-between">
+                  <span className="text-slate-500">Points earned</span>
+                  <span className="font-semibold text-brand-dark">+{num(points)}</span>
+                </div>
+              </div>
+
+              {flags.length > 0 && (
+                <div className="space-y-1.5">
+                  {flags.map((f, i) => (
+                    <p
+                      key={i}
+                      className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-800"
+                    >
+                      <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      {f.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {overBudget && budgetLimit != null && (
+                <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
+                  <Wallet className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" /> This
+                  puts the guest over their {money(budgetLimit)} travel budget.
+                </p>
+              )}
+
+              <Button className="w-full" onClick={reserve} disabled={!price}>
+                {needsApproval ? 'Request this stay' : 'Confirm booking'}
+              </Button>
+              {needsApproval && (
+                <p className="text-center text-[11px] text-slate-400">
+                  Routes to an admin for approval.{' '}
+                  {opt.freeCancellation
+                    ? 'Free-cancellation rate — held at no risk.'
+                    : 'Non-refundable — re-priced live at approval.'}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* lightbox */}
       {lightbox != null && images.length > 0 && (
