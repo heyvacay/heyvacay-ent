@@ -22,24 +22,50 @@ import {
   MapPin,
 } from '@/components/icons';
 
-const ADMIN_NAV = [
-  { href: '/app/dashboard', label: 'Dashboard', icon: ChartBar },
-  { href: '/app/reports', label: 'Reports', icon: TrendUp },
-  { href: '/app/approvals', label: 'Approvals', icon: Bell },
-  { href: '/app/people', label: 'People', icon: Users },
-  { href: '/app/budgets', label: 'Budgets', icon: Wallet },
-  { href: '/app/policies', label: 'Policies', icon: Shield },
-  { href: '/app/bookings', label: 'Bookings', icon: Plane },
-  { href: '/app/expenses', label: 'Expenses', icon: Receipt },
-  { href: '/app/integrations', label: 'Integrations', icon: Globe },
+type NavItem = { href: string; label: string; icon: typeof ChartBar };
+type NavSection = { title: string | null; items: NavItem[] };
+
+const ADMIN_NAV: NavSection[] = [
+  {
+    title: null,
+    items: [{ href: '/app/dashboard', label: 'Dashboard', icon: ChartBar }],
+  },
+  {
+    title: 'Travel',
+    items: [
+      { href: '/app/bookings', label: 'Bookings', icon: Plane },
+      { href: '/app/approvals', label: 'Approvals', icon: Bell },
+      { href: '/app/reports', label: 'Analytics', icon: TrendUp },
+    ],
+  },
+  {
+    title: 'Spend',
+    items: [
+      { href: '/app/budgets', label: 'Budgets', icon: Wallet },
+      { href: '/app/expenses', label: 'Expenses', icon: Receipt },
+    ],
+  },
+  {
+    title: 'Configuration',
+    items: [
+      { href: '/app/people', label: 'People', icon: Users },
+      { href: '/app/policies', label: 'Policies', icon: Shield },
+      { href: '/app/integrations', label: 'Integrations', icon: Globe },
+    ],
+  },
 ];
 
-const EMPLOYEE_NAV = [
-  { href: '/app/book', label: 'Home', icon: MapPin },
-  { href: '/app/trips', label: 'My trips', icon: Calendar },
-  { href: '/app/rewards', label: 'Rewards', icon: Gift },
-  { href: '/app/expenses', label: 'Expenses', icon: Receipt },
-  { href: '/app/me', label: 'My dashboard', icon: ChartBar },
+const EMPLOYEE_NAV: NavSection[] = [
+  {
+    title: null,
+    items: [
+      { href: '/app/book', label: 'Home', icon: MapPin },
+      { href: '/app/trips', label: 'My trips', icon: Calendar },
+      { href: '/app/rewards', label: 'Rewards', icon: Gift },
+      { href: '/app/expenses', label: 'Expenses', icon: Receipt },
+      { href: '/app/me', label: 'My dashboard', icon: ChartBar },
+    ],
+  },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -82,29 +108,38 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3">
-        {nav.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                active
-                  ? 'bg-brand/12 text-slate-900 ring-1 ring-brand/25'
-                  : 'text-slate-600 hover:bg-slate-100'
-              )}
-            >
-              <Icon
-                className={cn('h-[18px] w-[18px]', active && 'text-brand-dark')}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-5 px-3">
+        {nav.map((section, si) => (
+          <div key={section.title ?? si} className="space-y-1">
+            {section.title && (
+              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                {section.title}
+              </p>
+            )}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                    active
+                      ? 'bg-brand/12 text-slate-900 ring-1 ring-brand/25'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  <Icon
+                    className={cn('h-[18px] w-[18px]', active && 'text-brand-dark')}
+                  />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="border-t border-slate-200 p-3">

@@ -23,6 +23,19 @@ import {
   type HotelPlace,
 } from '@/lib/search';
 import { useRouter } from 'next/navigation';
+import { Train, Car } from 'lucide-react';
+
+type ProductType = BookingType | 'train' | 'car';
+const PRODUCTS: {
+  key: ProductType;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { key: 'flight', label: 'Flights', Icon: Plane },
+  { key: 'hotel', label: 'Hotels', Icon: Receipt },
+  { key: 'train', label: 'Trains', Icon: Train },
+  { key: 'car', label: 'Cars', Icon: Car },
+];
 import {
   Plane,
   Receipt,
@@ -182,6 +195,31 @@ function AirlineBadge({ iata, logo }: { iata?: string; logo?: string }) {
     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-xs font-bold text-brand-dark">
       {iata ?? <Plane className="h-4 w-4" />}
     </span>
+  );
+}
+
+/** Placeholder for verticals we're still onboarding suppliers for. */
+function ComingSoon({ product }: { product: ProductType }) {
+  const isTrain = product === 'train';
+  const Icon = isTrain ? Train : Car;
+  const label = isTrain ? 'Trains' : 'Rental cars';
+  return (
+    <div className="grid place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+      <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-brand-dark">
+        <Icon className="h-6 w-6" />
+      </span>
+      <h3 className="mt-3 font-display text-lg font-bold text-slate-900">
+        {label} are almost here
+      </h3>
+      <p className="mt-1 max-w-sm text-sm text-slate-500">
+        We&apos;re onboarding {isTrain ? 'rail' : 'car-rental'} suppliers so your
+        team can book {label.toLowerCase()} in policy, right alongside flights and
+        hotels.
+      </p>
+      <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-brand-dark ring-1 ring-slate-200">
+        <Sparkles className="h-3.5 w-3.5" /> Coming soon
+      </span>
+    </div>
   );
 }
 
@@ -555,7 +593,7 @@ export default function BookPage() {
   const router = useRouter();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
-  const [type, setType] = useState<BookingType>('flight');
+  const [type, setType] = useState<ProductType>('flight');
 
   // flight inputs
   const [originText, setOriginText] = useState('');
@@ -584,7 +622,7 @@ export default function BookPage() {
   } | null>(null);
   const [detailOpt, setDetailOpt] = useState<InventoryOption | null>(null);
 
-  const switchType = (t: BookingType) => {
+  const switchType = (t: ProductType) => {
     setType(t);
     setResults(null);
     setError(null);
@@ -769,24 +807,20 @@ export default function BookPage() {
           </p>
 
           {/* product switcher */}
-          <div className="mt-6 inline-flex rounded-full bg-white/10 p-1 ring-1 ring-white/15 backdrop-blur">
-            {(['flight', 'hotel'] as BookingType[]).map((t) => (
+          <div className="mt-6 inline-flex flex-wrap rounded-full bg-white/10 p-1 ring-1 ring-white/15 backdrop-blur">
+            {PRODUCTS.map(({ key, label, Icon }) => (
               <button
-                key={t}
-                onClick={() => switchType(t)}
+                key={key}
+                onClick={() => switchType(key)}
                 className={cn(
-                  'flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold capitalize transition-colors',
-                  type === t
+                  'flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors',
+                  type === key
                     ? 'bg-white text-navy shadow-sm'
                     : 'text-white/70 hover:text-white'
                 )}
               >
-                {t === 'flight' ? (
-                  <Plane className="h-4 w-4" />
-                ) : (
-                  <Receipt className="h-4 w-4" />
-                )}
-                {t === 'flight' ? 'Flights' : 'Hotels'}
+                <Icon className="h-4 w-4" />
+                {label}
               </button>
             ))}
           </div>
@@ -889,7 +923,7 @@ export default function BookPage() {
               </Field>
             </div>
           </>
-        ) : (
+        ) : type === 'hotel' ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <PlaceField<HotelSug>
               label="Destination"
@@ -936,18 +970,22 @@ export default function BookPage() {
               )}
             </Field>
           </div>
+        ) : (
+          <ComingSoon product={type} />
         )}
 
-            <Button className="mt-4" onClick={runSearch} disabled={loading}>
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <Spinner className="h-4 w-4 border-white/40 border-t-white" />
-                  Searching…
-                </span>
-              ) : (
-                `Search ${type === 'flight' ? 'flights' : 'hotels'}`
-              )}
-            </Button>
+            {(type === 'flight' || type === 'hotel') && (
+              <Button className="mt-4" onClick={runSearch} disabled={loading}>
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner className="h-4 w-4 border-white/40 border-t-white" />
+                    Searching…
+                  </span>
+                ) : (
+                  `Search ${type === 'flight' ? 'flights' : 'hotels'}`
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </section>
