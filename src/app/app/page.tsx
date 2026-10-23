@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
+import { HvLoader } from '@/components/HvLoader';
 
 export default function AppIndex() {
   const { role } = useStore();
@@ -10,9 +11,5 @@ export default function AppIndex() {
   useEffect(() => {
     router.replace(role === 'admin' ? '/app/dashboard' : '/app/book');
   }, [role, router]);
-  return (
-    <div className="grid place-items-center py-20">
-      <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
-    </div>
-  );
+  return <HvLoader className="py-24" />;
 }

@@ -17,6 +17,7 @@ import {
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { Plane, Check, Shield, Gift, Wallet } from '@/components/icons';
+import { HvLoader } from '@/components/HvLoader';
 
 /* ---------------- helpers ---------------- */
 
@@ -312,12 +313,7 @@ export default function FlightsResults() {
         </Card>
       )}
 
-      {loading && (
-        <div className="grid place-items-center py-24 text-slate-400">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
-          <p className="mt-3 text-sm">Pulling live fares…</p>
-        </div>
-      )}
+      {loading && <HvLoader className="py-24" />}
 
       {!loading && results && results.length === 0 && !error && (
         <EmptyState title="No fares for those dates" sub="Try different dates or nearby airports." />

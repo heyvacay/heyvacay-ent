@@ -14,6 +14,7 @@ import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import { HotelCarousel } from '@/components/hotels/HotelCarousel';
 import { Button, Card, Select, EmptyState } from '@/components/app/ui';
+import { HvLoader } from '@/components/HvLoader';
 import { money, num } from '@/lib/format';
 import { Check, Shield, Gift, MapPin } from '@/components/icons';
 
@@ -223,12 +224,7 @@ export default function HotelsResults() {
         </Card>
       )}
 
-      {loading && (
-        <div className="grid place-items-center py-24 text-slate-400">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
-          <p className="mt-3 text-sm">Pulling live rates for {label}…</p>
-        </div>
-      )}
+      {loading && <HvLoader className="py-24" />}
 
       {!loading && options.length === 0 && !error && (
         <EmptyState

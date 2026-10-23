@@ -142,3 +142,53 @@ body {
     animation: none !important;
   }
 }
+
+/* ---- HeyVacay loader (the signature palm + ring spinner) ---- */
+.pageloader {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  position: relative;
+  animation: hv-rotate 1s linear infinite;
+}
+.pageloader::before,
+.pageloader::after {
+  content: '';
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0px;
+  border-radius: 50%;
+  border: 7px solid #ccf2fe;
+  animation: hv-prixClipFix 2s linear infinite;
+}
+.pageloader::after {
+  border-color: #23e3ef;
+  transform: rotate3d(90, 90, 0, 180deg);
+}
+@keyframes hv-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes hv-prixClipFix {
+  0% {
+    clip-path: polygon(50% 50%, 0 0, 0 0, 0 0, 0 0, 0 0);
+  }
+  50% {
+    clip-path: polygon(50% 50%, 0 0, 100% 0, 100% 0, 100% 0, 100% 0);
+  }
+  75%,
+  100% {
+    clip-path: polygon(50% 50%, 0 0, 100% 0, 100% 100%, 100% 100%, 100% 100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pageloader,
+  .pageloader::before,
+  .pageloader::after {
+    animation-duration: 3s;
+  }
+}
