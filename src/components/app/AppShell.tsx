@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Avatar, cn } from './ui';
 import {
@@ -71,7 +71,27 @@ const EMPLOYEE_NAV: NavSection[] = [
 export default function AppShell({ children }: { children: ReactNode }) {
   const { state, activeUser, role, setActiveUser, setRole, reset } = useStore();
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [viewAs, setViewAs] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setViewAs(sessionStorage.getItem('hv_view_as'));
+    } catch {
+      /* ignore */
+    }
+  }, [pathname]);
+
+  const exitViewAs = () => {
+    try {
+      sessionStorage.removeItem('hv_view_as');
+    } catch {
+      /* ignore */
+    }
+    setViewAs(null);
+    router.push('/sales');
+  };
 
   const nav = role === 'admin' ? ADMIN_NAV : EMPLOYEE_NAV;
 
@@ -143,6 +163,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="border-t border-slate-200 p-3">
+        {role === 'admin' && (
+          <Link
+            href="/sales"
+            className="block rounded-lg px-3 py-2 text-xs font-semibold text-brand-dark hover:bg-brand/10"
+          >
+            Sales console (Nova)
+          </Link>
+        )}
         <Link
           href="/"
           className="block rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-600"
@@ -180,6 +208,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="lg:pl-64">
+        {/* Impersonation banner — set by the Sales console's "View as user". */}
+        {viewAs && (
+          <div className="flex items-center justify-between gap-3 bg-navy-deep px-4 py-2 text-sm text-white sm:px-6">
+            <span className="truncate">
+              Viewing <span className="font-semibold">{viewAs}</span> as account
+              manager
+            </span>
+            <button
+              onClick={exitViewAs}
+              className="shrink-0 rounded-md bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25"
+            >
+              Exit to Sales
+            </button>
+          </div>
+        )}
         {/* Topbar */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6">
           <button
