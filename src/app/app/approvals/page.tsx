@@ -14,8 +14,7 @@ import { money, money2, dateRange, shortDate } from '@/lib/format';
 import { Plane, Receipt, Shield, Check } from '@/components/icons';
 
 export default function ApprovalsPage() {
-  const { state, userById, approveBooking, cancelBooking, setExpenseStatus } =
-    useStore();
+  const { state, userById, setExpenseStatus } = useStore();
 
   const trips = state.bookings.filter((b) => b.status === 'pending_approval');
   const expenses = state.expenses.filter((e) => e.status === 'submitted');
@@ -89,15 +88,8 @@ export default function ApprovalsPage() {
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => approveBooking(b.id)}>
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => cancelBooking(b.id)}
-                        >
-                          Decline
+                        <Button size="sm" href={`/app/approvals/${b.id}`}>
+                          Review &amp; decide
                         </Button>
                       </div>
                     </div>

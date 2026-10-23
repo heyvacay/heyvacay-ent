@@ -86,6 +86,12 @@ export interface Booking {
   pointsEarned: number;
   status: BookingStatus;
   createdAt: string;
+  /** Policy rules this trip tripped, captured at booking time. */
+  policyNotes?: string[];
+  /** A reviewer's comment when approved/declined. */
+  reviewNote?: string;
+  /** Hotel rate was free-cancellation (relevant to the approval window). */
+  freeCancellation?: boolean;
 }
 
 export type ExpenseCategory =

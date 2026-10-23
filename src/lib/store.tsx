@@ -75,8 +75,8 @@ export interface StoreApi {
     startDate: string;
     endDate: string;
   }) => Booking;
-  cancelBooking: (id: string) => void;
-  approveBooking: (id: string) => void;
+  cancelBooking: (id: string, note?: string) => void;
+  approveBooking: (id: string, note?: string) => void;
   submitExpense: (data: {
     userId: string;
     merchant: string;
@@ -337,6 +337,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pointsEarned,
         status: needsApproval ? 'pending_approval' : 'confirmed',
         createdAt: new Date().toISOString().slice(0, 10),
+        policyNotes: flags.map((f) => f.message),
+        freeCancellation: opt.freeCancellation,
       };
 
       setState((s) => {
@@ -370,7 +372,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [evaluatePolicies, state.activeUserId, state.users, activeUser.department]
   );
 
-  const approveBooking: StoreApi['approveBooking'] = useCallback((id) => {
+  const approveBooking: StoreApi['approveBooking'] = useCallback((id, note) => {
     setState((s) => {
       const bk = s.bookings.find((b) => b.id === id);
       if (!bk || bk.status !== 'pending_approval') return s;
@@ -389,18 +391,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return {
         ...s,
         bookings: s.bookings.map((b) =>
-          b.id === id ? { ...b, status: 'confirmed' } : b
+          b.id === id
+            ? { ...b, status: 'confirmed', reviewNote: note || b.reviewNote }
+            : b
         ),
         points,
       };
     });
   }, []);
 
-  const cancelBooking: StoreApi['cancelBooking'] = useCallback((id) => {
+  const cancelBooking: StoreApi['cancelBooking'] = useCallback((id, note) => {
     setState((s) => ({
       ...s,
       bookings: s.bookings.map((b) =>
-        b.id === id ? { ...b, status: 'cancelled' } : b
+        b.id === id
+          ? { ...b, status: 'cancelled', reviewNote: note || b.reviewNote }
+          : b
       ),
       points: s.points.filter((p) => p.bookingId !== id),
     }));
