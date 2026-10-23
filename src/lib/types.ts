@@ -43,9 +43,18 @@ export type PolicyType =
   | 'max_hotel_star'
   | 'max_nightly'
   | 'max_cabin'
+  | 'flight_cabin_by_duration'
   | 'advance_days';
 
 export type PolicyAction = 'allow' | 'warn' | 'approve' | 'block';
+
+/** One row of a flight cabin policy: the top allowed cabin up to a duration. */
+export interface FlightCabinTier {
+  /** Upper bound in hours; null means "and anything longer". */
+  upToHours: number | null;
+  /** Highest allowed cabin at this tier, e.g. "Economy". */
+  cabin: string;
+}
 
 export interface Policy {
   id: string;
@@ -54,6 +63,8 @@ export interface Policy {
   value: number | string;
   action: PolicyAction;
   enabled: boolean;
+  /** For flight_cabin_by_duration: cabin allowance by flight length. */
+  tiers?: FlightCabinTier[];
 }
 
 export type BookingType = 'hotel' | 'flight';

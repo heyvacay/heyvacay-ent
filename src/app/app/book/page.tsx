@@ -617,6 +617,8 @@ export default function BookPage() {
           return `≤ ${money(Number(p.value))}/night`;
         case 'max_cabin':
           return `${String(p.value)} cabin max`;
+        case 'flight_cabin_by_duration':
+          return `${p.tiers?.[0]?.cabin ?? 'Economy'} on short flights`;
         case 'advance_days':
           return `Book ${p.value}+ days ahead`;
         default:

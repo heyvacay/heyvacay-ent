@@ -26,7 +26,16 @@ import { SEED } from './seed';
 import { uid } from './format';
 import { rewardsFor } from './rewards';
 
-const STORAGE_KEY = 'hv_ent_demo_v1';
+const STORAGE_KEY = 'hv_ent_demo_v2';
+
+/** Order flight cabins so we can compare "is this above the allowed cabin?". */
+function cabinRank(cabin: string): number {
+  const c = cabin.toLowerCase();
+  if (c.includes('first')) return 3;
+  if (c.includes('business')) return 2;
+  if (c.includes('premium')) return 1;
+  return 0; // economy / anything else
+}
 
 export interface PolicyFlag {
   policy: Policy;
@@ -58,6 +67,8 @@ export interface StoreApi {
   updateBudgetLimit: (id: string, limit: number) => void;
   addPolicy: (p: Omit<Policy, 'id'>) => void;
   togglePolicy: (id: string) => void;
+  updatePolicy: (id: string, patch: Partial<Omit<Policy, 'id'>>) => void;
+  removePolicy: (id: string) => void;
   book: (args: {
     opt: InventoryOption;
     travelerId: string;
@@ -202,6 +213,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               message: `Booked ${daysAhead} days ahead — policy asks for ${p.value}+.`,
             });
         }
+        if (
+          p.type === 'flight_cabin_by_duration' &&
+          opt.type === 'flight' &&
+          opt.cabin &&
+          opt.durationMins != null &&
+          p.tiers &&
+          p.tiers.length
+        ) {
+          const hours = opt.durationMins / 60;
+          const tiers = [...p.tiers].sort(
+            (a, b) => (a.upToHours ?? Infinity) - (b.upToHours ?? Infinity)
+          );
+          const tier =
+            tiers.find((t) => t.upToHours == null || hours <= t.upToHours) ??
+            tiers[tiers.length - 1];
+          if (tier && cabinRank(opt.cabin) > cabinRank(tier.cabin)) {
+            const len =
+              tier.upToHours == null
+                ? `over ${tiers[tiers.length - 2]?.upToHours ?? 0}h`
+                : `up to ${tier.upToHours}h`;
+            flags.push({
+              policy: p,
+              message: `Flights ${len} allow up to ${tier.cabin}; this is ${opt.cabin}.`,
+            });
+          }
+        }
+        if (p.type === 'max_cabin' && opt.type === 'flight' && opt.cabin) {
+          if (cabinRank(opt.cabin) > cabinRank(String(p.value)))
+            flags.push({
+              policy: p,
+              message: `${opt.cabin} is above the ${p.value} cabin limit.`,
+            });
+        }
       }
       return flags;
     },
@@ -251,6 +295,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       policies: s.policies.map((p) =>
         p.id === id ? { ...p, enabled: !p.enabled } : p
       ),
+    }));
+  }, []);
+
+  const updatePolicy: StoreApi['updatePolicy'] = useCallback((id, patch) => {
+    setState((s) => ({
+      ...s,
+      policies: s.policies.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+  }, []);
+
+  const removePolicy: StoreApi['removePolicy'] = useCallback((id) => {
+    setState((s) => ({
+      ...s,
+      policies: s.policies.filter((p) => p.id !== id),
     }));
   }, []);
 
@@ -509,6 +567,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateBudgetLimit,
     addPolicy,
     togglePolicy,
+    updatePolicy,
+    removePolicy,
     book,
     cancelBooking,
     approveBooking,

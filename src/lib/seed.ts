@@ -99,7 +99,18 @@ const budgets = [
 const policies = [
   { id: 'p_star', name: 'Hotels up to 4 stars', type: 'max_hotel_star' as const, value: 4, action: 'warn' as const, enabled: true },
   { id: 'p_nightly', name: 'Nightly rate cap $350', type: 'max_nightly' as const, value: 350, action: 'approve' as const, enabled: true },
-  { id: 'p_cabin', name: 'Economy by default', type: 'max_cabin' as const, value: 'Economy', action: 'approve' as const, enabled: true },
+  {
+    id: 'p_cabin',
+    name: 'Cabin by flight length',
+    type: 'flight_cabin_by_duration' as const,
+    value: '',
+    action: 'approve' as const,
+    enabled: true,
+    tiers: [
+      { upToHours: 6, cabin: 'Economy' },
+      { upToHours: null, cabin: 'Premium economy' },
+    ],
+  },
   { id: 'p_advance', name: 'Book 7+ days ahead', type: 'advance_days' as const, value: 7, action: 'warn' as const, enabled: true },
 ];
 
