@@ -7,6 +7,7 @@
  * here so the cards stay dumb.
  */
 import type { InventoryOption } from './types';
+import { enrichUiRooms, type UiRoom } from './hotelRooms';
 
 /* ---------------- typeahead ---------------- */
 
@@ -362,12 +363,6 @@ export async function nextHotels(
 
 /* ---------------- hotel detail ---------------- */
 
-export interface HotelDetailRoom {
-  name: string;
-  meal?: string;
-  refundable?: boolean;
-  price?: number;
-}
 export interface HotelDetailData {
   name?: string;
   address?: string;
@@ -380,7 +375,7 @@ export interface HotelDetailData {
   amenities: string[];
   amenityGroups: { group: string; items: string[] }[];
   about: string[];
-  rooms: HotelDetailRoom[];
+  uiRooms: UiRoom[];
   noAvailability?: boolean;
 }
 export interface HotelReviewTheme {
@@ -417,28 +412,6 @@ interface RawHotelDetail {
   noAvailability?: boolean;
 }
 
-function parseRooms(raw: unknown[]): HotelDetailRoom[] {
-  const rooms: HotelDetailRoom[] = [];
-  for (const r of raw) {
-    if (!r || typeof r !== 'object') continue;
-    const rec = r as Record<string, unknown>;
-    const name = String(rec.name || rec.roomName || rec.bedType || 'Room');
-    const price =
-      num(rec.price) ??
-      num(rec.total) ??
-      num((rec.rate as Record<string, unknown> | undefined)?.price);
-    rooms.push({
-      name,
-      meal: typeof rec.meal === 'string' ? rec.meal : undefined,
-      refundable:
-        typeof rec.refundable === 'boolean' ? rec.refundable : undefined,
-      price,
-    });
-    if (rooms.length >= 12) break;
-  }
-  return rooms;
-}
-
 export async function getHotelDetail(args: {
   hid: string;
   checkin: string;
@@ -472,7 +445,7 @@ export async function getHotelDetail(args: {
       items: g.amenities ?? [],
     })),
     about: Array.isArray(h.about_property) ? h.about_property : [],
-    rooms: Array.isArray(data.UIRooms) ? parseRooms(data.UIRooms) : [],
+    uiRooms: enrichUiRooms(data.UIRooms),
     noAvailability: data.noAvailability,
   };
 }

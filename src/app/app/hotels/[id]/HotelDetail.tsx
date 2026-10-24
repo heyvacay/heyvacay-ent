@@ -15,6 +15,9 @@ import {
 import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import { HotelCarousel } from '@/components/hotels/HotelCarousel';
+import { RoomSelection } from '@/components/hotels/RoomSelection';
+import type { ReserveArgs } from '@/components/hotels/RoomCard';
+import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, Select, cn } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet } from '@/components/icons';
@@ -59,6 +62,12 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const [roomPhotos, setRoomPhotos] = useState<{ images: string[]; title: string } | null>(
+    null
+  );
+  // The specific rate the guest picked from a room card — carries the real
+  // book_hash and all-in price the booking is made against.
+  const [selected, setSelected] = useState<ReserveArgs | null>(null);
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
     null
   );
@@ -93,7 +102,17 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const reviewCount = detail?.reviews ?? reviewsParam;
   const address = detail?.address || locParam;
   const images = detail?.images ?? [];
-  const price = priceParam || detail?.rooms.find((r) => r.price)?.price || 0;
+
+  const uiRooms = detail?.uiRooms ?? [];
+  const hasRooms = uiRooms.length > 0;
+  const lead = hasRooms ? leadRoomPrice(uiRooms) : null;
+
+  // Active price: the rate the guest picked, else the lead "from" rate, else
+  // the price carried over from the results card.
+  const price = selected?.price ?? lead?.price ?? priceParam ?? 0;
+  const market = selected?.competitive ?? marketParam;
+  const perNight =
+    selected?.perNight ?? lead?.pricePerDay ?? (price ? Math.round(price / nights) : 0);
 
   const opt: InventoryOption = {
     id: hid,
@@ -102,7 +121,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
     title: name,
     detail: `${nights} night${nights === 1 ? '' : 's'}`,
     price,
-    marketPrice: marketParam > price ? marketParam : price,
+    marketPrice: market > price ? market : price,
     star,
     nights,
     location: address,
@@ -112,13 +131,23 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const needsApproval = flags.some(
     (f) => f.policy.action === 'approve' || f.policy.action === 'block'
   );
-  const perNight = price ? Math.round(price / nights) : 0;
 
   const reserve = () => {
     book({ opt, travelerId, startDate: checkin, endDate: checkout });
     setConfirmed({ pending: needsApproval, points });
     setReview(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const onReserveRoom = (args: ReserveArgs) => {
+    setSelected(args);
+    setReview(true);
+  };
+
+  const scrollToRooms = () => {
+    document
+      .querySelector('[data-section="select-room"]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Budget check for the chosen traveler.
@@ -279,6 +308,15 @@ export default function HotelDetail({ hid }: { hid: string }) {
             </section>
           )}
 
+          {/* rooms */}
+          {hasRooms && (
+            <RoomSelection
+              uiRooms={uiRooms}
+              onReserve={onReserveRoom}
+              onPhotos={(imgs, title) => setRoomPhotos({ images: imgs, title })}
+            />
+          )}
+
           {/* AI review summary */}
           {reviews && (
             <section>
@@ -338,42 +376,6 @@ export default function HotelDetail({ hid }: { hid: string }) {
             </section>
           )}
 
-          {/* rooms */}
-          {detail && detail.rooms.length > 0 && (
-            <section>
-              <h2 className="mb-3 font-display text-lg font-bold text-slate-900">
-                Rooms
-              </h2>
-              <div className="space-y-2">
-                {detail.rooms.map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-800">{r.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {[r.meal, r.refundable ? 'Refundable' : null]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </p>
-                    </div>
-                    {r.price ? (
-                      <div className="shrink-0 text-right">
-                        <p className="font-display font-bold text-slate-900">
-                          {money(Math.ceil(r.price))}
-                        </p>
-                        <Button size="sm" variant="outline" onClick={() => setReview(true)}>
-                          Reserve
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
           {/* location */}
           {address && (
             <section>
@@ -402,6 +404,11 @@ export default function HotelDetail({ hid }: { hid: string }) {
         {/* sticky price box */}
         <div className="lg:col-span-1">
           <Card className="lg:sticky lg:top-24">
+            {!selected && hasRooms && (
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                From
+              </p>
+            )}
             <div className="flex items-end gap-2">
               {savings > 0 && (
                 <span className="text-sm text-slate-400 line-through">
@@ -416,6 +423,11 @@ export default function HotelDetail({ hid }: { hid: string }) {
               {perNight ? `${money(perNight)}/night · ` : ''}
               {nights} night{nights === 1 ? '' : 's'} · incl. taxes
             </p>
+            {selected && (
+              <p className="mt-1 text-xs font-medium text-slate-600">
+                {selected.roomTitle}
+              </p>
+            )}
 
             <div className="my-4 space-y-2 rounded-xl bg-slate-50 p-3 text-xs">
               {flags.length === 0 ? (
@@ -443,8 +455,19 @@ export default function HotelDetail({ hid }: { hid: string }) {
               )}
             </div>
 
-            <Button className="w-full" onClick={() => setReview(true)} disabled={!price}>
-              {needsApproval ? 'Request this stay' : 'Reserve'}
+            <Button
+              className="w-full"
+              onClick={() => {
+                if (hasRooms && !selected) scrollToRooms();
+                else setReview(true);
+              }}
+              disabled={!price}
+            >
+              {hasRooms && !selected
+                ? 'Select your room'
+                : needsApproval
+                  ? 'Request this stay'
+                  : 'Reserve'}
             </Button>
             <p className="mt-2 text-center text-[11px] text-slate-400">
               {checkin} → {checkout}
@@ -482,6 +505,18 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   {dateRange(checkin, checkout)} · {nights} night
                   {nights === 1 ? '' : 's'}
                 </p>
+                {selected && (
+                  <div className="mt-2 rounded-xl border border-slate-200 p-3">
+                    <p className="text-sm font-medium text-slate-800">
+                      {selected.roomTitle}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {[selected.bed, selected.refund, selected.meal]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {canBookForOthers && (
@@ -574,6 +609,33 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 images={images}
                 alt={name}
                 startIndex={lightbox}
+                className="h-[70vh] w-full"
+                rounded="rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* room photos lightbox */}
+      {roomPhotos && roomPhotos.images.length > 0 && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/90">
+          <div className="flex items-center justify-between px-4 py-3">
+            <p className="text-sm font-medium text-white/90">{roomPhotos.title}</p>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setRoomPhotos(null)}
+              className="rounded-lg p-2 text-white/80 hover:bg-white/10"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+          <div className="flex flex-1 items-center justify-center px-4 pb-8">
+            <div className="w-full max-w-4xl">
+              <HotelCarousel
+                images={roomPhotos.images}
+                alt={roomPhotos.title}
                 className="h-[70vh] w-full"
                 rounded="rounded-xl"
               />
