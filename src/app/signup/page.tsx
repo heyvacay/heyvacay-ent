@@ -167,6 +167,7 @@ export default function SignupPage() {
   const canContinue = () => {
     if (STEPS[step].key === 'company')
       return form.companyName.trim().length > 1 && /\S+@\S+\.\S+/.test(form.workEmail);
+    if (STEPS[step].key === 'travel') return form.annualSpend > 0;
     return true;
   };
 
@@ -405,6 +406,27 @@ export default function SignupPage() {
                   if (match) set('annualSpend', match);
                 }}
               />
+              <div className="mt-3 max-w-xs">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                  Or enter a custom amount
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    $
+                  </span>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    className="pl-7"
+                    placeholder="e.g. 2,500,000"
+                    value={form.annualSpend ? form.annualSpend.toLocaleString('en-US') : ''}
+                    onChange={(e) => {
+                      const n = Number(e.target.value.replace(/[^0-9]/g, ''));
+                      set('annualSpend', Number.isFinite(n) ? n : 0);
+                    }}
+                  />
+                </div>
+              </div>
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-brand/8 px-4 py-3 text-sm text-slate-600">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
                 At {money(form.annualSpend)} a year, companies like yours typically
