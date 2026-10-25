@@ -102,6 +102,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(SEED);
   const [role, setRole] = useState<Role>('admin');
   const [hydrated, setHydrated] = useState(false);
+  // When a sales rep "enters" a company from the Nova console, we overlay that
+  // company's identity onto the workspace (non-persistent — view only).
+  const [impersonation, setImpersonation] = useState<{
+    name: string;
+    domain: string;
+  } | null>(null);
 
   // Load persisted state on the client only (avoids SSR hydration mismatch).
   useEffect(() => {
@@ -137,6 +143,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, [state, role, hydrated]);
+
+  // Read the "view as company" overlay set by the Sales console.
+  useEffect(() => {
+    const read = () => {
+      try {
+        const raw = sessionStorage.getItem('hv_view_as_ctx');
+        setImpersonation(raw ? JSON.parse(raw) : null);
+      } catch {
+        setImpersonation(null);
+      }
+    };
+    read();
+    window.addEventListener('hv-view-as-change', read);
+    window.addEventListener('storage', read);
+    return () => {
+      window.removeEventListener('hv-view-as-change', read);
+      window.removeEventListener('storage', read);
+    };
+  }, []);
+
+  // The state exposed to the app, with the impersonated company's identity
+  // overlaid on top. Never persisted — raw `state` stays clean.
+  const effectiveState: AppState = impersonation
+    ? {
+        ...state,
+        company: {
+          ...state.company,
+          name: impersonation.name,
+          domain: impersonation.domain || state.company.domain,
+        },
+      }
+    : state;
 
   const activeUser =
     state.users.find((u) => u.id === state.activeUserId) ?? state.users[0];
@@ -558,7 +596,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const api: StoreApi = {
-    state,
+    state: effectiveState,
     activeUser,
     role,
     setRole,

@@ -16,43 +16,52 @@ import {
 } from '@/components/app/ui';
 import { money } from '@/lib/format';
 import {
+  INDUSTRIES,
   ME,
   REPS,
+  STATUS_COLOR,
   STATUS_LABEL,
   STATUS_ORDER,
+  TIERS,
+  healthColor,
   onboardingPct,
   type AccountStatus,
+  type Tier,
 } from '@/lib/crm';
-
-const STATUS_COLOR: Record<AccountStatus, 'slate' | 'amber' | 'green' | 'red'> = {
-  lead: 'slate',
-  onboarding: 'amber',
-  active: 'green',
-  churned: 'red',
-};
 
 export default function CompaniesPage() {
   const { companies, addCompany } = useCrm();
   const router = useRouter();
   const [filter, setFilter] = useState<'all' | AccountStatus>('all');
+  const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: '',
     domain: '',
+    industry: INDUSTRIES[0] as string,
+    tier: 'Mid-Market' as Tier,
     employees: 100,
     hq: '',
     annualSpend: 500000,
     accountManager: ME,
   });
 
-  const shown =
-    filter === 'all' ? companies : companies.filter((c) => c.status === filter);
+  const q = query.trim().toLowerCase();
+  const shown = companies
+    .filter((c) => (filter === 'all' ? true : c.status === filter))
+    .filter((c) =>
+      q
+        ? [c.name, c.domain, c.industry, c.hq].some((f) => f?.toLowerCase().includes(q))
+        : true
+    );
 
   const create = () => {
     if (!form.name.trim()) return;
     const co = addCompany({
       name: form.name.trim(),
       domain: form.domain.trim(),
+      industry: form.industry,
+      tier: form.tier,
       employees: Number(form.employees) || 0,
       hq: form.hq.trim(),
       annualSpend: Number(form.annualSpend) || 0,
@@ -70,20 +79,29 @@ export default function CompaniesPage() {
         actions={<Button onClick={() => setOpen(true)}>New company</Button>}
       />
 
-      {/* filter tabs */}
-      <div className="mb-4 inline-flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
-        {(['all', ...STATUS_ORDER] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-semibold capitalize transition-colors',
-              filter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-            )}
-          >
-            {f === 'all' ? 'All' : STATUS_LABEL[f]}
-          </button>
-        ))}
+      {/* filter tabs + search */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
+          {(['all', ...STATUS_ORDER] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-semibold capitalize transition-colors',
+                filter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              )}
+            >
+              {f === 'all' ? 'All' : STATUS_LABEL[f]}
+            </button>
+          ))}
+        </div>
+        <div className="w-full sm:w-64">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, domain, industry…"
+          />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -102,7 +120,7 @@ export default function CompaniesPage() {
                 <Badge color={STATUS_COLOR[c.status]}>{STATUS_LABEL[c.status]}</Badge>
               </div>
               <p className="text-xs text-slate-400">
-                {c.domain} · {c.employees} employees · {c.hq || '—'}
+                {c.industry} · {c.employees} employees · {c.hq || '—'}
               </p>
             </div>
             <div className="flex items-center gap-6 text-sm">
@@ -118,8 +136,11 @@ export default function CompaniesPage() {
                 <p className="text-xs font-medium text-slate-500">
                   {c.accountManager ?? 'Unassigned'}
                 </p>
+                <p className="mt-0.5">
+                  <Badge color={healthColor(c.health)}>Health {c.health}</Badge>
+                </p>
                 {c.status === 'onboarding' && (
-                  <p className="text-xs text-amber-600">{onboardingPct(c)}% onboarded</p>
+                  <p className="mt-0.5 text-xs text-amber-600">{onboardingPct(c)}% onboarded</p>
                 )}
               </div>
             </div>
@@ -162,6 +183,30 @@ export default function CompaniesPage() {
                   onChange={(e) => setForm({ ...form, domain: e.target.value })}
                   placeholder="acme.com"
                 />
+              </Field>
+              <Field label="Industry">
+                <Select
+                  value={form.industry}
+                  onChange={(e) => setForm({ ...form, industry: e.target.value })}
+                >
+                  {INDUSTRIES.map((i) => (
+                    <option key={i} value={i}>
+                      {i}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Tier">
+                <Select
+                  value={form.tier}
+                  onChange={(e) => setForm({ ...form, tier: e.target.value as Tier })}
+                >
+                  {TIERS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </Select>
               </Field>
               <Field label="Employees">
                 <Input

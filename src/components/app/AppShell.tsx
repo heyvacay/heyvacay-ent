@@ -86,6 +86,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const exitViewAs = () => {
     try {
       sessionStorage.removeItem('hv_view_as');
+      sessionStorage.removeItem('hv_view_as_ctx');
+      window.dispatchEvent(new Event('hv-view-as-change'));
     } catch {
       /* ignore */
     }

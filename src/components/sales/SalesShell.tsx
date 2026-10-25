@@ -4,12 +4,22 @@ import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/components/app/ui';
-import { ChartBar, Building, Sparkles } from '@/components/icons';
+import {
+  ChartBar,
+  Building,
+  Sparkles,
+  TrendUp,
+  Calendar,
+  Receipt,
+} from '@/components/icons';
 import { ME } from '@/lib/crm';
 
 const NAV = [
   { href: '/sales', label: 'Dashboard', icon: ChartBar },
+  { href: '/sales/pipeline', label: 'Pipeline', icon: TrendUp },
   { href: '/sales/companies', label: 'Companies', icon: Building },
+  { href: '/sales/tasks', label: 'Tasks', icon: Calendar },
+  { href: '/sales/contracts', label: 'Contracts', icon: Receipt },
 ];
 
 export default function SalesShell({ children }: { children: ReactNode }) {
