@@ -429,10 +429,14 @@ export default function SignupPage() {
               </div>
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-brand/8 px-4 py-3 text-sm text-slate-600">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
-                At {money(form.annualSpend)} a year, companies like yours typically
-                save around{' '}
-                <span className="font-semibold text-slate-800">{money(estimate)}</span>{' '}
-                with HeyVacay.
+                <p>
+                  At {money(form.annualSpend)} a year, companies like yours
+                  typically save around{' '}
+                  <span className="font-semibold text-slate-800">
+                    {money(estimate)}
+                  </span>{' '}
+                  with HeyVacay.
+                </p>
               </div>
             </StepShell>
           )}
