@@ -15,6 +15,7 @@ import {
   cn,
 } from '@/components/app/ui';
 import { money } from '@/lib/format';
+import { companyAccountNumber } from '@/components/app/AppShell';
 import {
   INDUSTRIES,
   ME,
@@ -51,7 +52,9 @@ export default function CompaniesPage() {
     .filter((c) => (filter === 'all' ? true : c.status === filter))
     .filter((c) =>
       q
-        ? [c.name, c.domain, c.industry, c.hq].some((f) => f?.toLowerCase().includes(q))
+        ? [c.name, c.domain, c.industry, c.hq, companyAccountNumber(c.id)].some((f) =>
+            f?.toLowerCase().includes(q)
+          )
         : true
     );
 
@@ -99,7 +102,7 @@ export default function CompaniesPage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, domain, industry…"
+            placeholder="Search name, domain, account #…"
           />
         </div>
       </div>
@@ -122,6 +125,7 @@ export default function CompaniesPage() {
               <p className="text-xs text-slate-400">
                 {c.industry} · {c.employees} employees · {c.hq || '—'}
               </p>
+              <p className="font-mono text-[11px] text-slate-400">{companyAccountNumber(c.id)}</p>
             </div>
             <div className="flex items-center gap-6 text-sm">
               <div className="text-right">

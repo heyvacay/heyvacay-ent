@@ -68,6 +68,53 @@ export function readAppLink(companyId: string): LinkedStats | null {
   }
 }
 
+export interface WorkspaceSnapshot {
+  company: { id: string; name: string; domain: string };
+  users: { id: string; name: string; email: string; department: string; title: string; role: string }[];
+  bookings: {
+    id: string;
+    travelerId: string;
+    title: string;
+    detail: string;
+    type: string;
+    startDate: string;
+    endDate: string;
+    price: number;
+    savings: number;
+    status: string;
+    destination?: string;
+    roomType?: string;
+  }[];
+}
+
+/** Full workspace snapshot for the support console (Nova). */
+export function readWorkspace(): WorkspaceSnapshot | null {
+  try {
+    const raw = localStorage.getItem(APP_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw)?.state;
+    if (!state?.company) return null;
+    return {
+      company: state.company,
+      users: Array.isArray(state.users) ? state.users : [],
+      bookings: Array.isArray(state.bookings) ? state.bookings : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function useWorkspace(): WorkspaceSnapshot | null {
+  const [snap, setSnap] = useState<WorkspaceSnapshot | null>(null);
+  useEffect(() => {
+    const read = () => setSnap(readWorkspace());
+    read();
+    window.addEventListener('storage', read);
+    return () => window.removeEventListener('storage', read);
+  }, []);
+  return snap;
+}
+
 /** Live-updating version — re-reads when the app store changes. */
 export function useAppLink(companyId: string): LinkedStats | null {
   const [stats, setStats] = useState<LinkedStats | null>(null);

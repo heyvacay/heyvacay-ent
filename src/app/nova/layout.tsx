@@ -9,10 +9,8 @@ export const metadata: Metadata = {
 };
 
 const NAV = [
-  { href: '#overview', label: 'Overview' },
-  { href: '#revenue', label: 'Revenue' },
-  { href: '#companies', label: 'Companies' },
-  { href: '#support', label: 'Ops queue' },
+  { href: '/nova', label: 'Booking lookup' },
+  { href: '/sales', label: 'Sales (Nova CRM)' },
 ];
 
 export default function NovaLayout({
