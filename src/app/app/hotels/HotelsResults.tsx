@@ -107,6 +107,14 @@ export default function HotelsResults() {
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState('recommended');
 
+  // Filters (client-side over the loaded results, like HeyVacay.co).
+  const [fProperty, setFProperty] = useState('');
+  const [fStars, setFStars] = useState<Set<number>>(new Set());
+  const [fMaxNightly, setFMaxNightly] = useState<number | null>(null);
+  const [fMinRating, setFMinRating] = useState(0);
+  const [fFreeCancel, setFFreeCancel] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   const baseArgs = useCallback((): HotelSearchArgs => {
     const chosen = SORTS.find((s) => s.value === sort) ?? SORTS[0];
     return {
@@ -202,6 +210,40 @@ export default function HotelsResults() {
     return `/app/hotels/${opt.hid}?${q.toString()}`;
   };
 
+  const perNightOf = (opt: InventoryOption) => Math.round(opt.price / (opt.nights || 1));
+  const maxNightlyAvailable = options.length
+    ? Math.max(...options.map(perNightOf))
+    : 1000;
+
+  // Apply the active filters over the loaded results.
+  const q = fProperty.trim().toLowerCase();
+  const visibleOptions = options.filter((opt) => {
+    if (q && !opt.title.toLowerCase().includes(q) && !(opt.location ?? '').toLowerCase().includes(q)) return false;
+    if (fStars.size > 0 && !(opt.star && fStars.has(opt.star))) return false;
+    if (fMaxNightly != null && perNightOf(opt) > fMaxNightly) return false;
+    if (fMinRating > 0 && !(opt.rating != null && opt.rating >= fMinRating)) return false;
+    if (fFreeCancel && !opt.freeCancellation) return false;
+    return true;
+  });
+
+  const toggleStar = (n: number) =>
+    setFStars((prev) => {
+      const next = new Set(prev);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+
+  const filtersActive =
+    Boolean(q) || fStars.size > 0 || fMaxNightly != null || fMinRating > 0 || fFreeCancel;
+  const clearFilters = () => {
+    setFProperty('');
+    setFStars(new Set());
+    setFMaxNightly(null);
+    setFMinRating(0);
+    setFFreeCancel(false);
+  };
+
   return (
     <div>
       {/* header */}
@@ -219,7 +261,10 @@ export default function HotelsResults() {
           <p className="text-sm text-slate-400">
             {checkin} → {checkout} · {nights} night{nights === 1 ? '' : 's'} ·{' '}
             {adults} guest{adults === 1 ? '' : 's'}
-            {!loading && ` · ${options.length} stays${hasMore ? '+' : ''}`}
+            {!loading &&
+              ` · ${visibleOptions.length}${filtersActive ? ` of ${options.length}` : ''} stays${
+                hasMore && !filtersActive ? '+' : ''
+              }`}
           </p>
         </div>
         <div className="w-full sm:w-56">
@@ -232,6 +277,105 @@ export default function HotelsResults() {
           </Select>
         </div>
       </div>
+
+      {/* filters */}
+      {!loading && options.length > 0 && (
+        <Card pad={false} className="mb-5 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={fProperty}
+              onChange={(e) => setFProperty(e.target.value)}
+              placeholder="Search by property or area…"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+            />
+            <button
+              onClick={() => setFiltersOpen((v) => !v)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Filters{filtersActive ? ' ·' : ''}
+            </button>
+            {filtersActive && (
+              <button onClick={clearFilters} className="text-sm font-medium text-brand-dark hover:underline">
+                Clear
+              </button>
+            )}
+          </div>
+
+          {filtersOpen && (
+            <div className="mt-4 grid gap-5 border-t border-slate-100 pt-4 sm:grid-cols-3">
+              {/* stars */}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Star rating</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[5, 4, 3].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => toggleStar(n)}
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-sm font-medium transition',
+                        fStars.has(n)
+                          ? 'border-brand bg-brand/10 text-brand-dark'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      )}
+                    >
+                      {n}★
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* price */}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Max / night {fMaxNightly != null ? `· ${money(fMaxNightly)}` : ''}
+                </p>
+                <input
+                  type="range"
+                  min={50}
+                  max={Math.max(200, maxNightlyAvailable)}
+                  step={25}
+                  value={fMaxNightly ?? Math.max(200, maxNightlyAvailable)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setFMaxNightly(v >= Math.max(200, maxNightlyAvailable) ? null : v);
+                  }}
+                  className="w-full accent-brand"
+                />
+              </div>
+
+              {/* rating + free cancel */}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Guest rating</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[0, 7, 8, 9].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setFMinRating(r)}
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-sm font-medium transition',
+                        fMinRating === r
+                          ? 'border-brand bg-brand/10 text-brand-dark'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      )}
+                    >
+                      {r === 0 ? 'Any' : `${r}+`}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={fFreeCancel}
+                    onChange={(e) => setFFreeCancel(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                  />
+                  Free cancellation only
+                </label>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {error && (
         <Card className="border-amber-200 bg-amber-50">
@@ -248,9 +392,13 @@ export default function HotelsResults() {
         />
       )}
 
-      {!loading && options.length > 0 && (
+      {!loading && options.length > 0 && visibleOptions.length === 0 && (
+        <EmptyState title="No stays match your filters" sub="Try widening or clearing them." />
+      )}
+
+      {!loading && visibleOptions.length > 0 && (
         <div className="space-y-4">
-          {[...options]
+          {[...visibleOptions]
             .map((opt) => ({ opt, flags: evaluatePolicies(opt, checkin) }))
             // In-policy first, then needs-approval, then blocked (stable).
             .sort((a, b) => policySeverity(a.flags) - policySeverity(b.flags))
