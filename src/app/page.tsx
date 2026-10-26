@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Nav from '@/components/Nav';
 import Reveal from '@/components/Reveal';
 import CountUp from '@/components/CountUp';
+import { SavingsCalculator } from '@/components/SavingsCalculator';
 import {
   ArrowRight,
   Bell,
@@ -234,6 +235,13 @@ export default function Home() {
             </Reveal>
           </div>
         </div>
+      </section>
+
+      {/* ============================ SAVINGS CALCULATOR ============================ */}
+      <section id="calculator" className="relative px-5 py-14 sm:px-8">
+        <Reveal>
+          <SavingsCalculator />
+        </Reveal>
       </section>
 
       {/* ============================ SAVINGS / VALUE ============================ */}

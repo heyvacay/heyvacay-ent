@@ -238,16 +238,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const daysAhead = Math.round(
         (new Date(startDate).getTime() - Date.now()) / 86400000
       );
+      // A city-scoped rule only applies to stays in that city.
+      const cityMatch = (p: Policy) =>
+        !p.city ||
+        (opt.location ?? '').toLowerCase().includes(p.city.toLowerCase());
+
       for (const p of state.policies.filter((x) => x.enabled)) {
-        if (p.type === 'max_nightly' && opt.type === 'hotel') {
+        if (p.type === 'max_nightly' && opt.type === 'hotel' && cityMatch(p)) {
           const nightly = opt.price / (opt.nights || 1);
           if (nightly > Number(p.value))
             flags.push({
               policy: p,
-              message: `Nightly rate ~${Math.round(nightly)} is over the ${p.value} cap.`,
+              message: `Nightly rate ~${Math.round(nightly)} is over the ${p.value} cap${p.city ? ` for ${p.city}` : ''}.`,
             });
         }
-        if (p.type === 'max_hotel_star' && opt.type === 'hotel' && opt.star) {
+        if (p.type === 'max_hotel_star' && opt.type === 'hotel' && opt.star && cityMatch(p)) {
           if (opt.star > Number(p.value))
             flags.push({
               policy: p,

@@ -202,13 +202,23 @@ function FlightPreview({ tiers }: { tiers: FlightCabinTier[] }) {
 /* ---------------- page ---------------- */
 
 export default function PoliciesPage() {
-  const { state, togglePolicy, updatePolicy } = useStore();
+  const { state, togglePolicy, updatePolicy, addPolicy, removePolicy } = useStore();
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
 
-  const nightly = byType('max_nightly');
+  // Multiple nightly-rate rules (e.g. >$400 approve, >$1000 block, per city).
+  const nightlyRules = state.policies.filter((p) => p.type === 'max_nightly');
   const star = byType('max_hotel_star');
   const flight = byType('flight_cabin_by_duration');
   const advance = byType('advance_days');
+
+  const addNightlyRule = () =>
+    addPolicy({
+      name: 'Nightly rate cap',
+      type: 'max_nightly',
+      value: 500,
+      action: 'approve',
+      enabled: true,
+    });
 
   const setTiers = (tiers: FlightCabinTier[]) =>
     flight && updatePolicy(flight.id, { tiers });
@@ -243,10 +253,11 @@ export default function PoliciesPage() {
         <SectionCard
           icon={<Receipt className="h-5 w-5" />}
           title="Hotels"
-          sub="Caps on nightly rate and hotel class."
+          sub="Add as many nightly-rate rules as you need — e.g. over $400 needs approval, over $1,000 blocks. Scope any rule to a city."
         >
-          {nightly && (
+          {nightlyRules.map((nightly) => (
             <Rule
+              key={nightly.id}
               enabled={nightly.enabled}
               onToggle={() => togglePolicy(nightly.id)}
               action={nightly.action}
@@ -259,8 +270,24 @@ export default function PoliciesPage() {
                 onChange={(n) => updatePolicy(nightly.id, { value: n })}
               />
               <span>per night</span>
+              <span className="text-slate-400">in</span>
+              <input
+                value={nightly.city ?? ''}
+                onChange={(e) => updatePolicy(nightly.id, { city: e.target.value || undefined })}
+                placeholder="any city"
+                className="w-28 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+              />
+              <button
+                onClick={() => removePolicy(nightly.id)}
+                className="ml-1 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-red-600"
+              >
+                Remove
+              </button>
             </Rule>
-          )}
+          ))}
+          <Button variant="ghost" size="sm" onClick={addNightlyRule}>
+            + Add nightly-rate rule
+          </Button>
           {star && (
             <Rule
               enabled={star.enabled}

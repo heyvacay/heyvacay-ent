@@ -65,6 +65,8 @@ export interface Policy {
   enabled: boolean;
   /** For flight_cabin_by_duration: cabin allowance by flight length. */
   tiers?: FlightCabinTier[];
+  /** Optional city scope — the rule applies only to stays in this city. */
+  city?: string;
 }
 
 export type BookingType = 'hotel' | 'flight';
