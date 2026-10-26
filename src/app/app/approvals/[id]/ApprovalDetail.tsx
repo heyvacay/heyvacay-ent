@@ -161,6 +161,12 @@ export default function ApprovalDetail({ id }: { id: string }) {
                     Room requested: {b.roomType}
                   </p>
                 )}
+                {b.travelerNote && (
+                  <p className="mt-1 rounded-lg bg-slate-50 p-2 text-sm text-slate-600">
+                    <span className="font-semibold text-slate-700">Traveler&apos;s note:</span>{' '}
+                    {b.travelerNote}
+                  </p>
+                )}
                 <p className="mt-1 text-sm text-slate-400">
                   {dateRange(b.startDate, b.endDate)}
                 </p>

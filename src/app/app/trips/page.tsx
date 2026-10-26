@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import {
   Badge,
@@ -15,9 +16,11 @@ import type { Booking } from '@/lib/types';
 function TripCard({
   b,
   onCancel,
+  onDetails,
 }: {
   b: Booking;
   onCancel: (id: string) => void;
+  onDetails: (b: Booking) => void;
 }) {
   const savings = b.savings;
   const days = daysUntil(b.startDate);
@@ -69,18 +72,90 @@ function TripCard({
             </p>
           )}
         </div>
-        {b.status !== 'cancelled' && !past && (
-          <Button size="sm" variant="ghost" onClick={() => onCancel(b.id)}>
-            Cancel
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => onDetails(b)}>
+            View details
           </Button>
-        )}
+          {b.status !== 'cancelled' && !past && (
+            <Button size="sm" variant="ghost" onClick={() => onCancel(b.id)}>
+              Cancel
+            </Button>
+          )}
+        </div>
       </div>
     </Card>
   );
 }
 
+function DetailsModal({ b, onClose }: { b: Booking; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-md overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {b.images && b.images.length > 0 && (
+          <div className="grid grid-cols-3 gap-1">
+            {b.images.slice(0, 3).map((src, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={i} src={src} alt="" className={`h-28 w-full object-cover ${i === 0 ? 'col-span-3 h-40' : ''}`} />
+            ))}
+          </div>
+        )}
+        <div className="space-y-3 p-5">
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="font-display text-lg font-bold text-slate-900">{b.title}</h2>
+            <button onClick={onClose} aria-label="Close" className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">
+              ✕
+            </button>
+          </div>
+          <p className="text-sm text-slate-500">{b.detail}</p>
+          <div className="rounded-xl bg-slate-50 p-3 text-sm">
+            {b.roomType && <Row k="Room" v={b.roomType} />}
+            {b.destination && <Row k="Destination" v={b.destination} />}
+            <Row k="Dates" v={dateRange(b.startDate, b.endDate)} />
+            <Row k="Total" v={money(b.price)} />
+            {b.savings > 0 && <Row k="Saved vs market" v={money(b.savings)} tone="emerald" />}
+            <Row k="Points earned" v={`+${num(b.pointsEarned)}`} tone="brand" />
+            <Row k="Status" v={b.status.replace('_', ' ')} />
+          </div>
+          {b.travelerNote && (
+            <p className="rounded-lg bg-slate-50 p-2 text-sm text-slate-600">
+              <span className="font-semibold">Your note:</span> {b.travelerNote}
+            </p>
+          )}
+          {b.reviewNote && b.reviewNoteVisible && (
+            <p className="rounded-lg bg-slate-50 p-2 text-sm text-slate-600">
+              <span className="font-semibold">Manager:</span> “{b.reviewNote}”
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ k, v, tone }: { k: string; v: string; tone?: 'emerald' | 'brand' }) {
+  return (
+    <div className="mt-1 flex justify-between first:mt-0">
+      <span className="text-slate-500">{k}</span>
+      <span
+        className={`font-semibold capitalize ${
+          tone === 'emerald' ? 'text-emerald-600' : tone === 'brand' ? 'text-brand-dark' : 'text-slate-800'
+        }`}
+      >
+        {v}
+      </span>
+    </div>
+  );
+}
+
 export default function TripsPage() {
   const { state, activeUser, cancelBooking } = useStore();
+  const [details, setDetails] = useState<Booking | null>(null);
 
   const mine = state.bookings
     .filter((b) => b.travelerId === activeUser.id)
@@ -117,7 +192,7 @@ export default function TripsPage() {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} />
+                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} />
                 ))}
               </div>
             )}
@@ -130,13 +205,15 @@ export default function TripsPage() {
               </h2>
               <div className="space-y-3">
                 {past.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} />
+                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} />
                 ))}
               </div>
             </section>
           )}
         </div>
       )}
+
+      {details && <DetailsModal b={details} onClose={() => setDetails(null)} />}
     </div>
   );
 }

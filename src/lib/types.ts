@@ -94,6 +94,8 @@ export interface Booking {
   reviewNote?: string;
   /** Whether the reviewer's comment is shown to the traveler (default true). */
   reviewNoteVisible?: boolean;
+  /** A note the traveler adds when submitting for approval. */
+  travelerNote?: string;
   /** Hotel rate was free-cancellation (relevant to the approval window). */
   freeCancellation?: boolean;
   /** Destination label (flight dest city/IATA, or hotel location). */

@@ -68,6 +68,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
   // book_hash and all-in price the booking is made against.
   const [selected, setSelected] = useState<ReserveArgs | null>(null);
   const [policyAlert, setPolicyAlert] = useState<string[] | null>(null);
+  const [bookNote, setBookNote] = useState('');
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
     null
   );
@@ -155,6 +156,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
       endDate: checkout,
       roomType: selected?.roomTitle,
       images,
+      travelerNote: bookNote.trim() || undefined,
     });
     setConfirmed({ pending: needsApproval, points });
     setReview(false);
@@ -619,6 +621,21 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   <Wallet className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" /> This
                   puts the guest over their {money(budgetLimit)} travel budget.
                 </p>
+              )}
+
+              {needsApproval && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Add a note for your approver (optional)
+                  </label>
+                  <textarea
+                    value={bookNote}
+                    onChange={(e) => setBookNote(e.target.value)}
+                    rows={2}
+                    placeholder="Why this stay? Anything they should know…"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                  />
+                </div>
               )}
 
               <Button className="w-full" onClick={reserve} disabled={!price}>

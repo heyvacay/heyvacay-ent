@@ -13,6 +13,9 @@ export default function EventsPage() {
   const { state, activeUser, role } = useStore();
   const { events, createEvent } = useEvents();
   const router = useRouter();
+  // Events can edit policy (allow-lists), so only admins / bookers create them.
+  // Everyone else can still be added to and join events.
+  const canCreate = role === 'admin' || role === 'booker';
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -71,10 +74,14 @@ export default function EventsPage() {
       <PageHeader
         title="Events"
         subtitle="Company trips with an allow-list of travel, a group chat, and group dinners."
-        actions={<Button onClick={() => setOpen((v) => !v)}>{open ? 'Close' : 'New event'}</Button>}
+        actions={
+          canCreate ? (
+            <Button onClick={() => setOpen((v) => !v)}>{open ? 'Close' : 'New event'}</Button>
+          ) : undefined
+        }
       />
 
-      {suggestions.length > 0 && (
+      {canCreate && suggestions.length > 0 && (
         <Card className="mb-5 border-brand/30 bg-brand/5">
           <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <Sparkles className="h-4 w-4 text-brand-dark" /> Nova spotted a group trip

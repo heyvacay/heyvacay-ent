@@ -81,6 +81,7 @@ export interface StoreApi {
     endDate: string;
     roomType?: string;
     images?: string[];
+    travelerNote?: string;
   }) => Booking;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
@@ -400,7 +401,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, startDate, endDate, roomType, images }) => {
+    ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
       const flags = evaluatePolicies(opt, startDate);
       const needsApproval = flags.some(
@@ -435,6 +436,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         airline: opt.airline,
         images: images ?? opt.images,
         roomType,
+        travelerNote,
       };
 
       setState((s) => {
