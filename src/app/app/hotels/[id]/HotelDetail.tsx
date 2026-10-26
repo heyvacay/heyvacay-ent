@@ -18,7 +18,8 @@ import { Lightbox } from '@/components/hotels/Lightbox';
 import { RoomSelection } from '@/components/hotels/RoomSelection';
 import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
-import { Button, Card, Field, Select, cn } from '@/components/app/ui';
+import { Button, Card, Field, Input, Select, cn } from '@/components/app/ui';
+import { HvLoader } from '@/components/HvLoader';
 import { money, num, dateRange } from '@/lib/format';
 import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet } from '@/components/icons';
 
@@ -69,6 +70,10 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [selected, setSelected] = useState<ReserveArgs | null>(null);
   const [policyAlert, setPolicyAlert] = useState<string[] | null>(null);
   const [bookNote, setBookNote] = useState('');
+  // Checkout: payment entry step + a processing overlay (like HeyVacay.co).
+  const [payStep, setPayStep] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [cc, setCc] = useState({ num: '', exp: '', cvc: '', name: '' });
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
     null
   );
@@ -148,7 +153,8 @@ export default function HotelDetail({ hid }: { hid: string }) {
     return { status: 'in', notes: [] };
   };
 
-  const reserve = () => {
+  // Commit the booking (after payment / approval decision).
+  const commitBooking = () => {
     book({
       opt,
       travelerId,
@@ -160,7 +166,31 @@ export default function HotelDetail({ hid }: { hid: string }) {
     });
     setConfirmed({ pending: needsApproval, points });
     setReview(false);
+    setPayStep(false);
+    setProcessing(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Simulate payment processing then commit (demo or "real" both run this).
+  const processAndBook = () => {
+    setProcessing(true);
+    setTimeout(commitBooking, 1600);
+  };
+
+  // "Request this stay" / "Confirm booking" primary action.
+  const reserve = () => {
+    if (needsApproval) {
+      // Approvals route to an admin — no payment taken up front.
+      commitBooking();
+    } else if (state.billing?.mode === 'employee') {
+      // Employee pays at checkout — show the payment step.
+      setReview(false);
+      setPayStep(true);
+    } else {
+      // Company card / Net 30 — process straight through.
+      setReview(false);
+      processAndBook();
+    }
   };
 
   const onReserveRoom = (args: ReserveArgs) => {
@@ -191,16 +221,54 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   if (confirmed) {
     return (
-      <Card className="mx-auto max-w-xl text-center">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
-          <Check className="h-7 w-7" />
-        </span>
-        <h2 className="mt-4 font-display text-2xl font-bold text-slate-900">
-          {confirmed.pending ? 'Sent for approval' : 'Trip confirmed'}
-        </h2>
-        <p className="mt-1 text-slate-500">
-          {name} · {nights} night{nights === 1 ? '' : 's'}
-        </p>
+      <Card className="mx-auto max-w-xl">
+        <div className="text-center">
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+            <Check className="h-7 w-7" />
+          </span>
+          <h2 className="mt-4 font-display text-2xl font-bold text-slate-900">
+            {confirmed.pending ? 'Sent for approval' : 'Booking confirmed!'}
+          </h2>
+          <p className="mt-1 text-slate-500">
+            {confirmed.pending
+              ? 'Your manager will review and decide shortly.'
+              : 'Your stay is booked. Have a great trip!'}
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 p-4">
+          <p className="font-semibold text-slate-900">{name}</p>
+          {selected?.roomTitle && <p className="text-sm text-slate-500">{selected.roomTitle}</p>}
+          <p className="text-sm text-slate-400">
+            {dateRange(checkin, checkout)} · {nights} night{nights === 1 ? '' : 's'}
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs text-slate-400">Total</p>
+              <p className="font-display font-bold text-slate-900">{money(price)}</p>
+            </div>
+            <div className="rounded-xl bg-emerald-50 p-3">
+              <p className="text-xs text-emerald-600">Saved your company</p>
+              <p className="font-display font-bold text-emerald-700">{money(savings)}</p>
+            </div>
+            <div className="rounded-xl bg-brand/10 p-3">
+              <p className="text-xs text-brand-dark">Points</p>
+              <p className="font-display font-bold text-brand-dark">+{num(confirmed.points)}</p>
+            </div>
+          </div>
+          <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium">
+            {flags.length === 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-sky-600">
+                <Check className="h-4 w-4" /> In your travel policy
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-amber-600">
+                <Shield className="h-4 w-4" /> {needsApproval ? 'Pending manager approval' : 'Policy note acknowledged'}
+              </span>
+            )}
+          </p>
+        </div>
+
         <div className="mt-6 flex justify-center gap-2">
           <Button href="/app/trips">View my trips</Button>
           <Button href="/app/book" variant="outline">
@@ -650,6 +718,76 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 </p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* payment / checkout step */}
+      {payStep && !processing && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"
+          onClick={() => setPayStep(false)}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-md overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h2 className="font-display text-lg font-bold text-slate-900">Payment</h2>
+              <button onClick={() => setPayStep(false)} aria-label="Close" className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm">
+                <span className="text-slate-500">Total due</span>
+                <span className="font-display text-lg font-bold text-slate-900">{money(price)}</span>
+              </div>
+              <Field label="Name on card">
+                <Input value={cc.name} onChange={(e) => setCc({ ...cc, name: e.target.value })} placeholder="Full name" />
+              </Field>
+              <Field label="Card number">
+                <Input
+                  value={cc.num}
+                  onChange={(e) => setCc({ ...cc, num: e.target.value })}
+                  placeholder="1234 5678 9012 3456"
+                  inputMode="numeric"
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Expiry">
+                  <Input value={cc.exp} onChange={(e) => setCc({ ...cc, exp: e.target.value })} placeholder="MM/YY" />
+                </Field>
+                <Field label="CVC">
+                  <Input value={cc.cvc} onChange={(e) => setCc({ ...cc, cvc: e.target.value })} placeholder="123" inputMode="numeric" />
+                </Field>
+              </div>
+              <Button className="w-full" onClick={processAndBook}>
+                Pay {money(price)}
+              </Button>
+              <button
+                onClick={processAndBook}
+                className="w-full rounded-lg border border-dashed border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              >
+                DEMO MODE — DOES NOT CREATE A REAL BOOKING
+              </button>
+              <p className="text-center text-[11px] text-slate-400">
+                Payments are processed securely. Demo mode simulates a successful payment.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* processing overlay */}
+      {processing && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-white/95">
+          <div className="text-center">
+            <HvLoader />
+            <p className="mt-4 font-display text-lg font-semibold text-slate-700">
+              Processing your booking…
+            </p>
+            <p className="text-sm text-slate-400">Hang tight, this only takes a moment.</p>
           </div>
         </div>
       )}
