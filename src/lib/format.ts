@@ -23,8 +23,19 @@ export function pct(n: number, digits = 0): string {
   return `${(n * 100).toFixed(digits)}%`;
 }
 
+/**
+ * Parse a date string as LOCAL time. A bare YYYY-MM-DD is otherwise parsed as
+ * UTC midnight, which renders as the previous day in US timezones — the cause
+ * of bookings showing a day early.
+ */
+export function parseLocal(iso: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(iso);
+}
+
 export function shortDate(iso: string): string {
-  const d = new Date(iso);
+  const d = parseLocal(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-US', {
     month: 'short',
@@ -34,8 +45,8 @@ export function shortDate(iso: string): string {
 }
 
 export function dateRange(a: string, b: string): string {
-  const d1 = new Date(a);
-  const d2 = new Date(b);
+  const d1 = parseLocal(a);
+  const d2 = parseLocal(b);
   const sameYear = d1.getFullYear() === d2.getFullYear();
   const f = (d: Date, withYear: boolean) =>
     d.toLocaleDateString('en-US', {
@@ -59,18 +70,24 @@ export function uid(prefix = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Local calendar date (not UTC) so "today" is correct across timezones.
+  return toISODate(new Date());
 }
 
 export function addDays(iso: string, days: number): string {
-  const d = new Date(iso);
+  const d = parseLocal(iso);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toISODate(d);
 }
 
 export function daysUntil(iso: string): number {
-  const d = new Date(iso);
+  const d = parseLocal(iso);
   const now = new Date();
-  return Math.round((d.getTime() - now.getTime()) / 86400000);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
 }

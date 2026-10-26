@@ -16,7 +16,7 @@ import {
   type UiRoom,
 } from '@/lib/hotelRooms';
 
-export type PolicyStatus = 'in' | 'approval' | 'block';
+export type PolicyStatus = 'in' | 'note' | 'approval' | 'block';
 
 export interface ReserveArgs {
   roomTitle: string;
@@ -27,6 +27,7 @@ export interface ReserveArgs {
   refund: string;
   meal: string;
   policy: PolicyStatus;
+  policyNotes: string[];
   points: number;
 }
 
@@ -88,6 +89,7 @@ const POLICY_META: Record<
   { label: string; cls: string; Icon: typeof Check }
 > = {
   in: { label: 'In policy', cls: 'bg-sky-50 text-sky-700', Icon: Check },
+  note: { label: 'Policy note', cls: 'bg-lime-50 text-lime-700', Icon: Shield },
   approval: { label: 'Needs approval', cls: 'bg-amber-50 text-amber-700', Icon: Shield },
   block: { label: 'Out of policy', cls: 'bg-red-50 text-red-700', Icon: Shield },
 };
@@ -101,7 +103,7 @@ export function RoomCard({
   room: UiRoom;
   onReserve: (args: ReserveArgs) => void;
   onPhotos: (images: string[], title: string, index: number) => void;
-  assessPolicy?: (priceAllIn: number) => PolicyStatus;
+  assessPolicy?: (priceAllIn: number) => { status: PolicyStatus; notes: string[] };
 }) {
   // Bed selection stays internal (defaults to the best bed) — we no longer show
   // confusing bed-type options; travelers choose refundability and meal plan.
@@ -139,7 +141,9 @@ export function RoomCard({
     price: allIn,
   }).points;
 
-  const policy: PolicyStatus = assessPolicy?.(allIn) ?? 'in';
+  const assessment = assessPolicy?.(allIn);
+  const policy: PolicyStatus = assessment?.status ?? 'in';
+  const policyNotes = assessment?.notes ?? [];
   const pm = POLICY_META[policy];
 
   const refundOpts = leaf?.bed?.refundOptions ?? [];
@@ -158,7 +162,9 @@ export function RoomCard({
           ? 'ring-red-200'
           : policy === 'approval'
             ? 'ring-amber-200'
-            : 'ring-transparent'
+            : policy === 'note'
+              ? 'ring-lime-200'
+              : 'ring-transparent'
       )}
     >
       <HotelCarousel
@@ -279,11 +285,16 @@ export function RoomCard({
                 refund: refund?.label ?? '',
                 meal: leaf?.meal.label ?? '',
                 policy,
+                policyNotes,
                 points,
               })
             }
           >
-            {policy === 'block' ? 'Request override' : policy === 'approval' ? 'Request approval' : 'Reserve'}
+            {policy === 'block'
+              ? 'Request override'
+              : policy === 'approval'
+                ? 'Request approval'
+                : 'Reserve'}
           </Button>
         </div>
       </div>

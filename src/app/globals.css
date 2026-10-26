@@ -68,8 +68,8 @@ body {
 }
 
 ::selection {
-  background: rgba(35, 227, 239, 0.3);
-  color: #fff;
+  background: rgba(35, 227, 239, 0.35);
+  color: #0a1426;
 }
 
 /* Thin, on-brand scrollbar */

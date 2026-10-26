@@ -39,10 +39,11 @@ function Stars({ n = 0 }: { n?: number }) {
   );
 }
 
-/** 0 = in policy, 1 = needs approval, 2 = blocked. */
-function policySeverity(flags: PolicyFlag[]): 0 | 1 | 2 {
-  if (flags.some((f) => f.policy.action === 'block')) return 2;
-  if (flags.some((f) => f.policy.action === 'approve')) return 1;
+/** 0 = in policy, 1 = policy note (warn), 2 = needs approval, 3 = blocked. */
+function policySeverity(flags: PolicyFlag[]): 0 | 1 | 2 | 3 {
+  if (flags.some((f) => f.policy.action === 'block')) return 3;
+  if (flags.some((f) => f.policy.action === 'approve')) return 2;
+  if (flags.some((f) => f.policy.action === 'warn')) return 1;
   return 0;
 }
 
@@ -53,7 +54,7 @@ function Signals({
 }: {
   savings: number;
   points: number;
-  severity: 0 | 1 | 2;
+  severity: 0 | 1 | 2 | 3;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -62,6 +63,10 @@ function Signals({
           <Check className="h-3.5 w-3.5" /> In policy
         </span>
       ) : severity === 1 ? (
+        <span className="inline-flex items-center gap-1 font-semibold text-lime-600">
+          <Shield className="h-3.5 w-3.5" /> Policy note
+        </span>
+      ) : severity === 2 ? (
         <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
           <Shield className="h-3.5 w-3.5" /> Needs approval
         </span>
@@ -264,11 +269,13 @@ export default function HotelsResults() {
                   'overflow-hidden ring-1',
                   searched
                     ? 'ring-2 ring-sky-400'
-                    : severity === 2
+                    : severity === 3
                       ? 'ring-red-200'
-                      : severity === 1
+                      : severity === 2
                         ? 'ring-amber-200'
-                        : 'ring-sky-100'
+                        : severity === 1
+                          ? 'ring-lime-200'
+                          : 'ring-sky-100'
                 )}
               >
                 <div className="flex flex-col sm:flex-row">
@@ -294,6 +301,8 @@ export default function HotelsResults() {
                       </div>
                       <Link
                         href={detailHref(opt)}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="line-clamp-1 font-display text-lg font-bold text-slate-900 hover:text-brand-dark"
                       >
                         {opt.title}
@@ -348,7 +357,7 @@ export default function HotelsResults() {
                           {money(perNight)}/night · incl. taxes
                         </div>
                       </div>
-                      <Button href={detailHref(opt)} size="sm" className="w-full">
+                      <Button href={detailHref(opt)} target="_blank" size="sm" className="w-full">
                         See rooms
                       </Button>
                     </div>

@@ -432,6 +432,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : opt.location ?? opt.title,
         departAt: opt.departAt,
         arriveAt: opt.arriveAt,
+        airline: opt.airline,
         images: images ?? opt.images,
         roomType,
       };

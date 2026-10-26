@@ -30,13 +30,16 @@ export function Card({
   children,
   className = '',
   pad = true,
+  id,
 }: {
   children: ReactNode;
   className?: string;
   pad?: boolean;
+  id?: string;
 }) {
   return (
     <div
+      id={id}
       className={cn(
         'rounded-2xl border border-slate-200 bg-white shadow-sm',
         pad && 'p-5 sm:p-6',
@@ -112,6 +115,7 @@ type ButtonProps = {
   variant?: 'primary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md';
   href?: string;
+  target?: string;
   type?: 'button' | 'submit';
   onClick?: () => void;
   disabled?: boolean;
@@ -123,6 +127,7 @@ export function Button({
   variant = 'primary',
   size = 'md',
   href,
+  target,
   type = 'button',
   onClick,
   disabled,
@@ -144,7 +149,12 @@ export function Button({
 
   if (href) {
     return (
-      <a href={href} className={cls}>
+      <a
+        href={href}
+        className={cls}
+        target={target}
+        rel={target === '_blank' ? 'noopener noreferrer' : undefined}
+      >
         {children}
       </a>
     );

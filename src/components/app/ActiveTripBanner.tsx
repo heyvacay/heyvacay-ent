@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import type { Booking } from '@/lib/types';
+import { parseLocal } from '@/lib/format';
 import { Plane, MapPin } from '@/components/icons';
 
 interface Weather {
@@ -96,7 +98,10 @@ export function ActiveTripBanner() {
   if (!trip) return null;
 
   const first = activeUser.name.split(' ')[0];
+  const destCity = cityOf(destination);
   const weatherStr = weather ? `${weather.tempF}°F, ${weather.label.toLowerCase()} ${weather.emoji}` : '';
+  const longDate = (iso: string) =>
+    parseLocal(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
   let headline = '';
   let sub = '';
@@ -105,13 +110,14 @@ export function ActiveTripBanner() {
     const depart = trip.departAt ? new Date(trip.departAt).getTime() : null;
     const arrive = trip.arriveAt ? new Date(trip.arriveAt).getTime() : null;
     const hoursToDepart = depart ? (depart - now) / 3600000 : null;
+    const airlineSite = trip.airline ? `${trip.airline}'s website` : "your airline's website";
 
     // Stable mock flight status.
     const statusSeed = hashNum(trip.id + todayStr) % 10;
     const status = statusSeed === 9 ? 'cancelled' : statusSeed >= 7 ? 'delayed' : 'ontime';
 
     if (arrive && now >= arrive && now <= arrive + 3600_000) {
-      headline = `Welcome to ${destination}! ✈️`;
+      headline = `Welcome to ${destCity}! ✈️`;
       sub = weatherStr ? `It's currently ${weatherStr}. Enjoy your time here!` : 'Enjoy your time here!';
     } else if (hoursToDepart != null && hoursToDepart <= 4 && hoursToDepart > -2) {
       headline = `Good ${greetingWord()}, ${first}!`;
@@ -121,43 +127,57 @@ export function ActiveTripBanner() {
         sub = `Your flight is delayed — new departure time ${fmtTime(trip.departAt)}. We apologize for the inconvenience.`;
       else
         sub = `Your flight is cancelled. We apologize — please work with the airline at the airport to rebook, and contact us if you have any issues.`;
+    } else if (hoursToDepart != null && hoursToDepart <= 24 && hoursToDepart > 4) {
+      headline = `Good ${greetingWord()}, ${first}, your trip is almost here!`;
+      sub = `It's time to check in! Visit ${airlineSite} to check in for your flight to ${destCity}.`;
     } else {
-      headline = `Hi ${first}! Get ready for your flight to ${destination}. ✈️`;
-      sub = trip.departAt
-        ? `Departing ${fmtTime(trip.departAt)} today.`
-        : `Departing ${new Date(trip.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`;
+      headline = `Hi ${first}! Get ready for your flight to ${destCity}. ✈️`;
+      sub = trip.departAt ? `Departing ${fmtTime(trip.departAt)}.` : `Departing ${longDate(trip.startDate)}.`;
     }
   } else {
     // Hotel / in-destination.
     const daysLeft = Math.max(
       0,
-      Math.round((new Date(trip.endDate).getTime() - now) / 86400000)
+      Math.round((parseLocal(trip.endDate).getTime() - now) / 86400000)
     );
     if (trip.startDate === todayStr) {
-      headline = `Welcome to ${destination}!`;
+      headline = `Welcome to ${destCity}!`;
       sub = weatherStr
         ? `It's currently ${weatherStr}. ${trip.title} has your room ready and is excited to welcome you!`
         : `${trip.title} has your room ready and is excited to welcome you!`;
     } else if (trip.startDate > todayStr) {
-      headline = `Hi ${first}! Get ready for your trip to ${destination}.`;
-      sub = `Starting ${new Date(trip.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`;
+      headline = `Hi ${first}! Get ready for your trip to ${destCity}.`;
+      sub = `Starting ${longDate(trip.startDate)}.`;
     } else {
       headline = `Hi ${first}!`;
-      sub = `It's currently ${weatherStr || 'a great day'} in ${destination} and you have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in your trip.`;
+      sub = `It's currently ${weatherStr || 'a great day'} in ${destCity} and you have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in your trip.`;
     }
   }
 
   return (
     <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-navy-deep to-navy p-5 text-white sm:p-6">
-      <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
-          {trip.type === 'flight' ? <Plane className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
-        </span>
-        <div className="min-w-0">
-          <h2 className="font-display text-xl font-bold leading-tight">{headline}</h2>
-          <p className="mt-1 text-sm text-slate-300">{sub}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
+            {trip.type === 'flight' ? <Plane className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-display text-xl font-bold leading-tight">{headline}</h2>
+            <p className="mt-1 text-sm text-slate-300">{sub}</p>
+          </div>
         </div>
+        <Link
+          href="/app/trips"
+          className="shrink-0 rounded-lg bg-white/15 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-white/25"
+        >
+          View trip
+        </Link>
       </div>
     </div>
   );
+}
+
+/** City portion of a location string ("San Francisco, USA" -> "San Francisco"). */
+function cityOf(s: string): string {
+  return s.split(',')[0].trim() || s;
 }

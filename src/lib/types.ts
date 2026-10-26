@@ -101,6 +101,8 @@ export interface Booking {
   /** Flight departure / arrival times (ISO), when known. */
   departAt?: string;
   arriveAt?: string;
+  /** Marketing airline name (flights). */
+  airline?: string;
   /** Hotel images + the room type requested (shown to the approver). */
   images?: string[];
   roomType?: string;

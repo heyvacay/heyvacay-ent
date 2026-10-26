@@ -36,7 +36,7 @@ export function RoomSelection({
   uiRooms: UiRoom[];
   onReserve: (args: ReserveArgs) => void;
   onPhotos: (images: string[], title: string, index: number) => void;
-  assessPolicy?: (priceAllIn: number) => PolicyStatus;
+  assessPolicy?: (priceAllIn: number) => { status: PolicyStatus; notes: string[] };
 }) {
   const [filter, setFilter] = useState<string>('all');
   const [showAll, setShowAll] = useState(false);
@@ -66,7 +66,7 @@ export function RoomSelection({
   if (uiRooms.length === 0) return null;
 
   return (
-    <Card data-section="select-room" className="scroll-mt-24">
+    <Card id="select-room" className="scroll-mt-24">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-lg font-bold text-slate-900">
           Select room type

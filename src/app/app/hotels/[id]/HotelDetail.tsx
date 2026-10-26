@@ -67,6 +67,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
   // The specific rate the guest picked from a room card — carries the real
   // book_hash and all-in price the booking is made against.
   const [selected, setSelected] = useState<ReserveArgs | null>(null);
+  const [policyAlert, setPolicyAlert] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
     null
   );
@@ -132,13 +133,18 @@ export default function HotelDetail({ hid }: { hid: string }) {
   );
 
   // Per-room policy check — each room card evaluates its own all-in price so a
-  // cheap room can be in policy while a suite needs approval or is blocked.
-  const assessRoom = (priceAllIn: number): 'in' | 'approval' | 'block' => {
+  // cheap room can be in policy while a suite has a note / needs approval /
+  // is blocked. Returns the status and the human-readable notes.
+  const assessRoom = (
+    priceAllIn: number
+  ): { status: 'in' | 'note' | 'approval' | 'block'; notes: string[] } => {
     const roomOpt: InventoryOption = { ...opt, price: priceAllIn };
     const fl = evaluatePolicies(roomOpt, checkin || new Date().toISOString());
-    if (fl.some((f) => f.policy.action === 'block')) return 'block';
-    if (fl.some((f) => f.policy.action === 'approve')) return 'approval';
-    return fl.length ? 'approval' : 'in';
+    const notes = fl.map((f) => f.message);
+    if (fl.some((f) => f.policy.action === 'block')) return { status: 'block', notes };
+    if (fl.some((f) => f.policy.action === 'approve')) return { status: 'approval', notes };
+    if (fl.some((f) => f.policy.action === 'warn')) return { status: 'note', notes };
+    return { status: 'in', notes: [] };
   };
 
   const reserve = () => {
@@ -157,13 +163,20 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   const onReserveRoom = (args: ReserveArgs) => {
     setSelected(args);
-    setReview(true);
+    // A policy note (warn) requires an acknowledgement, not approval — show a
+    // full-screen alert the traveler must accept before continuing.
+    if (args.policy === 'note' && args.policyNotes.length > 0) {
+      setPolicyAlert(args.policyNotes);
+    } else {
+      setReview(true);
+    }
   };
 
   const scrollToRooms = () => {
-    document
-      .querySelector('[data-section="select-room"]')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('select-room')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
   };
 
   // Budget check for the chosen traveler.
@@ -477,16 +490,21 @@ export default function HotelDetail({ hid }: { hid: string }) {
             <Button
               className="w-full"
               onClick={() => {
+                if (loading) return;
+                // Always send people to pick a room when rooms exist and none
+                // is chosen yet — don't open the booking modal mid-load.
                 if (hasRooms && !selected) scrollToRooms();
-                else setReview(true);
+                else if (selected || !hasRooms) setReview(true);
               }}
-              disabled={!price}
+              disabled={loading || !price}
             >
-              {hasRooms && !selected
-                ? 'Select your room'
-                : needsApproval
-                  ? 'Request this stay'
-                  : 'Reserve'}
+              {loading
+                ? 'Loading rooms…'
+                : hasRooms && !selected
+                  ? 'Select your room'
+                  : needsApproval
+                    ? 'Request this stay'
+                    : 'Reserve'}
             </Button>
             <p className="mt-2 text-center text-[11px] text-slate-400">
               {checkin} → {checkout}
@@ -615,6 +633,37 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 </p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* policy note — full-screen acknowledgement */}
+      {policyAlert && (
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-slate-900/60 p-5">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-lime-50 text-lime-600">
+              <Shield className="h-6 w-6" />
+            </span>
+            <h2 className="mt-3 font-display text-lg font-bold text-slate-900">
+              Heads up — a policy note applies
+            </h2>
+            <ul className="mt-3 space-y-1.5 text-left text-sm text-slate-600">
+              {policyAlert.map((n, i) => (
+                <li key={i} className="rounded-lg bg-slate-50 p-2">{n}</li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-slate-400">
+              You can still book this stay — your company just wants you to be aware.
+            </p>
+            <Button
+              className="mt-4 w-full"
+              onClick={() => {
+                setPolicyAlert(null);
+                setReview(true);
+              }}
+            >
+              I understand — continue
+            </Button>
           </div>
         </div>
       )}
