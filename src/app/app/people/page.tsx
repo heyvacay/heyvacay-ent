@@ -16,8 +16,11 @@ import { money } from '@/lib/format';
 import type { Role } from '@/lib/types';
 
 export default function PeoplePage() {
-  const { state, inviteUser, spentForScope } = useStore();
+  const { state, inviteUser, updateUser, spentForScope } = useStore();
   const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState<{ id: string; name: string; title: string; department: string } | null>(
+    null
+  );
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -25,6 +28,9 @@ export default function PeoplePage() {
     title: '',
     role: 'employee' as Role,
   });
+
+  const resetPassword = (email: string) =>
+    window.alert(`Password reset link sent to ${email}.`);
 
   const departments = Array.from(
     new Set(state.users.map((u) => u.department))
@@ -123,6 +129,7 @@ export default function PeoplePage() {
                 <th className="px-5 py-3 font-semibold">Role</th>
                 <th className="px-5 py-3 font-semibold">Spend</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
+                <th className="px-5 py-3 text-right font-semibold sm:px-6">Manage</th>
               </tr>
             </thead>
             <tbody>
@@ -145,17 +152,16 @@ export default function PeoplePage() {
                     <div className="text-xs text-slate-400">{u.title}</div>
                   </td>
                   <td className="px-5 py-3">
-                    <Badge
-                      color={
-                        u.role === 'admin'
-                          ? 'brand'
-                          : u.role === 'booker'
-                            ? 'amber'
-                            : 'slate'
-                      }
-                    >
-                      {u.role}
-                    </Badge>
+                    <span className="inline-block w-32">
+                      <Select
+                        value={u.role}
+                        onChange={(e) => updateUser(u.id, { role: e.target.value as Role })}
+                      >
+                        <option value="employee">Employee</option>
+                        <option value="booker">Booker</option>
+                        <option value="admin">Admin</option>
+                      </Select>
+                    </span>
                   </td>
                   <td className="px-5 py-3 font-medium text-slate-700">
                     {money(spentForScope('employee', u.id))}
@@ -171,12 +177,83 @@ export default function PeoplePage() {
                       <Badge color="slate">Deactivated</Badge>
                     )}
                   </td>
+                  <td className="px-5 py-3 sm:px-6">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setEdit({ id: u.id, name: u.name, title: u.title, department: u.department })
+                        }
+                      >
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => resetPassword(u.email)}>
+                        Reset password
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          updateUser(u.id, {
+                            status: u.status === 'deactivated' ? 'active' : 'deactivated',
+                          })
+                        }
+                      >
+                        {u.status === 'deactivated' ? 'Reactivate' : 'Deactivate'}
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {edit && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"
+          onClick={() => setEdit(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="font-display text-lg font-bold text-slate-900">Edit person</h2>
+            </div>
+            <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
+              <Field label="Name">
+                <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+              </Field>
+              <Field label="Title">
+                <Input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
+              </Field>
+              <Field label="Department">
+                <Input value={edit.department} onChange={(e) => setEdit({ ...edit, department: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
+              <Button variant="ghost" onClick={() => setEdit(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  updateUser(edit.id, {
+                    name: edit.name.trim(),
+                    title: edit.title.trim(),
+                    department: edit.department.trim(),
+                  });
+                  setEdit(null);
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

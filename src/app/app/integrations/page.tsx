@@ -3,7 +3,8 @@
 import { useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, PageHeader, StatCard } from '@/components/app/ui';
-import { Check, Globe } from '@/components/icons';
+import { Check } from '@/components/icons';
+import { IntegrationLogo } from '@/components/app/IntegrationLogo';
 import type { Integration } from '@/lib/types';
 
 export default function IntegrationsPage() {
@@ -49,9 +50,7 @@ export default function IntegrationsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               {items.map((it) => (
                 <Card key={it.id} className="flex items-start gap-4">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500">
-                    <Globe className="h-5 w-5" />
-                  </span>
+                  <IntegrationLogo id={it.id} name={it.name} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-semibold text-slate-800">{it.name}</p>

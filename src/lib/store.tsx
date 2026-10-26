@@ -64,6 +64,7 @@ export interface StoreApi {
     title: string;
     role: Role;
   }) => void;
+  updateUser: (id: string, patch: Partial<Pick<User, 'name' | 'title' | 'department' | 'role' | 'status'>>) => void;
   updateBudgetLimit: (id: string, limit: number) => void;
   addPolicy: (p: Omit<Policy, 'id'>) => void;
   togglePolicy: (id: string) => void;
@@ -322,6 +323,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           personalLinked: false,
         },
       ],
+    }));
+  }, []);
+
+  const updateUser: StoreApi['updateUser'] = useCallback((id, patch) => {
+    setState((s) => ({
+      ...s,
+      users: s.users.map((u) => (u.id === id ? { ...u, ...patch } : u)),
     }));
   }, []);
 
@@ -653,6 +661,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     pointsBalance,
     evaluatePolicies,
     inviteUser,
+    updateUser,
     updateBudgetLimit,
     addPolicy,
     togglePolicy,

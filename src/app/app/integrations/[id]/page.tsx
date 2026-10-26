@@ -16,7 +16,8 @@ import {
 } from '@/components/app/ui';
 import { money2, shortDate } from '@/lib/format';
 import { ACCOUNTING_IDS } from '@/lib/seed';
-import { Check, Globe, Lock, Receipt, Users } from '@/components/icons';
+import { Check, Lock, Receipt, Users } from '@/components/icons';
+import { IntegrationLogo } from '@/components/app/IntegrationLogo';
 import type { ExpenseCategory } from '@/lib/types';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -109,9 +110,7 @@ export default function IntegrationDetailPage() {
       />
 
       <div className="mb-6 flex items-center gap-3">
-        <span className="grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-500">
-          <Globe className="h-6 w-6" />
-        </span>
+        <IntegrationLogo id={integration.id} name={integration.name} className="h-12 w-12" />
         <div>
           <p className="text-sm font-semibold text-slate-700">
             {integration.category}
