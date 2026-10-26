@@ -37,6 +37,7 @@ import {
   type TaskType,
 } from '@/lib/crm';
 import { accountOnePagerPdf, contractPdf } from '@/lib/pdf';
+import { useAppLink } from '@/lib/appLink';
 import { ContractWizard } from '@/components/sales/ContractWizard';
 import {
   Check,
@@ -71,6 +72,9 @@ export default function CompanyDetail({ id }: { id: string }) {
   } = useCrm();
   const router = useRouter();
   const c = companyById(id);
+  // Live stats from the customer workspace when this account is provisioned
+  // in this browser (ids match). Null otherwise.
+  const linked = useAppLink(id);
 
   const [tab, setTab] = useState<Tab>('overview');
   const [wizard, setWizard] = useState(false);
@@ -159,8 +163,15 @@ export default function CompanyDetail({ id }: { id: string }) {
               {/* snapshot */}
               <Card>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <Metric label="Annual spend" value={money(c.annualSpend)} />
-                  <Metric label="Saved" value={money(c.savings)} tone="emerald" />
+                  <Metric
+                    label="Annual spend"
+                    value={money(linked ? linked.spend : c.annualSpend)}
+                  />
+                  <Metric
+                    label="Saved"
+                    value={money(linked ? linked.savings : c.savings)}
+                    tone="emerald"
+                  />
                   <div>
                     <p className="text-xs text-slate-400">Status</p>
                     <Badge color={STATUS_COLOR[c.status]}>{STATUS_LABEL[c.status]}</Badge>
@@ -171,6 +182,38 @@ export default function CompanyDetail({ id }: { id: string }) {
                   </div>
                 </div>
               </Card>
+
+              {/* live workspace data */}
+              {linked && (
+                <Card className="border-emerald-200 bg-emerald-50/40">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                      <Sparkles className="h-4 w-4 text-emerald-600" /> Live from their workspace
+                    </h2>
+                    <Badge color="green">Connected</Badge>
+                  </div>
+                  <div className="mb-4 grid grid-cols-3 gap-4">
+                    <Metric label="Bookings" value={String(linked.bookings)} />
+                    <Metric label="Spend" value={money(linked.spend)} />
+                    <Metric label="Saved" value={money(linked.savings)} tone="emerald" />
+                  </div>
+                  {linked.recent.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {linked.recent.map((b, i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                          <span className="min-w-0 truncate text-slate-700">{b.title}</span>
+                          <span className="shrink-0 text-xs text-slate-400">
+                            {money(b.price)}
+                            {b.savings > 0 && <span className="ml-2 text-emerald-600">saved {money(b.savings)}</span>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No bookings in their workspace yet.</p>
+                  )}
+                </Card>
+              )}
 
               {/* onboarding */}
               <Card>

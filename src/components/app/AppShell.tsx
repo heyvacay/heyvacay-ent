@@ -88,6 +88,7 @@ const EMPLOYEE_NAV: NavSection[] = [
       { href: '/app/book', label: 'Home', icon: MapPin },
       { href: '/app/trips', label: 'My trips', icon: Calendar },
       { href: '/app/events', label: 'Events', icon: Users },
+      { href: '/app/restaurants', label: 'Dining', icon: MapPin },
       { href: '/app/rewards', label: 'Rewards', icon: Gift },
       { href: '/app/expenses', label: 'Expenses', icon: Receipt },
       { href: '/app/me', label: 'My dashboard', icon: ChartBar },
