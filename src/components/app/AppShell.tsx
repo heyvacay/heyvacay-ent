@@ -20,6 +20,7 @@ import {
   TrendUp,
   Bell,
   MapPin,
+  Lock,
 } from '@/components/icons';
 
 type NavItem = { href: string; label: string; icon: typeof ChartBar };
@@ -69,6 +70,7 @@ const ADMIN_NAV: NavSection[] = [
     items: [
       { href: '/app/budgets', label: 'Budgets', icon: Wallet },
       { href: '/app/expenses', label: 'Expenses', icon: Receipt },
+      { href: '/app/billing', label: 'Billing', icon: Lock },
     ],
   },
   {

@@ -152,6 +152,20 @@ export default function CompanyDetail({ id }: { id: string }) {
 
           {tab === 'overview' && (
             <>
+              {/* Net 30 request from the customer */}
+              {linked?.netRequested && (
+                <Card className="border-amber-300 bg-amber-50">
+                  <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                    <Receipt className="h-4 w-4" /> 1 Net 30 request
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700">
+                    {c.name} asked to set up Net 30 terms. As the account manager
+                    {c.accountManager ? ` (${c.accountManager})` : ''}, reach out to approve and
+                    configure invoicing.
+                  </p>
+                </Card>
+              )}
+
               {/* Nova insight */}
               <Card className="border-brand/30 bg-brand/5">
                 <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">

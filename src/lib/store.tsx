@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type {
   AppState,
+  Billing,
   Booking,
   BudgetScope,
   Expense,
@@ -65,6 +66,9 @@ export interface StoreApi {
     role: Role;
   }) => void;
   updateUser: (id: string, patch: Partial<Pick<User, 'name' | 'title' | 'department' | 'role' | 'status'>>) => void;
+  setBillingMode: (mode: Billing['mode']) => void;
+  linkCard: (brand: string, last4: string) => void;
+  requestNet30: () => void;
   updateBudgetLimit: (id: string, limit: number) => void;
   addPolicy: (p: Omit<Policy, 'id'>) => void;
   togglePolicy: (id: string) => void;
@@ -126,6 +130,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...parsed.state,
             // back-fill slices added after this browser last saved
             integrations: parsed.state.integrations ?? SEED.integrations,
+            billing: parsed.state.billing ?? SEED.billing,
             accountingMap: parsed.state.accountingMap ?? SEED.accountingMap,
             history: parsed.state.history ?? SEED.history,
           });
@@ -331,6 +336,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...s,
       users: s.users.map((u) => (u.id === id ? { ...u, ...patch } : u)),
     }));
+  }, []);
+
+  const setBillingMode: StoreApi['setBillingMode'] = useCallback((mode) => {
+    setState((s) => ({ ...s, billing: { ...(s.billing ?? { mode }), mode } }));
+  }, []);
+
+  const linkCard: StoreApi['linkCard'] = useCallback((brand, last4) => {
+    setState((s) => ({
+      ...s,
+      billing: { ...(s.billing ?? { mode: 'card' }), mode: 'card', cardBrand: brand, cardLast4: last4 },
+    }));
+  }, []);
+
+  const requestNet30: StoreApi['requestNet30'] = useCallback(() => {
+    setState((s) => ({ ...s, billing: { ...(s.billing ?? { mode: 'employee' }), netRequested: true } }));
   }, []);
 
   const updateBudgetLimit: StoreApi['updateBudgetLimit'] = useCallback(
@@ -662,6 +682,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     evaluatePolicies,
     inviteUser,
     updateUser,
+    setBillingMode,
+    linkCard,
+    requestNet30,
     updateBudgetLimit,
     addPolicy,
     togglePolicy,

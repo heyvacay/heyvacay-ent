@@ -219,6 +219,7 @@ export const SEED: AppState = {
   expenses,
   points,
   integrations: INTEGRATIONS,
+  billing: { mode: 'employee' as const },
   accountingMap: DEFAULT_GL,
   history,
   activeUserId: 'u_admin',

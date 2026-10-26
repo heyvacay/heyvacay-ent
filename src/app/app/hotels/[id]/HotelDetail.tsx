@@ -563,6 +563,16 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   <span className="text-slate-500">Points earned</span>
                   <span className="font-semibold text-brand-dark">+{num(points)}</span>
                 </div>
+                <div className="mt-1 flex justify-between">
+                  <span className="text-slate-500">Payment</span>
+                  <span className="font-semibold text-slate-700">
+                    {state.billing?.mode === 'net30'
+                      ? 'Billed to company · Net 30'
+                      : state.billing?.mode === 'card'
+                        ? `Company card ${state.billing.cardLast4 ? `•••• ${state.billing.cardLast4}` : 'on file'}`
+                        : 'You enter payment at checkout'}
+                  </span>
+                </div>
               </div>
 
               {flags.length > 0 && (

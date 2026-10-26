@@ -28,6 +28,9 @@ export interface LinkedStats {
   savings: number;
   spend: number;
   recent: LinkedBooking[];
+  /** Net-30 request raised by the company admin, if any. */
+  netRequested: boolean;
+  billingMode?: string;
 }
 
 export function readAppLink(companyId: string): LinkedStats | null {
@@ -51,7 +54,15 @@ export function readAppLink(companyId: string): LinkedStats | null {
         status: String(b.status ?? ''),
         type: String(b.type ?? ''),
       }));
-    return { bookings: live.length, savings, spend, recent };
+    const billing = state.billing ?? {};
+    return {
+      bookings: live.length,
+      savings,
+      spend,
+      recent,
+      netRequested: Boolean(billing.netRequested),
+      billingMode: billing.mode,
+    };
   } catch {
     return null;
   }

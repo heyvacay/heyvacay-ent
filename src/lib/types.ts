@@ -264,6 +264,18 @@ export interface OnboardingProfile {
   completedAt: string;
 }
 
+export type BillingMode = 'card' | 'employee' | 'net30';
+
+export interface Billing {
+  /** card = company card on file (auto-charge); employee = traveler pays at
+   *  booking; net30 = invoiced, traveler never prompted to pay. */
+  mode: BillingMode;
+  cardBrand?: string;
+  cardLast4?: string;
+  /** true once an admin has requested Net 30 (routes to the account manager). */
+  netRequested?: boolean;
+}
+
 export interface AppState {
   company: Company;
   users: User[];
@@ -273,6 +285,7 @@ export interface AppState {
   expenses: Expense[];
   points: PointsEntry[];
   integrations: Integration[];
+  billing?: Billing;
   onboarding?: OnboardingProfile;
   /** Expense category → GL account, used when posting to accounting. */
   accountingMap: Record<string, string>;
