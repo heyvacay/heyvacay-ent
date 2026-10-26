@@ -11,17 +11,7 @@ import {
   type ReservationResult,
 } from '@/lib/restaurants';
 import { FOOD_GENRES } from '@/lib/events';
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Field,
-  Input,
-  PageHeader,
-  Select,
-  cn,
-} from '@/components/app/ui';
+import { Button, EmptyState, PageHeader, cn } from '@/components/app/ui';
 import { todayISO } from '@/lib/format';
 import { Check, Shield, MapPin } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
@@ -54,35 +44,64 @@ export default function RestaurantsPage() {
         subtitle="Book restaurants for your trip — the whole reservation happens right here."
       />
 
-      <Card className="mb-6">
-        <div className="grid gap-4 sm:grid-cols-5">
-          <Field label="City">
-            <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" />
-          </Field>
-          <Field label="Cuisine">
-            <Select value={genre} onChange={(e) => setGenre(e.target.value)}>
-              <option value="">Any cuisine</option>
+      {/* search hero */}
+      <div className="mb-6 rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-5 ring-1 ring-white/10 sm:p-6">
+        <div className="grid gap-3 sm:grid-cols-6">
+          <label className="sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-mist/70">City</span>
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="City"
+              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-brand"
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-mist/70">Cuisine</span>
+            <select
+              value={genre}
+              onChange={(e) => setGenre(e.target.value)}
+              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
+            >
+              <option value="" className="text-slate-900">Any cuisine</option>
               {FOOD_GENRES.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
+                <option key={g} value={g} className="text-slate-900">{g}</option>
               ))}
-            </Select>
-          </Field>
-          <Field label="Date">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </Field>
-          <Field label="Time">
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-          </Field>
-          <Field label="Party size">
-            <Input type="number" value={party} onChange={(e) => setParty(Number(e.target.value) || 1)} />
-          </Field>
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-mist/70">Date</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-mist/70">Time</span>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-mist/70">Guests</span>
+            <input
+              type="number"
+              value={party}
+              onChange={(e) => setParty(Number(e.target.value) || 1)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
+            />
+          </label>
         </div>
         <div className="mt-4">
           <Button onClick={search}>Find tables</Button>
         </div>
-      </Card>
+      </div>
 
       {loading && <HvLoader className="py-16" />}
 
@@ -91,24 +110,39 @@ export default function RestaurantsPage() {
       )}
 
       {!loading && results && results.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {results.map((r) => (
-            <Card key={r.id} pad={false} className="flex flex-col overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={r.image} alt={r.name} className="h-40 w-full object-cover" />
+            <div
+              key={r.id}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="relative h-44 w-full overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={r.image}
+                  alt={r.name}
+                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                />
+                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2 py-0.5 text-xs font-bold text-slate-800 shadow-sm">
+                  ★ {r.rating}
+                </span>
+                <span className="absolute right-3 top-3 rounded-full bg-slate-900/70 px-2 py-0.5 text-xs font-semibold text-white">
+                  {'$'.repeat(r.priceBand)}
+                </span>
+              </div>
               <div className="flex flex-1 flex-col p-4">
                 <p className="font-display text-base font-bold text-slate-900">{r.name}</p>
-                <p className="text-xs text-slate-400">{r.cuisine} · ★ {r.rating}</p>
+                <p className="text-sm text-slate-500">{r.cuisine}</p>
                 <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-400">
-                  <MapPin className="h-3 w-3" /> {r.neighborhood}, {r.city} · {'$'.repeat(r.priceBand)}
+                  <MapPin className="h-3 w-3" /> {r.neighborhood}, {r.city}
                 </p>
-                <div className="mt-3">
+                <div className="mt-auto pt-4">
                   <Button size="sm" className="w-full" onClick={() => setSelected(r)}>
-                    Reserve
+                    Reserve a table
                   </Button>
                 </div>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
