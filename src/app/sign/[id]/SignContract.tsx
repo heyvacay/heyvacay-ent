@@ -1,21 +1,67 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCrm } from '@/lib/crmStore';
-import { CONTRACT_TYPE_LABEL, PRICING_LABEL } from '@/lib/crm';
+import { CONTRACT_TYPE_LABEL, PRICING_LABEL, type Contract, type SalesCompany } from '@/lib/crm';
 import { contractPdf } from '@/lib/pdf';
 import { Sparkles, Check, Receipt } from '@/components/icons';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
+/** Readable agreement clauses, derived from the terms (our own language). */
+function clauses(c: SalesCompany, ct: Contract): { title: string; body: string }[] {
+  const t = ct.terms;
+  return [
+    {
+      title: '1. Commercial terms',
+      body: `${PRICING_LABEL[t.pricingModel]}. Commission ${t.commissionPct}% of booking value${t.platformFee > 0 ? `, platform fee ${money(t.platformFee)}/yr` : ''}${t.discountPct > 0 ? `, ${t.discountPct}% customer discount` : ''}. Term ${t.termMonths} months from ${t.startDate}. Payment ${t.paymentTerms}. ${t.minimumSpend > 0 ? `Minimum annual spend ${money(t.minimumSpend)}.` : 'No minimum spend commitment.'}`,
+    },
+    {
+      title: '2. Scope of services',
+      body: 'HeyVacay provides Customer access to its corporate travel and expense platform — flight and hotel booking, policy controls, budgets, approvals, expense management, and savings rewards — sourcing inventory from its supply partners at negotiated rates passed through to Customer.',
+    },
+    {
+      title: '3. Fees & payment',
+      body: `Fees are exclusive of taxes. Invoiced amounts are due ${t.paymentTerms}; undisputed overdue amounts accrue interest at the lesser of 1.5%/month or the legal maximum, and HeyVacay may suspend on 10 days' notice of non-payment.`,
+    },
+    {
+      title: '4. Term & termination',
+      body: `${t.autoRenew ? 'Renews automatically for like terms unless either party gives 30 days’ notice.' : 'Does not auto-renew; renewal requires a new order.'} Either party may terminate for material breach uncured 30 days after notice.`,
+    },
+    {
+      title: '5. Confidentiality & data',
+      body: "Each party protects the other's non-public information with reasonable care and uses it only to perform this Agreement, for 3 years after disclosure. HeyVacay processes traveler data only to provide the services and under its Data Processing Addendum.",
+    },
+    {
+      title: '6. Liability',
+      body: 'Neither party is liable for indirect or consequential damages; aggregate liability is capped at fees paid in the preceding 12 months, except for payment, confidentiality, and indemnification obligations.',
+    },
+    {
+      title: '7. Support & governing law',
+      body: `Customer receives ${t.supportTier} support. This Agreement is governed by the laws of ${t.governingLaw}. It is the entire agreement and may be amended only in writing signed by both parties.`,
+    },
+  ];
+}
+
 export function SignContract({ id }: { id: string }) {
   const { companies, signContract } = useCrm();
   const [heyName, setHeyName] = useState('');
   const [custName, setCustName] = useState('');
+  const downloadedRef = useRef(false);
 
   const found = companies
     .map((c) => ({ c, ct: c.contracts.find((x) => x.id === id) }))
     .find((x) => x.ct);
+
+  // Once both parties have signed, save a PDF that includes both signatures.
+  useEffect(() => {
+    const ct = found?.ct;
+    const co = found?.c;
+    if (ct && co && ct.signatures?.heyvacay && ct.signatures?.customer && !downloadedRef.current) {
+      downloadedRef.current = true;
+      contractPdf(co, ct);
+    }
+  }, [found]);
 
   if (!found || !found.ct) {
     return (
@@ -87,7 +133,26 @@ export function SignContract({ id }: { id: string }) {
             <Receipt className="h-4 w-4" /> Download full agreement (PDF)
           </button>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {/* the agreement, to read before signing */}
+          <div className="mt-5 max-h-80 overflow-auto rounded-xl border border-slate-200 p-4">
+            <p className="text-sm leading-relaxed text-slate-600">
+              This {CONTRACT_TYPE_LABEL[t.type]} is entered into as of {t.startDate} by and between
+              HeyVacay, Inc. and {c.name} (&quot;Customer&quot;).
+            </p>
+            <div className="mt-3 space-y-3">
+              {clauses(c, ct).map((cl) => (
+                <div key={cl.title}>
+                  <p className="text-sm font-semibold text-slate-800">{cl.title}</p>
+                  <p className="text-sm leading-relaxed text-slate-500">{cl.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Sign below
+          </p>
+          <div className="mt-2 grid gap-4 sm:grid-cols-2">
             <SignBox
               label="HeyVacay, Inc."
               signed={sig.heyvacay}

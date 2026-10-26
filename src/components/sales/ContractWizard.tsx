@@ -8,12 +8,13 @@ import { money, todayISO } from '@/lib/format';
 import {
   CONTRACT_TYPE_LABEL,
   PRICING_LABEL,
+  type Contract,
   type ContractTerms,
   type ContractType,
   type PricingModel,
   type SalesCompany,
 } from '@/lib/crm';
-import { Check, Sparkles } from '@/components/icons';
+import { Check, Sparkles, Receipt } from '@/components/icons';
 
 const SUPPORT_TIERS = ['Standard', 'Priority', 'Dedicated'];
 const PAYMENT_OPTIONS = ['Net 15', 'Net 30', 'Net 45', 'Net 60', 'Due on receipt'];
@@ -34,8 +35,10 @@ export function ContractWizard({
   company: SalesCompany;
   onClose: () => void;
 }) {
-  const { addContract } = useCrm();
+  const { addContract, signContract, companies } = useCrm();
   const champion = company.contacts.find((c) => c.champion) ?? company.contacts[0];
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [hvSignName, setHvSignName] = useState('');
 
   // Prefill from the account's most recent contract so repeat paperwork is
   // fast — the rep only changes what's different this time.
@@ -71,9 +74,17 @@ export function ContractWizard({
 
   const generate = () => {
     const contract = addContract(company.id, { title, terms, value });
-    contractPdf(company, contract);
-    onClose();
+    setCreatedId(contract.id);
   };
+
+  // Live view of the created contract (reflects signatures as they're added).
+  const createdContract: Contract | undefined = createdId
+    ? companies.flatMap((c) => c.contracts).find((x) => x.id === createdId)
+    : undefined;
+  const signLink =
+    createdId && typeof window !== 'undefined'
+      ? `${window.location.origin}/sign/${createdId}`
+      : '';
 
   const next = () => setStep((s) => Math.min(4, s + 1) as Step);
   const back = () => setStep((s) => Math.max(0, s - 1) as Step);
@@ -123,6 +134,70 @@ export function ContractWizard({
 
         {/* body */}
         <div className="flex-1 overflow-auto px-5 py-5">
+          {createdContract ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+                  <Check className="h-6 w-6" />
+                </span>
+                <h3 className="mt-3 font-display text-lg font-bold text-slate-900">
+                  Contract created
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Share the signature link with {company.name}, and sign your side now so they only
+                  have their field left.
+                </p>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Signature link
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={signLink}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigator.clipboard?.writeText(signLink).catch(() => {})}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-sm font-semibold text-slate-800">Sign as HeyVacay now</p>
+                {createdContract.signatures?.heyvacay ? (
+                  <p className="mt-1 text-sm text-emerald-600">
+                    ✓ Signed by {createdContract.signatures.heyvacay.name}. {company.name} just needs
+                    to sign their part.
+                  </p>
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <Input
+                      value={hvSignName}
+                      onChange={(e) => setHvSignName(e.target.value)}
+                      placeholder="Your full name"
+                    />
+                    <Button
+                      onClick={() =>
+                        hvSignName.trim() && signContract(createdContract.id, 'heyvacay', hvSignName.trim())
+                      }
+                    >
+                      Sign
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <Button variant="outline" className="w-full" onClick={() => contractPdf(company, createdContract)}>
+                <Receipt className="h-4 w-4" /> Download PDF
+              </Button>
+            </div>
+          ) : (
+          <>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-dark">
             Step {step + 1} of 5
           </p>
@@ -327,17 +402,27 @@ export function ContractWizard({
               </div>
             </div>
           )}
+          </>
+          )}
         </div>
 
         {/* footer */}
         <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
-          <Button variant="ghost" onClick={step === 0 ? onClose : back}>
-            {step === 0 ? 'Cancel' : 'Back'}
-          </Button>
-          {step < 4 ? (
-            <Button onClick={next}>Continue</Button>
+          {createdContract ? (
+            <Button className="ml-auto" onClick={onClose}>
+              Done
+            </Button>
           ) : (
-            <Button onClick={generate}>Generate contract & PDF</Button>
+            <>
+              <Button variant="ghost" onClick={step === 0 ? onClose : back}>
+                {step === 0 ? 'Cancel' : 'Back'}
+              </Button>
+              {step < 4 ? (
+                <Button onClick={next}>Continue</Button>
+              ) : (
+                <Button onClick={generate}>Generate contract</Button>
+              )}
+            </>
           )}
         </div>
       </div>

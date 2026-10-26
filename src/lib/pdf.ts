@@ -321,8 +321,20 @@ export function contractPdf(c: SalesCompany, ct: Contract) {
 
   heading(d, '11. Signatures');
   d.y += 10;
-  signatureBlock(d, 'HeyVacay, Inc.', ct.createdBy, 'Account Executive');
-  signatureBlock(d, c.name, t.signerName, t.signerTitle);
+  const hvSig = ct.signatures?.heyvacay;
+  const custSig = ct.signatures?.customer;
+  signatureBlock(
+    d,
+    'HeyVacay, Inc.',
+    hvSig?.name ?? ct.createdBy,
+    hvSig ? `Account Executive · e-signed ${hvSig.date}` : 'Account Executive'
+  );
+  signatureBlock(
+    d,
+    c.name,
+    custSig?.name ?? t.signerName,
+    custSig ? `${t.signerTitle} · e-signed ${custSig.date}` : t.signerTitle
+  );
 
   footer(d, `HeyVacay Enterprise · ${CONTRACT_TYPE_LABEL[t.type]} · ${c.name} · ${today()}`);
   d.pdf.save(`${slug(c.name)}-${t.type}-agreement.pdf`);
