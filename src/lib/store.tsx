@@ -79,9 +79,15 @@ export interface StoreApi {
     travelerId: string;
     startDate: string;
     endDate: string;
+    roomType?: string;
+    images?: string[];
   }) => Booking;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
+  /** Manager "approve if changed": sends a counter-offer to the traveler. */
+  proposeChange: (id: string, data: { note: string; newPrice?: number; newRoomType?: string; by: string }) => void;
+  /** Traveler responds to a counter-offer. */
+  respondOffer: (id: string, accept: boolean) => void;
   submitExpense: (data: {
     userId: string;
     merchant: string;
@@ -394,7 +400,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, startDate, endDate }) => {
+    ({ opt, travelerId, startDate, endDate, roomType, images }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
       const flags = evaluatePolicies(opt, startDate);
       const needsApproval = flags.some(
@@ -426,6 +432,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : opt.location ?? opt.title,
         departAt: opt.departAt,
         arriveAt: opt.arriveAt,
+        images: images ?? opt.images,
+        roomType,
       };
 
       setState((s) => {
@@ -514,6 +522,73 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     []
   );
+
+  const proposeChange: StoreApi['proposeChange'] = useCallback((id, data) => {
+    setState((s) => ({
+      ...s,
+      bookings: s.bookings.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              offer: {
+                note: data.note,
+                newPrice: data.newPrice,
+                newRoomType: data.newRoomType,
+                by: data.by,
+                status: 'offered',
+              },
+            }
+          : b
+      ),
+    }));
+  }, []);
+
+  const respondOffer: StoreApi['respondOffer'] = useCallback((id, accept) => {
+    setState((s) => {
+      const bk = s.bookings.find((b) => b.id === id);
+      if (!bk || !bk.offer) return s;
+      if (!accept) {
+        return {
+          ...s,
+          bookings: s.bookings.map((b) =>
+            b.id === id
+              ? { ...b, status: 'cancelled', offer: { ...b.offer!, status: 'declined' } }
+              : b
+          ),
+          points: s.points.filter((p) => p.bookingId !== id),
+        };
+      }
+      // Accept: apply the proposed changes and confirm, awarding points.
+      const newPrice = bk.offer.newPrice ?? bk.price;
+      const points = [
+        ...s.points,
+        {
+          id: uid('pt'),
+          userId: bk.travelerId,
+          delta: bk.pointsEarned,
+          reason: `${bk.type === 'flight' ? 'Flight' : 'Hotel'} savings · ${bk.title}`,
+          bucket: 'self' as const,
+          bookingId: bk.id,
+          createdAt: bk.createdAt,
+        },
+      ];
+      return {
+        ...s,
+        bookings: s.bookings.map((b) =>
+          b.id === id
+            ? {
+                ...b,
+                status: 'confirmed',
+                price: newPrice,
+                roomType: bk.offer!.newRoomType ?? b.roomType,
+                offer: { ...b.offer!, status: 'accepted' },
+              }
+            : b
+        ),
+        points,
+      };
+    });
+  }, []);
 
   const submitExpense: StoreApi['submitExpense'] = useCallback((data) => {
     setState((s) => ({
@@ -693,6 +768,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     book,
     cancelBooking,
     approveBooking,
+    proposeChange,
+    respondOffer,
     submitExpense,
     setExpenseStatus,
     redeemPoints,

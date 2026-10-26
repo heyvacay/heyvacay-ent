@@ -16,6 +16,7 @@ import { money, num, todayISO, addDays, daysUntil, dateRange } from '@/lib/forma
 import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
+import { OfferBanner } from '@/components/app/OfferBanner';
 import { format as fmtDate, parseISO } from 'date-fns';
 import {
   placesFlights,
@@ -790,6 +791,9 @@ export default function BookPage() {
   /* ----- search home + results ----- */
   return (
     <div>
+      {/* Manager counter-offers awaiting the traveler. */}
+      <OfferBanner />
+
       {/* Context-aware greeting when the traveler is on / about to start a trip. */}
       <ActiveTripBanner />
 

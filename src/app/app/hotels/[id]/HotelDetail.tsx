@@ -142,7 +142,14 @@ export default function HotelDetail({ hid }: { hid: string }) {
   };
 
   const reserve = () => {
-    book({ opt, travelerId, startDate: checkin, endDate: checkout });
+    book({
+      opt,
+      travelerId,
+      startDate: checkin,
+      endDate: checkout,
+      roomType: selected?.roomTitle,
+      images,
+    });
     setConfirmed({ pending: needsApproval, points });
     setReview(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -15,11 +15,14 @@ import { money, num, dateRange } from '@/lib/format';
 import { Plane, Receipt, Shield, Check, Gift, Wallet } from '@/components/icons';
 
 export default function ApprovalDetail({ id }: { id: string }) {
-  const { state, userById, spentForScope, approveBooking, cancelBooking } =
+  const { state, userById, spentForScope, approveBooking, cancelBooking, proposeChange, activeUser } =
     useStore();
   const [note, setNote] = useState('');
   const [noteVisible, setNoteVisible] = useState(true);
-  const [done, setDone] = useState<null | 'approved' | 'declined'>(null);
+  const [done, setDone] = useState<null | 'approved' | 'declined' | 'offered'>(null);
+  // "Approve if changed" counter-offer form.
+  const [offerMode, setOfferMode] = useState(false);
+  const [offer, setOffer] = useState({ note: '', newRoomType: '', newPrice: 0 });
 
   const b = state.bookings.find((x) => x.id === id);
 
@@ -68,6 +71,17 @@ export default function ApprovalDetail({ id }: { id: string }) {
     setDone(kind);
   };
 
+  const sendOffer = () => {
+    if (!offer.note.trim() && !offer.newRoomType.trim() && !offer.newPrice) return;
+    proposeChange(b.id, {
+      note: offer.note.trim() || 'Proposed a change to your booking.',
+      newRoomType: offer.newRoomType.trim() || undefined,
+      newPrice: offer.newPrice > 0 ? offer.newPrice : undefined,
+      by: activeUser.name,
+    });
+    setDone('offered');
+  };
+
   const pending = b.status === 'pending_approval';
 
   return (
@@ -87,8 +101,11 @@ export default function ApprovalDetail({ id }: { id: string }) {
       {done && (
         <Card className="mb-6 border-emerald-200 bg-emerald-50">
           <p className="font-semibold text-emerald-700">
-            {done === 'approved' ? 'Trip approved' : 'Trip declined'}
-            {done === 'approved' && ' — points awarded to the traveler.'}
+            {done === 'approved'
+              ? 'Trip approved — points awarded to the traveler.'
+              : done === 'declined'
+                ? 'Trip declined.'
+                : 'Offer sent — the traveler will see it on their home page and can accept or decline.'}
           </p>
           <div className="mt-3">
             <Button href="/app/approvals" size="sm">
@@ -100,6 +117,21 @@ export default function ApprovalDetail({ id }: { id: string }) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {/* photos of the requested stay */}
+          {b.images && b.images.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 overflow-hidden rounded-2xl" style={{ height: 180 }}>
+              {b.images.slice(0, 4).map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={src}
+                  alt=""
+                  className={`h-full w-full object-cover ${i === 0 ? 'col-span-2 row-span-1' : ''}`}
+                />
+              ))}
+            </div>
+          )}
+
           {/* itinerary */}
           <Card>
             <div className="flex items-start gap-4">
@@ -124,6 +156,11 @@ export default function ApprovalDetail({ id }: { id: string }) {
                   {b.status === 'cancelled' && <Badge color="slate">Declined</Badge>}
                 </div>
                 <p className="mt-0.5 text-slate-500">{b.detail}</p>
+                {b.roomType && (
+                  <p className="mt-0.5 text-sm font-medium text-slate-600">
+                    Room requested: {b.roomType}
+                  </p>
+                )}
                 <p className="mt-1 text-sm text-slate-400">
                   {dateRange(b.startDate, b.endDate)}
                 </p>
@@ -279,6 +316,47 @@ export default function ApprovalDetail({ id }: { id: string }) {
                       Decline
                     </Button>
                   </div>
+
+                  {/* Approve if changed */}
+                  <button
+                    onClick={() => setOfferMode((v) => !v)}
+                    className="mt-3 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    {offerMode ? 'Cancel offer' : 'Approve if changed…'}
+                  </button>
+                  {offerMode && (
+                    <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs text-slate-500">
+                        Propose a change (e.g. a different room). We&apos;ll send it to the traveler
+                        to accept or decline, and open a chat with you.
+                      </p>
+                      <input
+                        value={offer.newRoomType}
+                        onChange={(e) => setOffer({ ...offer, newRoomType: e.target.value })}
+                        placeholder="New room type (e.g. Standard King)"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                      />
+                      <input
+                        type="number"
+                        value={offer.newPrice || ''}
+                        onChange={(e) => setOffer({ ...offer, newPrice: Number(e.target.value) })}
+                        onFocus={(e) => e.currentTarget.select()}
+                        placeholder="New total (optional)"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                      />
+                      <textarea
+                        value={offer.note}
+                        onChange={(e) => setOffer({ ...offer, note: e.target.value })}
+                        rows={2}
+                        placeholder="Message to the traveler…"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                      />
+                      <Button className="w-full" onClick={sendOffer}>
+                        Send offer to traveler
+                      </Button>
+                    </div>
+                  )}
+
                   <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-400">
                     <Gift className="h-3 w-3" /> Approving awards the traveler{' '}
                     {num(b.pointsEarned)} points.
