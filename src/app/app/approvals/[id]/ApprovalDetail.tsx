@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import {
@@ -13,7 +13,29 @@ import {
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { sendEmail } from '@/lib/email';
+import { getHotelDetail } from '@/lib/search';
+import {
+  defaultSelection,
+  resolveLeaf,
+  sumPayAtProperty,
+  toTitleCase,
+  type UiRoom,
+} from '@/lib/hotelRooms';
 import { Plane, Receipt, Shield, Check, Gift, Wallet } from '@/components/icons';
+
+/** Representative all-in total for a room (default bed/refund/meal). */
+function roomAllIn(room: UiRoom): { title: string; price: number; image?: string } | null {
+  const sel = defaultSelection(room);
+  const leaf = resolveLeaf(room, sel);
+  const rate = leaf?.meal.rateRef;
+  if (!rate) return null;
+  const pap = sumPayAtProperty(rate.taxes_fees);
+  return {
+    title: toTitleCase(room.roomTitle),
+    price: Math.ceil((rate.price || 0) + pap),
+    image: room.images[0],
+  };
+}
 
 export default function ApprovalDetail({ id }: { id: string }) {
   const { state, userById, spentForScope, approveBooking, cancelBooking, proposeChange, activeUser } =
@@ -24,6 +46,20 @@ export default function ApprovalDetail({ id }: { id: string }) {
   // "Approve if changed" counter-offer form.
   const [offerMode, setOfferMode] = useState(false);
   const [offer, setOffer] = useState({ note: '', newRoomType: '', newPrice: 0 });
+  const [rooms, setRooms] = useState<UiRoom[] | null>(null);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+
+  // When proposing a change on a hotel booking, load its real room options so
+  // the manager can pick a different room (with photos) by a click.
+  const b0 = state.bookings.find((x) => x.id === id);
+  useEffect(() => {
+    if (!offerMode || rooms !== null || !b0 || b0.type !== 'hotel' || !b0.hid) return;
+    setLoadingRooms(true);
+    getHotelDetail({ hid: b0.hid, checkin: b0.startDate, checkout: b0.endDate, adults: 1 })
+      .then((d) => setRooms(d.uiRooms))
+      .catch(() => setRooms([]))
+      .finally(() => setLoadingRooms(false));
+  }, [offerMode, rooms, b0]);
 
   const b = state.bookings.find((x) => x.id === id);
 
@@ -340,25 +376,79 @@ export default function ApprovalDetail({ id }: { id: string }) {
                     {offerMode ? 'Cancel offer' : 'Approve if changed…'}
                   </button>
                   {offerMode && (
-                    <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
+                    <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
                       <p className="text-xs text-slate-500">
-                        Propose a change (e.g. a different room). We&apos;ll send it to the traveler
-                        to accept or decline, and open a chat with you.
+                        Pick a different room below — the traveler gets the offer and, on accept,
+                        it books instantly.
                       </p>
-                      <input
-                        value={offer.newRoomType}
-                        onChange={(e) => setOffer({ ...offer, newRoomType: e.target.value })}
-                        placeholder="New room type (e.g. Standard King)"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
-                      />
-                      <input
-                        type="number"
-                        value={offer.newPrice || ''}
-                        onChange={(e) => setOffer({ ...offer, newPrice: Number(e.target.value) })}
-                        onFocus={(e) => e.currentTarget.select()}
-                        placeholder="New total (optional)"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
-                      />
+
+                      {b.type === 'hotel' && b.hid ? (
+                        <div className="max-h-72 space-y-2 overflow-auto">
+                          {loadingRooms && <p className="text-xs text-slate-400">Loading rooms…</p>}
+                          {rooms?.map((room) => {
+                            const info = roomAllIn(room);
+                            if (!info) return null;
+                            const chosen = offer.newRoomType === info.title;
+                            const diff = b.price - info.price;
+                            return (
+                              <button
+                                key={room.roomKey}
+                                onClick={() =>
+                                  setOffer({
+                                    ...offer,
+                                    newRoomType: info.title,
+                                    newPrice: info.price,
+                                    note:
+                                      offer.note ||
+                                      `Proposed ${info.title}${diff > 0 ? ` — saves ${money(diff)}` : ''}.`,
+                                  })
+                                }
+                                className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${
+                                  chosen ? 'border-brand bg-brand/5' : 'border-slate-200 bg-white hover:border-slate-300'
+                                }`}
+                              >
+                                {info.image ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={info.image} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
+                                ) : (
+                                  <span className="h-12 w-12 shrink-0 rounded-md bg-slate-100" />
+                                )}
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-slate-800">{info.title}</span>
+                                  <span className="block text-xs text-slate-400">{money(info.price)} total</span>
+                                </span>
+                                {diff > 0 && (
+                                  <span className="shrink-0 text-xs font-semibold text-emerald-600">
+                                    −{money(diff)}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                          {rooms && rooms.length === 0 && !loadingRooms && (
+                            <p className="text-xs text-slate-400">No live room options available.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <input
+                          value={offer.newRoomType}
+                          onChange={(e) => setOffer({ ...offer, newRoomType: e.target.value })}
+                          placeholder="What to change"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                        />
+                      )}
+
+                      {offer.newPrice > 0 && (
+                        <div className="rounded-lg bg-white p-2 text-xs text-slate-600">
+                          New total <span className="font-semibold">{money(offer.newPrice)}</span>
+                          {b.price - offer.newPrice > 0 && (
+                            <span className="ml-1 font-semibold text-emerald-600">
+                              · saves {money(b.price - offer.newPrice)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       <textarea
                         value={offer.note}
                         onChange={(e) => setOffer({ ...offer, note: e.target.value })}
@@ -366,7 +456,7 @@ export default function ApprovalDetail({ id }: { id: string }) {
                         placeholder="Message to the traveler…"
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
                       />
-                      <Button className="w-full" onClick={sendOffer}>
+                      <Button className="w-full" onClick={sendOffer} disabled={!offer.newRoomType && !offer.note.trim()}>
                         Send offer to traveler
                       </Button>
                     </div>

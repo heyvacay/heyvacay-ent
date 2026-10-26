@@ -15,7 +15,6 @@ import { rewardsFor } from '@/lib/rewards';
 import { HotelCarousel } from '@/components/hotels/HotelCarousel';
 import { Button, Card, Select, EmptyState, cn } from '@/components/app/ui';
 import type { PolicyFlag } from '@/lib/store';
-import { HvLoader } from '@/components/HvLoader';
 import { money, num } from '@/lib/format';
 import { Check, Shield, Gift, MapPin } from '@/components/icons';
 
@@ -383,7 +382,23 @@ export default function HotelsResults() {
         </Card>
       )}
 
-      {loading && <HvLoader className="py-24" />}
+      {loading && (
+        <div className="space-y-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} pad={false} className="overflow-hidden">
+              <div className="flex flex-col sm:flex-row">
+                <div className="h-52 w-full shrink-0 animate-pulse bg-slate-100 sm:h-auto sm:w-72" />
+                <div className="flex flex-1 flex-col gap-3 p-4">
+                  <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
+                  <div className="h-5 w-2/3 animate-pulse rounded bg-slate-100" />
+                  <div className="h-3 w-1/3 animate-pulse rounded bg-slate-100" />
+                  <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {!loading && options.length === 0 && !error && (
         <EmptyState

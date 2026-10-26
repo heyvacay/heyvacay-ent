@@ -108,6 +108,8 @@ export interface Booking {
   /** Hotel images + the room type requested (shown to the approver). */
   images?: string[];
   roomType?: string;
+  /** Hotel id, so the approver can load real room options to change it. */
+  hid?: string;
   /** A manager's counter-offer when they "approve if changed". */
   offer?: {
     note: string;

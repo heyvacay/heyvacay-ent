@@ -436,6 +436,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         airline: opt.airline,
         images: images ?? opt.images,
         roomType,
+        hid: opt.hid,
         travelerNote,
       };
 
