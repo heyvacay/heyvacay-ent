@@ -266,10 +266,20 @@ export default function FlightsResults() {
     return { flags, points, needsApproval };
   };
 
-  const confirm = (opt: InventoryOption) => {
-    const { needsApproval } = sig(opt);
-    book({ opt, travelerId, startDate: departDate, endDate: returnDate || departDate });
-    setConfirmed({ opt, pending: needsApproval });
+  const confirm = (
+    opt: InventoryOption,
+    extra = 0,
+    fareLabel = '',
+    seat: string | null = null
+  ) => {
+    const finalOpt: InventoryOption = {
+      ...opt,
+      price: opt.price + extra,
+      detail: `${opt.detail}${fareLabel ? ` · ${fareLabel}` : ''}${seat ? ` · Seat ${seat}` : ''}`,
+    };
+    const { needsApproval } = sig(finalOpt);
+    book({ opt: finalOpt, travelerId, startDate: departDate, endDate: returnDate || departDate });
+    setConfirmed({ opt: finalOpt, pending: needsApproval });
     setSelected(null);
   };
 
@@ -368,7 +378,7 @@ export default function FlightsResults() {
         <CheckoutPanel
           opt={selected}
           onClose={() => setSelected(null)}
-          onConfirm={() => confirm(selected)}
+          onConfirm={(extra, fareLabel, seat) => confirm(selected, extra, fareLabel, seat)}
           sig={sig}
           canBookForOthers={canBookForOthers}
           travelerId={travelerId}
@@ -384,6 +394,77 @@ export default function FlightsResults() {
 
 /* ---------------- checkout panel ---------------- */
 
+// Fare families. Deltas are indicative in the prototype; wire to the airline's
+// branded fares / offer services when the backend exposes them per offer.
+const FARES = [
+  { label: 'Basic', delta: 0, note: 'Carry-on only · no changes · no seat choice' },
+  { label: 'Main', delta: 45, note: 'Seat choice + 1 checked bag' },
+  { label: 'Flex', delta: 120, note: 'Free changes + fully refundable' },
+];
+
+const SEAT_COLS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+function seatHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h >>> 0);
+}
+
+/** Simple seat map (prototype). Real seat maps come from the seat-map API. */
+function SeatMap({
+  offerId,
+  selected,
+  onSelect,
+}: {
+  offerId: string;
+  selected: string | null;
+  onSelect: (s: string) => void;
+}) {
+  const rows = [10, 11, 12, 13, 14, 15];
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        Front of cabin
+      </p>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={row} className="flex items-center justify-center gap-1.5">
+            <span className="w-5 text-right text-[10px] text-slate-400">{row}</span>
+            {SEAT_COLS.map((col, ci) => {
+              const id = `${row}${col}`;
+              const taken = seatHash(offerId + id) % 10 < 3;
+              const isSel = selected === id;
+              return (
+                <span key={id} className="flex items-center">
+                  {ci === 3 && <span className="w-3" />}
+                  <button
+                    type="button"
+                    disabled={taken}
+                    onClick={() => onSelect(id)}
+                    aria-label={`Seat ${id}`}
+                    className={`h-6 w-6 rounded text-[9px] font-semibold ${
+                      taken
+                        ? 'cursor-not-allowed bg-slate-100 text-slate-300'
+                        : isSel
+                          ? 'bg-brand text-navy-deep'
+                          : 'bg-brand/15 text-brand-dark hover:bg-brand/30'
+                    }`}
+                  >
+                    {col}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CheckoutPanel({
   opt,
   onClose,
@@ -398,7 +479,7 @@ function CheckoutPanel({
 }: {
   opt: InventoryOption;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (extra: number, fareLabel: string, seat: string | null) => void;
   sig: (o: InventoryOption) => { flags: ReturnType<typeof Object>[]; points: number; needsApproval: boolean };
   canBookForOthers: boolean;
   travelerId: string;
@@ -408,7 +489,12 @@ function CheckoutPanel({
   budget?: number;
 }) {
   const { flags, points, needsApproval } = sig(opt);
-  const overBudget = budget != null ? spent + opt.price > budget : false;
+  const [fareIdx, setFareIdx] = useState(1);
+  const [seat, setSeat] = useState<string | null>(null);
+  const fare = FARES[fareIdx];
+  const total = opt.price + fare.delta;
+  const overBudget = budget != null ? spent + total > budget : false;
+  const seatAllowed = fareIdx >= 1; // Basic has no seat selection
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" onClick={onClose}>
       <div className="max-h-[92vh] w-full max-w-md overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
@@ -432,10 +518,62 @@ function CheckoutPanel({
             </Field>
           )}
 
+          {/* fare type */}
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-700">Fare type</p>
+            <div className="space-y-2">
+              {FARES.map((f, i) => (
+                <button
+                  key={f.label}
+                  type="button"
+                  onClick={() => {
+                    setFareIdx(i);
+                    if (i < 1) setSeat(null);
+                  }}
+                  className={`flex w-full items-start justify-between gap-2 rounded-xl border p-3 text-left transition ${
+                    fareIdx === i ? 'border-brand bg-brand/5' : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-800">{f.label}</span>
+                    <span className="block text-xs text-slate-400">{f.note}</span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-slate-700">
+                    {f.delta === 0 ? 'Included' : `+${money(f.delta)}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* seat selection */}
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-700">
+              Seat {seat ? <span className="text-brand-dark">· {seat}</span> : ''}
+            </p>
+            {seatAllowed ? (
+              <SeatMap offerId={opt.id} selected={seat} onSelect={setSeat} />
+            ) : (
+              <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-400">
+                Seat selection is available on Main and Flex fares.
+              </p>
+            )}
+          </div>
+
           <div className="rounded-xl bg-slate-50 p-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">Fare</span>
-              <span className="font-semibold text-slate-900">{money(opt.price)}</span>
+              <span className="text-slate-500">Base fare</span>
+              <span className="text-slate-700">{money(opt.price)}</span>
+            </div>
+            {fare.delta > 0 && (
+              <div className="mt-1 flex justify-between">
+                <span className="text-slate-500">{fare.label} fare</span>
+                <span className="text-slate-700">+{money(fare.delta)}</span>
+              </div>
+            )}
+            <div className="mt-1 flex justify-between border-t border-slate-200 pt-1">
+              <span className="text-slate-500">Total</span>
+              <span className="font-semibold text-slate-900">{money(total)}</span>
             </div>
             <div className="mt-1 flex justify-between">
               <span className="text-slate-500">Points earned</span>
@@ -459,7 +597,7 @@ function CheckoutPanel({
             </p>
           )}
 
-          <Button className="w-full" onClick={onConfirm}>
+          <Button className="w-full" onClick={() => onConfirm(fare.delta, fare.label, seat)}>
             {needsApproval ? 'Request this flight' : 'Confirm booking'}
           </Button>
           {needsApproval && (
