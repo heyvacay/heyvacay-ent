@@ -11,6 +11,7 @@ import {
   TrendUp,
   Calendar,
   Receipt,
+  Users,
 } from '@/components/icons';
 import { ME } from '@/lib/crm';
 
@@ -20,6 +21,7 @@ const NAV = [
   { href: '/sales/companies', label: 'Companies', icon: Building },
   { href: '/sales/tasks', label: 'Tasks', icon: Calendar },
   { href: '/sales/contracts', label: 'Contracts', icon: Receipt },
+  { href: '/sales/team', label: 'Team', icon: Users },
 ];
 
 export default function SalesShell({ children }: { children: ReactNode }) {

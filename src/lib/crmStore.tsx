@@ -10,6 +10,7 @@ import {
 } from 'react';
 import {
   SEED_COMPANIES,
+  SEED_REPS,
   ONBOARDING_TEMPLATE,
   STAGE_PROBABILITY,
   ME,
@@ -20,6 +21,7 @@ import {
   type CrmTask,
   type Deal,
   type DealStage,
+  type Rep,
   type SalesCompany,
   type TaskType,
   type Tier,
@@ -27,6 +29,7 @@ import {
 import { todayISO, uid } from './format';
 
 const KEY = 'hv_crm_demo_v2';
+const REPS_KEY = 'hv_crm_reps_v1';
 
 interface CrmApi {
   companies: SalesCompany[];
@@ -69,6 +72,11 @@ interface CrmApi {
   ) => Contract;
   setContractStatus: (companyId: string, contractId: string, status: Contract['status']) => void;
 
+  reps: Rep[];
+  addRep: (rep: Rep) => void;
+  updateRep: (name: string, patch: Partial<Rep>) => void;
+  removeRep: (name: string) => void;
+
   reset: () => void;
 }
 
@@ -91,6 +99,7 @@ function hydrateCompany(c: Partial<SalesCompany>): SalesCompany {
 
 export function CrmProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<SalesCompany[]>(SEED_COMPANIES);
+  const [reps, setReps] = useState<Rep[]>(SEED_REPS);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -99,6 +108,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       if (raw) {
         const parsed = JSON.parse(raw) as SalesCompany[];
         if (Array.isArray(parsed)) setCompanies(parsed.map(hydrateCompany));
+      }
+      const rawReps = localStorage.getItem(REPS_KEY);
+      if (rawReps) {
+        const parsed = JSON.parse(rawReps) as Rep[];
+        if (Array.isArray(parsed) && parsed.length) setReps(parsed);
       }
     } catch {
       /* ignore */
@@ -110,10 +124,25 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     if (!hydrated) return;
     try {
       localStorage.setItem(KEY, JSON.stringify(companies));
+      localStorage.setItem(REPS_KEY, JSON.stringify(reps));
     } catch {
       /* ignore */
     }
-  }, [companies, hydrated]);
+  }, [companies, reps, hydrated]);
+
+  const addRep = useCallback(
+    (rep: Rep) => setReps((rs) => (rs.some((r) => r.name === rep.name) ? rs : [...rs, rep])),
+    []
+  );
+  const updateRep = useCallback(
+    (name: string, patch: Partial<Rep>) =>
+      setReps((rs) => rs.map((r) => (r.name === name ? { ...r, ...patch } : r))),
+    []
+  );
+  const removeRep = useCallback(
+    (name: string) => setReps((rs) => rs.filter((r) => r.name !== name)),
+    []
+  );
 
   const companyById = useCallback(
     (id: string) => companies.find((c) => c.id === id),
@@ -335,10 +364,12 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     try {
       localStorage.removeItem(KEY);
+      localStorage.removeItem(REPS_KEY);
     } catch {
       /* ignore */
     }
     setCompanies(SEED_COMPANIES);
+    setReps(SEED_REPS);
   }, []);
 
   return (
@@ -360,6 +391,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         toggleTask,
         addContract,
         setContractStatus,
+        reps,
+        addRep,
+        updateRep,
+        removeRep,
         reset,
       }}
     >

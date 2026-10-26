@@ -13,8 +13,6 @@ import {
 import { money, num, shortDate, todayISO } from '@/lib/format';
 import {
   ME,
-  QUOTA,
-  REPS,
   STATUS_COLOR,
   STATUS_LABEL,
   STATUS_ORDER,
@@ -28,8 +26,9 @@ import { pipelineReportPdf } from '@/lib/pdf';
 import { Receipt, Sparkles } from '@/components/icons';
 
 export default function SalesDashboard() {
-  const { companies } = useCrm();
+  const { companies, reps } = useCrm();
   const today = todayISO();
+  const quotaFor = (name: string) => reps.find((r) => r.name === name)?.quota ?? 0;
 
   const count = (s: AccountStatus) => companies.filter((c) => c.status === s).length;
   const mine = companies.filter((c) => c.accountManager === ME);
@@ -42,15 +41,17 @@ export default function SalesDashboard() {
     .filter((c) => c.status === 'active' || c.status === 'onboarding')
     .reduce((s, c) => s + c.annualSpend, 0);
 
-  const quota = QUOTA[ME] ?? 0;
+  const quota = quotaFor(ME);
   const won = wonValue(myDeals);
   const attainment = quota > 0 ? Math.round((won / quota) * 100) : 0;
 
   // Leaderboard — reps ranked by closed-won ACV.
-  const board = REPS.map((rep) => {
-    const deals = companies.flatMap((c) => c.deals).filter((d) => d.owner === rep);
-    return { rep, won: wonValue(deals), quota: QUOTA[rep] ?? 0 };
-  }).sort((a, b) => b.won - a.won);
+  const board = reps
+    .map((rep) => {
+      const deals = companies.flatMap((c) => c.deals).filter((d) => d.owner === rep.name);
+      return { rep: rep.name, won: wonValue(deals), quota: rep.quota };
+    })
+    .sort((a, b) => b.won - a.won);
 
   const activity = companies
     .flatMap((c) => c.activity.map((a) => ({ ...a, company: c.name, id: c.id })))

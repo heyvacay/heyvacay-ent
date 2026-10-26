@@ -37,6 +37,23 @@ export const QUOTA: Record<string, number> = {
   'Marcus L.': 900_000,
 };
 
+export type RepRole = 'Admin' | 'Account Executive' | 'SDR';
+
+export interface Rep {
+  name: string;
+  role: RepRole;
+  quota: number;
+  /** email, for invites — optional in the prototype. */
+  email?: string;
+}
+
+/** Seed sales team. Danil is the admin and can manage the others. */
+export const SEED_REPS: Rep[] = [
+  { name: 'Danil B.', role: 'Admin', quota: QUOTA['Danil B.'], email: 'danilb@heyvacay.co' },
+  { name: 'Priya N.', role: 'Account Executive', quota: QUOTA['Priya N.'], email: 'priya@heyvacay.co' },
+  { name: 'Marcus L.', role: 'Account Executive', quota: QUOTA['Marcus L.'], email: 'marcus@heyvacay.co' },
+];
+
 export const INDUSTRIES = [
   'Technology',
   'Healthcare',
