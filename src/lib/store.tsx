@@ -105,6 +105,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // When a sales rep "enters" a company from the Nova console, we overlay that
   // company's identity onto the workspace (non-persistent — view only).
   const [impersonation, setImpersonation] = useState<{
+    id?: string;
     name: string;
     domain: string;
   } | null>(null);
@@ -165,6 +166,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // The state exposed to the app, with the impersonated company's identity
   // overlaid on top. Never persisted — raw `state` stays clean.
+  // When entering a company OTHER than the seed account, the workspace starts
+  // clean — no prior bookings/expenses/points — so a rep sets it up from zero.
+  const freshAccount =
+    impersonation != null &&
+    impersonation.id != null &&
+    impersonation.id !== state.company.id;
   const effectiveState: AppState = impersonation
     ? {
         ...state,
@@ -173,6 +180,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           name: impersonation.name,
           domain: impersonation.domain || state.company.domain,
         },
+        ...(freshAccount
+          ? { bookings: [], expenses: [], points: [] }
+          : {}),
       }
     : state;
 

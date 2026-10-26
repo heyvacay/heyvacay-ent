@@ -98,6 +98,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [viewAs, setViewAs] = useState<string | null>(null);
 
   useEffect(() => {
@@ -290,16 +291,56 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   ))}
               </select>
             </label>
-            <div className="flex items-center gap-2.5">
-              <Avatar name={activeUser.name} />
-              <div className="hidden leading-tight sm:block">
-                <p className="text-sm font-semibold text-slate-800">
-                  {activeUser.name}
-                </p>
-                <p className="text-[11px] capitalize text-slate-400">
-                  {activeUser.title}
-                </p>
-              </div>
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-2.5 rounded-lg px-1.5 py-1 hover:bg-slate-100"
+              >
+                <Avatar name={activeUser.name} />
+                <div className="hidden leading-tight text-left sm:block">
+                  <p className="text-sm font-semibold text-slate-800">
+                    {activeUser.name}
+                  </p>
+                  <p className="text-[11px] capitalize text-slate-400">
+                    {activeUser.title}
+                  </p>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-slate-400">
+                  <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-full z-40 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                    <div className="border-b border-slate-100 px-3 py-2">
+                      <p className="truncate text-sm font-semibold text-slate-800">{activeUser.name}</p>
+                      <p className="truncate text-xs text-slate-400">{activeUser.email}</p>
+                    </div>
+                    <Link
+                      href="/app/preferences"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                    >
+                      User preferences
+                    </Link>
+                    <button
+                      onClick={() => {
+                        try {
+                          sessionStorage.removeItem('hv_view_as');
+                          sessionStorage.removeItem('hv_view_as_ctx');
+                        } catch {
+                          /* ignore */
+                        }
+                        window.location.href = '/signin';
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>

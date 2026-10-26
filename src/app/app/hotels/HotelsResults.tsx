@@ -13,7 +13,8 @@ import {
 import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import { HotelCarousel } from '@/components/hotels/HotelCarousel';
-import { Button, Card, Select, EmptyState } from '@/components/app/ui';
+import { Button, Card, Select, EmptyState, cn } from '@/components/app/ui';
+import type { PolicyFlag } from '@/lib/store';
 import { HvLoader } from '@/components/HvLoader';
 import { money, num } from '@/lib/format';
 import { Check, Shield, Gift, MapPin } from '@/components/icons';
@@ -38,26 +39,35 @@ function Stars({ n = 0 }: { n?: number }) {
   );
 }
 
+/** 0 = in policy, 1 = needs approval, 2 = blocked. */
+function policySeverity(flags: PolicyFlag[]): 0 | 1 | 2 {
+  if (flags.some((f) => f.policy.action === 'block')) return 2;
+  if (flags.some((f) => f.policy.action === 'approve')) return 1;
+  return 0;
+}
+
 function Signals({
   savings,
   points,
-  needsApproval,
-  inPolicy,
+  severity,
 }: {
   savings: number;
   points: number;
-  needsApproval: boolean;
-  inPolicy: boolean;
+  severity: 0 | 1 | 2;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      {inPolicy ? (
-        <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
+      {severity === 0 ? (
+        <span className="inline-flex items-center gap-1 font-semibold text-sky-600">
           <Check className="h-3.5 w-3.5" /> In policy
         </span>
-      ) : (
+      ) : severity === 1 ? (
         <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-          <Shield className="h-3.5 w-3.5" /> {needsApproval ? 'Needs approval' : 'Policy note'}
+          <Shield className="h-3.5 w-3.5" /> Needs approval
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 font-semibold text-red-600">
+          <Shield className="h-3.5 w-3.5" /> Out of policy — blocked
         </span>
       )}
       {savings > 0 && (
@@ -235,17 +245,32 @@ export default function HotelsResults() {
 
       {!loading && options.length > 0 && (
         <div className="space-y-4">
-          {options.map((opt) => {
-            const flags = evaluatePolicies(opt, checkin);
+          {[...options]
+            .map((opt) => ({ opt, flags: evaluatePolicies(opt, checkin) }))
+            // In-policy first, then needs-approval, then blocked (stable).
+            .sort((a, b) => policySeverity(a.flags) - policySeverity(b.flags))
+            .map(({ opt, flags }) => {
             const { savings, points } = rewardsFor(opt);
-            const needsApproval = flags.some(
-              (f) => f.policy.action === 'approve' || f.policy.action === 'block'
-            );
+            const severity = policySeverity(flags);
+            const searched = hid != null && String(opt.hid) === hid;
             const amenities =
               opt.details?.kind === 'hotel' ? opt.details.amenities : [];
             const perNight = Math.round(opt.price / (opt.nights || 1));
             return (
-              <Card key={opt.id} pad={false} className="overflow-hidden">
+              <Card
+                key={opt.id}
+                pad={false}
+                className={cn(
+                  'overflow-hidden ring-1',
+                  searched
+                    ? 'ring-2 ring-sky-400'
+                    : severity === 2
+                      ? 'ring-red-200'
+                      : severity === 1
+                        ? 'ring-amber-200'
+                        : 'ring-sky-100'
+                )}
+              >
                 <div className="flex flex-col sm:flex-row">
                   <HotelCarousel
                     images={opt.images ?? []}
@@ -299,8 +324,7 @@ export default function HotelsResults() {
                         <Signals
                           savings={savings}
                           points={points}
-                          needsApproval={needsApproval}
-                          inPolicy={flags.length === 0}
+                          severity={severity}
                         />
                       </div>
                       {opt.freeCancellation && (
