@@ -37,24 +37,32 @@ export function ContractWizard({
   const { addContract } = useCrm();
   const champion = company.contacts.find((c) => c.champion) ?? company.contacts[0];
 
+  // Prefill from the account's most recent contract so repeat paperwork is
+  // fast — the rep only changes what's different this time.
+  const prev = company.contracts[0];
+
   const [step, setStep] = useState<Step>(0);
-  const [value, setValue] = useState(company.annualSpend);
-  const [terms, setTerms] = useState<ContractTerms>({
-    type: 'order',
-    pricingModel: 'commission',
-    commissionPct: 0,
-    platformFee: 0,
-    discountPct: 0,
-    termMonths: 12,
-    startDate: todayISO(),
-    paymentTerms: 'Net 30',
-    minimumSpend: 0,
-    supportTier: company.tier === 'Enterprise' ? 'Dedicated' : 'Priority',
-    autoRenew: true,
-    governingLaw: 'State of Delaware, USA',
-    signerName: champion?.name ?? '',
-    signerTitle: champion?.title ?? '',
-  });
+  const [value, setValue] = useState(prev?.value ?? company.annualSpend);
+  const [terms, setTerms] = useState<ContractTerms>(
+    prev
+      ? { ...prev.terms, type: 'order', startDate: todayISO() }
+      : {
+          type: 'order',
+          pricingModel: 'commission',
+          commissionPct: 0,
+          platformFee: 0,
+          discountPct: 0,
+          termMonths: 12,
+          startDate: todayISO(),
+          paymentTerms: 'Net 30',
+          minimumSpend: 0,
+          supportTier: company.tier === 'Enterprise' ? 'Dedicated' : 'Priority',
+          autoRenew: true,
+          governingLaw: 'State of Delaware, USA',
+          signerName: champion?.name ?? '',
+          signerTitle: champion?.title ?? '',
+        }
+  );
 
   const set = <K extends keyof ContractTerms>(k: K, v: ContractTerms[K]) =>
     setTerms((t) => ({ ...t, [k]: v }));

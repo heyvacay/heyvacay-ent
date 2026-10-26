@@ -176,6 +176,7 @@ export function accountOnePagerPdf(c: SalesCompany) {
     ['Account manager', c.accountManager ?? 'Unassigned'],
     ['Annual travel spend', money(c.annualSpend)],
     ['Savings delivered', money(c.savings)],
+    ['Est. annual savings', `${money(Math.round(c.annualSpend * 0.15))} (~15%)`],
     ['Health score', `${c.health}/100`],
     ['Onboarding', `${onboardingPct(c)}% complete`],
     ['Domain', c.domain],
@@ -239,36 +240,86 @@ export function contractPdf(c: SalesCompany, ct: Contract) {
     ['Minimum annual spend', t.minimumSpend > 0 ? money(t.minimumSpend) : 'No commitment'],
   ]);
 
+  const estSavings = Math.round(c.annualSpend * 0.15);
+  paragraph(
+    d,
+    `Based on Customer's reported annual travel spend of ${money(c.annualSpend)}, HeyVacay projects estimated annual savings of approximately ${money(estSavings)} (~15%) through negotiated rates and policy controls. Savings are an estimate, not a guarantee.`,
+    { color: SLATE }
+  );
+  d.y += 8;
+
   heading(d, '2. Scope of services');
   paragraph(
     d,
-    'HeyVacay will provide Customer access to its corporate travel and expense platform, including flight and hotel booking, policy controls, budgets, approvals, expense management, and savings rewards. HeyVacay sources inventory from its supply partners and passes negotiated rates through to Customer.'
+    'HeyVacay will provide Customer access to its corporate travel and expense platform, including flight and hotel booking, policy controls, budgets, approvals, expense management, and savings rewards. HeyVacay sources inventory from its supply partners and passes negotiated rates through to Customer. HeyVacay may add, modify, or deprecate features over time provided it does not materially reduce the core functionality during the Term.'
   );
-  d.y += 6;
+  d.y += 4;
 
-  heading(d, '3. Support');
+  heading(d, '3. Fees & payment');
   paragraph(
     d,
-    `Customer will receive ${t.supportTier} support. Dedicated and Priority tiers include a named account manager and defined response-time targets. All tiers include self-service help and in-app assistance.`
+    `Fees are as set out in Section 1 and are exclusive of taxes, which are Customer's responsibility. Invoiced amounts are due ${t.paymentTerms}. Undisputed amounts not paid when due accrue interest at the lesser of 1.5% per month or the maximum permitted by law, and HeyVacay may suspend services on 10 days' written notice of non-payment. Fees are non-refundable except as expressly stated. Customer will reimburse reasonable costs of collection for overdue, undisputed amounts.`
   );
-  d.y += 6;
+  d.y += 4;
 
-  heading(d, '4. Term & renewal');
+  heading(d, '4. Term, renewal & termination');
   paragraph(
     d,
-    `This Agreement begins on ${t.startDate} and continues for ${t.termMonths} months. ${
+    `This Agreement begins on ${t.startDate} and continues for ${t.termMonths} months (the "Initial Term"). ${
       t.autoRenew
-        ? 'It renews automatically for successive like terms unless either party gives notice at least 30 days before the end of the then-current term.'
+        ? 'It then renews automatically for successive terms of equal length unless either party gives written notice of non-renewal at least 30 days before the end of the then-current term.'
         : 'It does not renew automatically; renewal requires a new written order.'
+    } Either party may terminate for material breach that remains uncured 30 days after written notice. HeyVacay may terminate immediately for non-payment or misuse of the platform. ${
+      t.minimumSpend > 0
+        ? `Customer has committed to a minimum annual spend of ${money(t.minimumSpend)}; early termination by Customer without cause does not relieve Customer of committed amounts for the then-current term.`
+        : 'Fees already incurred remain payable on termination.'
     }`
   );
-  d.y += 6;
+  d.y += 4;
 
-  heading(d, '5. Governing law');
-  paragraph(d, `This Agreement is governed by the laws of ${t.governingLaw}, without regard to its conflict-of-laws rules.`);
+  heading(d, '5. Confidentiality');
+  paragraph(
+    d,
+    "Each party may receive the other's non-public information (\"Confidential Information\"). The receiving party will use it only to perform under this Agreement, protect it with at least reasonable care, and not disclose it except to personnel and advisors with a need to know who are bound by similar obligations. These obligations continue for 3 years after disclosure (and for trade secrets, for as long as they remain trade secrets)."
+  );
+  d.y += 4;
+
+  heading(d, '6. Data protection');
+  paragraph(
+    d,
+    'Each party will comply with applicable data-protection laws. HeyVacay processes traveler personal data only to provide the services and under its Data Processing Addendum, applies industry-standard administrative, technical, and physical safeguards, and will notify Customer without undue delay on becoming aware of a confirmed breach of Customer personal data.'
+  );
+  d.y += 4;
+
+  heading(d, '7. Warranties & disclaimer');
+  paragraph(
+    d,
+    'HeyVacay warrants it will provide the services in a professional and workmanlike manner. Travel inventory is supplied by third-party airlines, hotels, and aggregators and is subject to their fare rules and availability; HeyVacay is not the supplier of travel and is not liable for supplier acts or omissions. EXCEPT AS EXPRESSLY STATED, THE SERVICES ARE PROVIDED "AS IS" AND HEYVACAY DISCLAIMS ALL OTHER WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.'
+  );
+  d.y += 4;
+
+  heading(d, '8. Limitation of liability');
+  paragraph(
+    d,
+    "Neither party is liable for indirect, incidental, special, consequential, or punitive damages, or lost profits or revenue. Except for Customer's payment obligations, a party's breach of confidentiality, or a party's indemnification obligations, each party's total aggregate liability arising out of this Agreement will not exceed the fees paid or payable by Customer to HeyVacay in the 12 months preceding the event giving rise to the claim."
+  );
+  d.y += 4;
+
+  heading(d, '9. Indemnification');
+  paragraph(
+    d,
+    "Each party will defend and indemnify the other against third-party claims arising from its gross negligence, willful misconduct, or breach of this Agreement. Customer will additionally indemnify HeyVacay against claims arising from Customer's or its travelers' misuse of the platform or violation of supplier fare rules."
+  );
+  d.y += 4;
+
+  heading(d, '10. General');
+  paragraph(
+    d,
+    `This Agreement is governed by the laws of ${t.governingLaw}, without regard to its conflict-of-laws rules, and the parties submit to the exclusive jurisdiction of its courts. Neither party may assign this Agreement without the other's consent, except to a successor in a merger or sale of substantially all assets. Neither party is liable for delays caused by events beyond its reasonable control (force majeure). During the Term and for 12 months after, neither party will solicit for employment the other's personnel primarily involved in this Agreement. This Agreement, with its order forms and addenda, is the entire agreement between the parties and supersedes all prior discussions; any amendment must be in writing and signed by both parties. If any provision is unenforceable, the rest remains in effect.`
+  );
   d.y += 14;
 
-  heading(d, '6. Signatures');
+  heading(d, '11. Signatures');
   d.y += 10;
   signatureBlock(d, 'HeyVacay, Inc.', ct.createdBy, 'Account Executive');
   signatureBlock(d, c.name, t.signerName, t.signerTitle);
