@@ -387,6 +387,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString().slice(0, 10),
         policyNotes: flags.map((f) => f.message),
         freeCancellation: opt.freeCancellation,
+        destination:
+          opt.type === 'flight'
+            ? opt.destIata ?? opt.title
+            : opt.location ?? opt.title,
+        departAt: opt.departAt,
+        arriveAt: opt.arriveAt,
       };
 
       setState((s) => {

@@ -15,6 +15,7 @@ import {
 import { money, num, todayISO, addDays, daysUntil, dateRange } from '@/lib/format';
 import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
+import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
 import { format as fmtDate, parseISO } from 'date-fns';
 import {
   placesFlights,
@@ -789,6 +790,9 @@ export default function BookPage() {
   /* ----- search home + results ----- */
   return (
     <div>
+      {/* Context-aware greeting when the traveler is on / about to start a trip. */}
+      <ActiveTripBanner />
+
       {/* hero — the employee home: search first, with a HeyVacay feel */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-6 text-white ring-1 ring-white/10 sm:p-8">
         <span className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand/25 blur-3xl" />

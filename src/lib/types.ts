@@ -94,6 +94,11 @@ export interface Booking {
   reviewNoteVisible?: boolean;
   /** Hotel rate was free-cancellation (relevant to the approval window). */
   freeCancellation?: boolean;
+  /** Destination label (flight dest city/IATA, or hotel location). */
+  destination?: string;
+  /** Flight departure / arrival times (ISO), when known. */
+  departAt?: string;
+  arriveAt?: string;
 }
 
 export type ExpenseCategory =
