@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store';
 import { Button, Field, Input, cn } from '@/components/app/ui';
 import { money, num, todayISO } from '@/lib/format';
 import type { OnboardingProfile } from '@/lib/types';
+import { pushSignupToCrm } from '@/lib/crmBridge';
 import {
   ArrowRight,
   Building,
@@ -195,6 +196,13 @@ export default function SignupPage() {
       completedAt: todayISO(),
     };
     completeOnboarding(profile);
+    // Notify the CRM: add the company + a welcome task for the account manager.
+    pushSignupToCrm({
+      companyName: profile.companyName,
+      workEmail: profile.workEmail,
+      annualSpend: profile.annualSpend,
+      teamSize: Number(form.teamSize) || undefined,
+    });
     setActiveUser('u_admin');
     setRole('admin');
     router.push('/app/dashboard');
