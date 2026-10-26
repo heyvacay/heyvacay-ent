@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { StoreProvider } from '@/lib/store';
+import { EventsProvider } from '@/lib/eventsStore';
 import AppShell from '@/components/app/AppShell';
 
 export const metadata: Metadata = {
@@ -14,7 +15,9 @@ export default function AppLayout({
 }) {
   return (
     <StoreProvider>
-      <AppShell>{children}</AppShell>
+      <EventsProvider>
+        <AppShell>{children}</AppShell>
+      </EventsProvider>
     </StoreProvider>
   );
 }

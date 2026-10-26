@@ -59,6 +59,7 @@ const ADMIN_NAV: NavSection[] = [
     title: 'Travel',
     items: [
       { href: '/app/bookings', label: 'Bookings', icon: Plane },
+      { href: '/app/events', label: 'Events', icon: Calendar },
       { href: '/app/approvals', label: 'Approvals', icon: Bell },
       { href: '/app/reports', label: 'Analytics', icon: TrendUp },
     ],
@@ -86,6 +87,7 @@ const EMPLOYEE_NAV: NavSection[] = [
     items: [
       { href: '/app/book', label: 'Home', icon: MapPin },
       { href: '/app/trips', label: 'My trips', icon: Calendar },
+      { href: '/app/events', label: 'Events', icon: Users },
       { href: '/app/rewards', label: 'Rewards', icon: Gift },
       { href: '/app/expenses', label: 'Expenses', icon: Receipt },
       { href: '/app/me', label: 'My dashboard', icon: ChartBar },
