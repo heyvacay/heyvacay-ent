@@ -20,6 +20,7 @@ import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, Input, Select, cn } from '@/components/app/ui';
 import { HvLoader } from '@/components/HvLoader';
+import { sendEmail } from '@/lib/email';
 import { money, num, dateRange } from '@/lib/format';
 import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet } from '@/components/icons';
 
@@ -169,6 +170,30 @@ export default function HotelDetail({ hid }: { hid: string }) {
     setPayStep(false);
     setProcessing(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Notify by email (no-ops without a provider key; real send when set).
+    const trav = state.users.find((u) => u.id === travelerId);
+    const manager = state.users.find((u) => u.role === 'admin');
+    const emailData = {
+      travelerName: trav?.name ?? 'there',
+      title: name,
+      roomType: selected?.roomTitle,
+      dates: dateRange(checkin, checkout),
+      total: price,
+      savings,
+      points,
+      inPolicy: flags.length === 0,
+    };
+    if (needsApproval) {
+      if (manager?.email)
+        sendEmail('approvalPending', manager.email, {
+          ...emailData,
+          manager: manager.name,
+          note: bookNote.trim() || undefined,
+        });
+    } else if (trav?.email) {
+      sendEmail('confirmation', trav.email, emailData);
+    }
   };
 
   // Simulate payment processing then commit (demo or "real" both run this).

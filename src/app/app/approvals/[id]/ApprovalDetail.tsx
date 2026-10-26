@@ -12,6 +12,7 @@ import {
   PageHeader,
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
+import { sendEmail } from '@/lib/email';
 import { Plane, Receipt, Shield, Check, Gift, Wallet } from '@/components/icons';
 
 export default function ApprovalDetail({ id }: { id: string }) {
@@ -69,6 +70,14 @@ export default function ApprovalDetail({ id }: { id: string }) {
     if (kind === 'approved') approveBooking(b.id, comment, noteVisible);
     else cancelBooking(b.id, comment, noteVisible);
     setDone(kind);
+    if (traveler?.email) {
+      sendEmail('approvalDecided', traveler.email, {
+        travelerName: traveler.name,
+        title: b.title,
+        approved: kind === 'approved',
+        note: noteVisible ? comment : undefined,
+      });
+    }
   };
 
   const sendOffer = () => {
