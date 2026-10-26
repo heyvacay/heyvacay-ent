@@ -222,6 +222,11 @@ export interface ContractTerms {
   signerTitle: string;
 }
 
+export interface Signature {
+  name: string;
+  date: string;
+}
+
 export interface Contract {
   id: string;
   companyId: string;
@@ -231,6 +236,11 @@ export interface Contract {
   value: number; // ACV this contract represents
   createdAt: string;
   createdBy: string;
+  /** E-signatures captured via the shareable sign link. */
+  signatures?: {
+    heyvacay?: Signature;
+    customer?: Signature;
+  };
 }
 
 /* ---------------- company ---------------- */

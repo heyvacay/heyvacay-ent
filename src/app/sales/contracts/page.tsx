@@ -16,6 +16,12 @@ import { Receipt } from '@/components/icons';
 export default function ContractsPage() {
   const { companies, setContractStatus } = useCrm();
 
+  const copySignLink = (contractId: string) => {
+    const url = `${window.location.origin}/sign/${contractId}`;
+    navigator.clipboard?.writeText(url).catch(() => {});
+    window.alert(`Sign link copied:\n${url}`);
+  };
+
   const rows = companies
     .flatMap((c) => c.contracts.map((ct) => ({ ct, company: c })))
     .sort((a, b) => (a.ct.createdAt < b.ct.createdAt ? 1 : -1));
@@ -65,9 +71,15 @@ export default function ContractsPage() {
                   {CONTRACT_TYPE_LABEL[ct.terms.type]} · {money(ct.value)} ACV ·{' '}
                   {ct.terms.termMonths}mo · created {shortDate(ct.createdAt)}
                 </p>
+                {ct.signatures && (ct.signatures.heyvacay || ct.signatures.customer) && (
+                  <p className="text-xs text-slate-500">
+                    Signed: {ct.signatures.heyvacay ? 'HeyVacay ✓' : 'HeyVacay —'} ·{' '}
+                    {ct.signatures.customer ? `${company.name} ✓` : `${company.name} —`}
+                  </p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-40">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-36">
                   <Select
                     value={ct.status}
                     onChange={(e) =>
@@ -81,6 +93,12 @@ export default function ContractsPage() {
                     ))}
                   </Select>
                 </span>
+                <Button size="sm" variant="outline" onClick={() => copySignLink(ct.id)}>
+                  Sign link
+                </Button>
+                <Button size="sm" variant="outline" href={`/sign/${ct.id}`}>
+                  Sign
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => contractPdf(company, ct)}>
                   <Receipt className="h-4 w-4" /> PDF
                 </Button>

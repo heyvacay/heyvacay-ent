@@ -71,6 +71,7 @@ interface CrmApi {
     data: { title: string; terms: ContractTerms; value: number }
   ) => Contract;
   setContractStatus: (companyId: string, contractId: string, status: Contract['status']) => void;
+  signContract: (contractId: string, party: 'heyvacay' | 'customer', name: string) => void;
 
   reps: Rep[];
   addRep: (rep: Rep) => void;
@@ -361,6 +362,36 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const signContract: CrmApi['signContract'] = useCallback(
+    (contractId, party, name) =>
+      setCompanies((cs) =>
+        cs.map((c) => {
+          if (!c.contracts.some((x) => x.id === contractId)) return c;
+          return {
+            ...c,
+            contracts: c.contracts.map((x) => {
+              if (x.id !== contractId) return x;
+              const signatures = {
+                ...x.signatures,
+                [party]: { name, date: todayISO() },
+              };
+              const bothSigned = Boolean(signatures.heyvacay && signatures.customer);
+              return {
+                ...x,
+                signatures,
+                status: bothSigned ? ('signed' as const) : x.status === 'draft' ? ('sent' as const) : x.status,
+              };
+            }),
+            activity: [
+              { date: todayISO(), text: `${party === 'heyvacay' ? 'HeyVacay' : 'Customer'} signed — ${name}` },
+              ...c.activity,
+            ],
+          };
+        })
+      ),
+    []
+  );
+
   const reset = useCallback(() => {
     try {
       localStorage.removeItem(KEY);
@@ -391,6 +422,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         toggleTask,
         addContract,
         setContractStatus,
+        signContract,
         reps,
         addRep,
         updateRep,
