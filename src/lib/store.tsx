@@ -75,8 +75,8 @@ export interface StoreApi {
     startDate: string;
     endDate: string;
   }) => Booking;
-  cancelBooking: (id: string, note?: string) => void;
-  approveBooking: (id: string, note?: string) => void;
+  cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
+  approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   submitExpense: (data: {
     userId: string;
     merchant: string;
@@ -86,7 +86,7 @@ export interface StoreApi {
     hasReceipt: boolean;
     note?: string;
   }) => void;
-  setExpenseStatus: (id: string, status: ExpenseStatus) => void;
+  setExpenseStatus: (id: string, status: ExpenseStatus, note?: string) => void;
   redeemPoints: (userId: string, amount: number, reason: string) => void;
   completeOnboarding: (profile: OnboardingProfile) => void;
   setIntegrationStatus: (id: string, status: IntegrationStatus) => void;
@@ -410,45 +410,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [evaluatePolicies, state.activeUserId, state.users, activeUser.department]
   );
 
-  const approveBooking: StoreApi['approveBooking'] = useCallback((id, note) => {
-    setState((s) => {
-      const bk = s.bookings.find((b) => b.id === id);
-      if (!bk || bk.status !== 'pending_approval') return s;
-      const points = [
-        ...s.points,
-        {
-          id: uid('pt'),
-          userId: bk.travelerId,
-          delta: bk.pointsEarned,
-          reason: `${bk.type === 'flight' ? 'Flight' : 'Hotel'} savings · ${bk.title}`,
-          bucket: 'self' as const,
-          bookingId: bk.id,
-          createdAt: bk.createdAt,
-        },
-      ];
-      return {
+  const approveBooking: StoreApi['approveBooking'] = useCallback(
+    (id, note, noteVisible = true) => {
+      setState((s) => {
+        const bk = s.bookings.find((b) => b.id === id);
+        if (!bk || bk.status !== 'pending_approval') return s;
+        const points = [
+          ...s.points,
+          {
+            id: uid('pt'),
+            userId: bk.travelerId,
+            delta: bk.pointsEarned,
+            reason: `${bk.type === 'flight' ? 'Flight' : 'Hotel'} savings · ${bk.title}`,
+            bucket: 'self' as const,
+            bookingId: bk.id,
+            createdAt: bk.createdAt,
+          },
+        ];
+        return {
+          ...s,
+          bookings: s.bookings.map((b) =>
+            b.id === id
+              ? {
+                  ...b,
+                  status: 'confirmed',
+                  reviewNote: note || b.reviewNote,
+                  reviewNoteVisible: note ? noteVisible : b.reviewNoteVisible,
+                }
+              : b
+          ),
+          points,
+        };
+      });
+    },
+    []
+  );
+
+  const cancelBooking: StoreApi['cancelBooking'] = useCallback(
+    (id, note, noteVisible = true) => {
+      setState((s) => ({
         ...s,
         bookings: s.bookings.map((b) =>
           b.id === id
-            ? { ...b, status: 'confirmed', reviewNote: note || b.reviewNote }
+            ? {
+                ...b,
+                status: 'cancelled',
+                reviewNote: note || b.reviewNote,
+                reviewNoteVisible: note ? noteVisible : b.reviewNoteVisible,
+              }
             : b
         ),
-        points,
-      };
-    });
-  }, []);
-
-  const cancelBooking: StoreApi['cancelBooking'] = useCallback((id, note) => {
-    setState((s) => ({
-      ...s,
-      bookings: s.bookings.map((b) =>
-        b.id === id
-          ? { ...b, status: 'cancelled', reviewNote: note || b.reviewNote }
-          : b
-      ),
-      points: s.points.filter((p) => p.bookingId !== id),
-    }));
-  }, []);
+        points: s.points.filter((p) => p.bookingId !== id),
+      }));
+    },
+    []
+  );
 
   const submitExpense: StoreApi['submitExpense'] = useCallback((data) => {
     setState((s) => ({
@@ -465,10 +481,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setExpenseStatus: StoreApi['setExpenseStatus'] = useCallback(
-    (id, status) => {
+    (id, status, note) => {
       setState((s) => ({
         ...s,
-        expenses: s.expenses.map((e) => (e.id === id ? { ...e, status } : e)),
+        expenses: s.expenses.map((e) =>
+          e.id === id ? { ...e, status, reviewNote: note || e.reviewNote } : e
+        ),
       }));
     },
     []
@@ -586,13 +604,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reset = useCallback(() => {
-    setState(SEED);
-    setRole('admin');
     try {
+      // Reset the whole demo in one go — customer app AND the Nova CRM — plus
+      // any "view as company" overlay, then reload so every provider reseeds.
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('hv_crm_demo_v2');
+      sessionStorage.removeItem('hv_view_as');
+      sessionStorage.removeItem('hv_view_as_ctx');
     } catch {
       /* ignore */
     }
+    setState(SEED);
+    setRole('admin');
+    if (typeof window !== 'undefined') window.location.href = '/app';
   }, []);
 
   const api: StoreApi = {

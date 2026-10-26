@@ -593,7 +593,7 @@ export default function BookPage() {
   const router = useRouter();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
-  const [type, setType] = useState<ProductType>('flight');
+  const [type, setType] = useState<ProductType>('hotel');
 
   // flight inputs
   const [originText, setOriginText] = useState('');

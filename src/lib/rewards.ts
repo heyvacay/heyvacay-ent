@@ -15,8 +15,12 @@
  *               market claim, so flights still reward the traveler honestly.
  */
 
-/** Flat loyalty earn: points per dollar of company spend. */
-export const SPEND_POINTS_RATE = 0.1;
+/**
+ * Points reward SAVINGS, not spend. The more a traveler saves the company
+ * versus the market/competitor price, the more they earn — so the incentive
+ * is to pick the cheapest in-policy option, never to spend more.
+ */
+export const SAVINGS_POINTS_MULTIPLIER = 2;
 
 export interface RewardInput {
   type: 'hotel' | 'flight';
@@ -29,9 +33,8 @@ export function savingsFor(opt: RewardInput): number {
 }
 
 export function pointsFor(opt: RewardInput): number {
-  const savings = savingsFor(opt);
-  const spendEarn = Math.round(opt.price * SPEND_POINTS_RATE);
-  return savings + spendEarn;
+  // Pure savings-based: 2 points per $1 saved vs market. No spend component.
+  return savingsFor(opt) * SAVINGS_POINTS_MULTIPLIER;
 }
 
 export function rewardsFor(opt: RewardInput): { savings: number; points: number } {

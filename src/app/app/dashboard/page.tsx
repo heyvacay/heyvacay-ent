@@ -19,7 +19,6 @@ export default function AdminDashboard() {
     companySavings,
     spentForScope,
     userById,
-    approveBooking,
   } = useStore();
 
   const companyBudget =
@@ -130,12 +129,9 @@ export default function AdminDashboard() {
                     </div>
                     <Badge color="amber">Review</Badge>
                   </div>
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => approveBooking(b.id)}>
-                      Approve
-                    </Button>
-                    <Button size="sm" variant="ghost">
-                      Details
+                  <div className="mt-3">
+                    <Button size="sm" href={`/app/approvals/${b.id}`} className="w-full">
+                      Review &amp; decide
                     </Button>
                   </div>
                 </div>

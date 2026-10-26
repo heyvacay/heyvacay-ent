@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Button, Card, cn } from '@/components/app/ui';
 import { toTitleCase, type UiRoom } from '@/lib/hotelRooms';
-import { RoomCard, type ReserveArgs } from './RoomCard';
+import { RoomCard, type PolicyStatus, type ReserveArgs } from './RoomCard';
 
 const MAX_ROOMS_TO_DISPLAY = 8;
 
@@ -31,10 +31,12 @@ export function RoomSelection({
   uiRooms,
   onReserve,
   onPhotos,
+  assessPolicy,
 }: {
   uiRooms: UiRoom[];
   onReserve: (args: ReserveArgs) => void;
-  onPhotos: (images: string[], title: string) => void;
+  onPhotos: (images: string[], title: string, index: number) => void;
+  assessPolicy?: (priceAllIn: number) => PolicyStatus;
 }) {
   const [filter, setFilter] = useState<string>('all');
   const [showAll, setShowAll] = useState(false);
@@ -94,6 +96,7 @@ export function RoomSelection({
             room={room}
             onReserve={onReserve}
             onPhotos={onPhotos}
+            assessPolicy={assessPolicy}
           />
         ))}
       </div>

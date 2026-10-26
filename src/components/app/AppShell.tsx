@@ -25,6 +25,31 @@ import {
 type NavItem = { href: string; label: string; icon: typeof ChartBar };
 type NavSection = { title: string | null; items: NavItem[] };
 
+/** Deterministic numeric string of length n, seeded from a stable id. */
+function seededDigits(seed: string, n: number): string {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let out = '';
+  while (out.length < n) {
+    h = Math.imul(h ^ out.length, 16777619);
+    out += Math.abs(h % 1_000_000).toString().padStart(6, '0');
+  }
+  return out.slice(0, n);
+}
+
+/** Company account number — ENT<year>-<8 digits>. Admin-only. */
+export function companyAccountNumber(companyId: string): string {
+  return `ENT2026-${seededDigits(companyId, 8)}`;
+}
+
+/** Per-user number — first 4 of the company's random digits + 4 of their own. */
+export function userNumber(companyId: string, userId: string): string {
+  return seededDigits(companyId, 8).slice(0, 4) + seededDigits(userId, 4);
+}
+
 const ADMIN_NAV: NavSection[] = [
   {
     title: null,
@@ -126,7 +151,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <p className="truncate text-sm font-semibold text-slate-800">
             {state.company.name}
           </p>
-          <p className="text-[11px] text-slate-400">Free plan · all features</p>
+          {role === 'admin' && (
+            <p className="truncate text-[11px] text-slate-400">
+              Acct {companyAccountNumber(state.company.id)}
+            </p>
+          )}
+          <p className="truncate text-[11px] text-slate-400">
+            User #{userNumber(state.company.id, activeUser.id)}
+          </p>
         </div>
       </div>
 

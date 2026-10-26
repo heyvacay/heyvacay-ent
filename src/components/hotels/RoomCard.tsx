@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { Button, Card, cn } from '@/components/app/ui';
-import { money } from '@/lib/format';
-import { Check, Users } from '@/components/icons';
+import { money, num } from '@/lib/format';
+import { rewardsFor } from '@/lib/rewards';
+import { Check, Users, Shield, Gift } from '@/components/icons';
 import { HotelCarousel } from './HotelCarousel';
 import {
   defaultSelection,
   firstEnabledMeal,
-  firstEnabledRefund,
   resolveLeaf,
   sumPayAtProperty,
   toTitleCase,
@@ -16,15 +16,18 @@ import {
   type UiRoom,
 } from '@/lib/hotelRooms';
 
+export type PolicyStatus = 'in' | 'approval' | 'block';
+
 export interface ReserveArgs {
   roomTitle: string;
   bookHash: string;
   price: number; // all-in total
   perNight: number;
   competitive?: number; // all-in strikethrough
-  bed: string;
   refund: string;
   meal: string;
+  policy: PolicyStatus;
+  points: number;
 }
 
 function fmtFreeUntil(iso: string): string {
@@ -66,9 +69,7 @@ function RadioRow({
         {selected && <span className="h-2 w-2 rounded-full bg-brand" />}
       </span>
       <span className={cn(disabled && 'opacity-50', 'text-slate-600')}>{label}</span>
-      {right && !disabled && (
-        <span className="ms-auto text-slate-400">{right}</span>
-      )}
+      {right && !disabled && <span className="ms-auto text-slate-400">{right}</span>}
     </button>
   );
 }
@@ -82,29 +83,31 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+const POLICY_META: Record<
+  PolicyStatus,
+  { label: string; cls: string; Icon: typeof Check }
+> = {
+  in: { label: 'In policy', cls: 'bg-sky-50 text-sky-700', Icon: Check },
+  approval: { label: 'Needs approval', cls: 'bg-amber-50 text-amber-700', Icon: Shield },
+  block: { label: 'Out of policy', cls: 'bg-red-50 text-red-700', Icon: Shield },
+};
+
 export function RoomCard({
   room,
   onReserve,
   onPhotos,
+  assessPolicy,
 }: {
   room: UiRoom;
   onReserve: (args: ReserveArgs) => void;
-  onPhotos: (images: string[], title: string) => void;
+  onPhotos: (images: string[], title: string, index: number) => void;
+  assessPolicy?: (priceAllIn: number) => PolicyStatus;
 }) {
+  // Bed selection stays internal (defaults to the best bed) — we no longer show
+  // confusing bed-type options; travelers choose refundability and meal plan.
   const [sel, setSel] = useState<RoomSelection | null>(() => defaultSelection(room));
   const leaf = resolveLeaf(room, sel);
 
-  const changeBed = (bedKey: string) => {
-    const bed = room.bedOptions.find((b) => b.bedKey === bedKey);
-    if (!bed) return;
-    const refund = firstEnabledRefund(bed);
-    const meal = refund ? firstEnabledMeal(refund) : undefined;
-    setSel({
-      bedKey,
-      refundKey: refund?.refundKey ?? '',
-      mealCode: meal?.mealCode ?? '',
-    });
-  };
   const changeRefund = (refundKey: string) => {
     if (!sel) return;
     const bed = room.bedOptions.find((b) => b.bedKey === sel.bedKey);
@@ -119,7 +122,6 @@ export function RoomCard({
 
   const rate = leaf?.meal.rateRef;
   const price = rate?.price ?? room.from.amount ?? 0;
-  const currency = rate?.currency ?? room.from.currency ?? 'USD';
   const perNight = rate?.pricePerDay ?? rate?.price ?? 0;
   const competitive = rate?.competitivePrice ?? room.from.competitivePrice;
   const pap = sumPayAtProperty(rate?.taxes_fees);
@@ -129,18 +131,41 @@ export function RoomCard({
   const showStrike = allInComp != null && allInComp > allIn;
   const totalCaption = pap > 0 ? 'Total incl. taxes & resort fees' : 'Total with taxes & fees';
 
-  const bed = leaf?.bed;
-  const refundOpts = bed?.refundOptions ?? [];
+  // Points reward savings on THIS room (more saved vs market = more points),
+  // so cheaper rooms earn more — per-room, not per-spend.
+  const points = rewardsFor({
+    type: 'hotel',
+    marketPrice: allInComp ?? allIn,
+    price: allIn,
+  }).points;
+
+  const policy: PolicyStatus = assessPolicy?.(allIn) ?? 'in';
+  const pm = POLICY_META[policy];
+
+  const refundOpts = leaf?.bed?.refundOptions ?? [];
   const refund = leaf?.refund;
   const meals = refund?.mealOptions ?? [];
   const hideMeals = meals.length <= 1 && meals[0]?.mealCode === 'nomeal';
 
+  const openPhotos = (index = 0) => onPhotos(room.images, room.roomTitle, index);
+
   return (
-    <Card pad={false} className="flex h-full flex-col overflow-hidden">
+    <Card
+      pad={false}
+      className={cn(
+        'flex h-full flex-col overflow-hidden ring-1',
+        policy === 'block'
+          ? 'ring-red-200'
+          : policy === 'approval'
+            ? 'ring-amber-200'
+            : 'ring-transparent'
+      )}
+    >
       <HotelCarousel
         images={room.images}
         alt={room.roomTitle}
         className="h-44 w-full"
+        onImageClick={(i) => openPhotos(i)}
       />
 
       <div className="flex flex-1 flex-col p-3">
@@ -148,6 +173,18 @@ export function RoomCard({
           <h3 className="mb-2 line-clamp-2 text-sm font-semibold text-slate-900">
             {toTitleCase(room.roomTitle)}
           </h3>
+
+          {/* policy + points chips */}
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold', pm.cls)}>
+              <pm.Icon className="h-3 w-3" /> {pm.label}
+            </span>
+            {points > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand-dark">
+                <Gift className="h-3 w-3" /> +{num(points)} pts
+              </span>
+            )}
+          </div>
 
           <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1">
@@ -161,27 +198,13 @@ export function RoomCard({
             {room.images.length > 0 && (
               <button
                 type="button"
-                onClick={() => onPhotos(room.images, room.roomTitle)}
+                onClick={() => openPhotos(0)}
                 className="font-medium text-brand-dark hover:underline"
               >
                 Photos
               </button>
             )}
           </div>
-
-          {/* Bed type */}
-          <Section title="Bed type">
-            {room.bedOptions.map((b) => (
-              <RadioRow
-                key={b.bedKey}
-                selected={sel?.bedKey === b.bedKey}
-                disabled={b.isDisabled}
-                label={b.bedLabel ?? b.bedKey}
-                right={`+${money(b.priceDelta ?? 0)}`}
-                onClick={() => changeBed(b.bedKey)}
-              />
-            ))}
-          </Section>
 
           {/* Refundability */}
           {sel && refundOpts.length > 0 && (
@@ -253,13 +276,14 @@ export function RoomCard({
                 price: allIn,
                 perNight: Math.ceil(Number(perNight) || 0),
                 competitive: showStrike ? allInComp : undefined,
-                bed: bed?.bedLabel ?? '',
                 refund: refund?.label ?? '',
                 meal: leaf?.meal.label ?? '',
+                policy,
+                points,
               })
             }
           >
-            Reserve
+            {policy === 'block' ? 'Request override' : policy === 'approval' ? 'Request approval' : 'Reserve'}
           </Button>
         </div>
       </div>

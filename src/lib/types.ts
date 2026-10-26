@@ -90,6 +90,8 @@ export interface Booking {
   policyNotes?: string[];
   /** A reviewer's comment when approved/declined. */
   reviewNote?: string;
+  /** Whether the reviewer's comment is shown to the traveler (default true). */
+  reviewNoteVisible?: boolean;
   /** Hotel rate was free-cancellation (relevant to the approval window). */
   freeCancellation?: boolean;
 }
@@ -118,6 +120,8 @@ export interface Expense {
   status: ExpenseStatus;
   hasReceipt: boolean;
   note?: string;
+  /** A reviewer's comment when approved/rejected (shown to the submitter). */
+  reviewNote?: string;
   tripId?: string;
   /** GL account the expense posts to (set when synced to accounting). */
   glCode?: string;

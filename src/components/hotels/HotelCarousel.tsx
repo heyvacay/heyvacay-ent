@@ -12,12 +12,14 @@ export function HotelCarousel({
   className = 'h-52 w-full',
   rounded = '',
   startIndex = 0,
+  onImageClick,
 }: {
   images: string[];
   alt: string;
   className?: string;
   rounded?: string;
   startIndex?: number;
+  onImageClick?: (index: number) => void;
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, startIndex });
   const [selected, setSelected] = useState(0);
@@ -71,7 +73,8 @@ export function HotelCarousel({
                   alt={alt}
                   loading={i === 0 ? 'eager' : 'lazy'}
                   onError={() => setFailed((f) => ({ ...f, [i]: true }))}
-                  className="h-full w-full object-cover"
+                  onClick={onImageClick ? () => onImageClick(i) : undefined}
+                  className={`h-full w-full object-cover${onImageClick ? ' cursor-pointer' : ''}`}
                 />
               )}
             </div>

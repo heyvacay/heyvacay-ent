@@ -51,6 +51,11 @@ export default function ExpensesPage() {
   );
   const showPosting = isAdmin && !!accounting;
   const [open, setOpen] = useState(false);
+  // Expense decision modal (approve/reject with an optional comment).
+  const [decide, setDecide] = useState<{ id: string; kind: 'approved' | 'rejected' } | null>(
+    null
+  );
+  const [decideNote, setDecideNote] = useState('');
   const [form, setForm] = useState({
     merchant: '',
     category: 'Meals' as ExpenseCategory,
@@ -260,6 +265,14 @@ export default function ExpensesPage() {
                         {!e.hasReceipt && (
                           <p className="text-xs text-amber-600">No receipt</p>
                         )}
+                        {e.reviewNote && (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            <span className="font-semibold">
+                              {e.status === 'rejected' ? 'Rejected' : 'Approved'}:
+                            </span>{' '}
+                            {e.reviewNote}
+                          </p>
+                        )}
                       </td>
                       {isAdmin && (
                         <td className="px-5 py-3 text-slate-600">
@@ -312,18 +325,20 @@ export default function ExpensesPage() {
                             <div className="flex justify-end gap-2">
                               <Button
                                 size="sm"
-                                onClick={() =>
-                                  setExpenseStatus(e.id, 'approved')
-                                }
+                                onClick={() => {
+                                  setDecideNote('');
+                                  setDecide({ id: e.id, kind: 'approved' });
+                                }}
                               >
                                 Approve
                               </Button>
                               <Button
                                 size="sm"
                                 variant="danger"
-                                onClick={() =>
-                                  setExpenseStatus(e.id, 'rejected')
-                                }
+                                onClick={() => {
+                                  setDecideNote('');
+                                  setDecide({ id: e.id, kind: 'rejected' });
+                                }}
                               >
                                 Reject
                               </Button>
@@ -355,6 +370,56 @@ export default function ExpensesPage() {
           </Card>
         )}
       </div>
+
+      {/* approve / reject with a comment */}
+      {decide && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"
+          onClick={() => setDecide(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="font-display text-lg font-bold text-slate-900">
+                {decide.kind === 'approved' ? 'Approve expense' : 'Reject expense'}
+              </h2>
+            </div>
+            <div className="space-y-3 px-5 py-4">
+              <label className="block text-sm font-medium text-slate-700">
+                Comment to the employee {decide.kind === 'rejected' ? '' : '(optional)'}
+              </label>
+              <textarea
+                value={decideNote}
+                onChange={(ev) => setDecideNote(ev.target.value)}
+                rows={3}
+                autoFocus
+                placeholder={
+                  decide.kind === 'rejected'
+                    ? 'Let them know why, and what to fix…'
+                    : 'Optional note…'
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
+              <Button variant="ghost" onClick={() => setDecide(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant={decide.kind === 'rejected' ? 'danger' : 'primary'}
+                onClick={() => {
+                  setExpenseStatus(decide.id, decide.kind, decideNote.trim() || undefined);
+                  setDecide(null);
+                }}
+              >
+                {decide.kind === 'approved' ? 'Approve' : 'Reject'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

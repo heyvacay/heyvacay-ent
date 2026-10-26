@@ -66,7 +66,9 @@ export function StatCard({
       </p>
       <p
         className={cn(
-          'mt-2 font-display text-3xl font-extrabold tracking-tight',
+          // Clamp so very large figures stay inside the card instead of
+          // overflowing; tabular-nums keeps digits aligned.
+          'mt-2 font-display text-2xl font-extrabold leading-tight tracking-tight tabular-nums break-words [overflow-wrap:anywhere] sm:text-3xl',
           accent ? 'text-brand-dark' : 'text-slate-900'
         )}
       >
@@ -198,7 +200,19 @@ const CONTROL =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 placeholder:text-slate-400';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cn(CONTROL, props.className)} />;
+  const { onFocus, ...rest } = props;
+  return (
+    <input
+      {...rest}
+      onFocus={(e) => {
+        // Select-all on focus for number fields so typing replaces the value
+        // instead of appending to a leading 0 (no more ctrl-A to clear it).
+        if (rest.type === 'number') e.currentTarget.select();
+        onFocus?.(e);
+      }}
+      className={cn(CONTROL, props.className)}
+    />
+  );
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {

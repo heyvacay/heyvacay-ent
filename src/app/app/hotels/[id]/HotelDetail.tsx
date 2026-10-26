@@ -14,14 +14,13 @@ import {
 } from '@/lib/search';
 import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
-import { HotelCarousel } from '@/components/hotels/HotelCarousel';
+import { Lightbox } from '@/components/hotels/Lightbox';
 import { RoomSelection } from '@/components/hotels/RoomSelection';
 import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, Select, cn } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet } from '@/components/icons';
-import { X } from 'lucide-react';
 
 function Stars({ n = 0 }: { n?: number }) {
   return (
@@ -62,7 +61,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
-  const [roomPhotos, setRoomPhotos] = useState<{ images: string[]; title: string } | null>(
+  const [roomPhotos, setRoomPhotos] = useState<{ images: string[]; title: string; index: number } | null>(
     null
   );
   // The specific rate the guest picked from a room card — carries the real
@@ -131,6 +130,16 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const needsApproval = flags.some(
     (f) => f.policy.action === 'approve' || f.policy.action === 'block'
   );
+
+  // Per-room policy check — each room card evaluates its own all-in price so a
+  // cheap room can be in policy while a suite needs approval or is blocked.
+  const assessRoom = (priceAllIn: number): 'in' | 'approval' | 'block' => {
+    const roomOpt: InventoryOption = { ...opt, price: priceAllIn };
+    const fl = evaluatePolicies(roomOpt, checkin || new Date().toISOString());
+    if (fl.some((f) => f.policy.action === 'block')) return 'block';
+    if (fl.some((f) => f.policy.action === 'approve')) return 'approval';
+    return fl.length ? 'approval' : 'in';
+  };
 
   const reserve = () => {
     book({ opt, travelerId, startDate: checkin, endDate: checkout });
@@ -313,7 +322,10 @@ export default function HotelDetail({ hid }: { hid: string }) {
             <RoomSelection
               uiRooms={uiRooms}
               onReserve={onReserveRoom}
-              onPhotos={(imgs, title) => setRoomPhotos({ images: imgs, title })}
+              onPhotos={(imgs, title, index) =>
+                setRoomPhotos({ images: imgs, title, index })
+              }
+              assessPolicy={assessRoom}
             />
           )}
 
@@ -511,7 +523,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
                       {selected.roomTitle}
                     </p>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      {[selected.bed, selected.refund, selected.meal]
+                      {[selected.refund, selected.meal]
                         .filter(Boolean)
                         .join(' · ')}
                     </p>
@@ -590,58 +602,24 @@ export default function HotelDetail({ hid }: { hid: string }) {
         </div>
       )}
 
-      {/* lightbox */}
+      {/* gallery lightbox */}
       {lightbox != null && images.length > 0 && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/90">
-          <div className="flex justify-end p-3">
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => setLightbox(null)}
-              className="rounded-lg p-2 text-white/80 hover:bg-white/10"
-            >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-          <div className="flex flex-1 items-center justify-center px-4 pb-8">
-            <div className="w-full max-w-4xl">
-              <HotelCarousel
-                images={images}
-                alt={name}
-                startIndex={lightbox}
-                className="h-[70vh] w-full"
-                rounded="rounded-xl"
-              />
-            </div>
-          </div>
-        </div>
+        <Lightbox
+          images={images}
+          startIndex={lightbox}
+          title={name}
+          onClose={() => setLightbox(null)}
+        />
       )}
 
       {/* room photos lightbox */}
       {roomPhotos && roomPhotos.images.length > 0 && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/90">
-          <div className="flex items-center justify-between px-4 py-3">
-            <p className="text-sm font-medium text-white/90">{roomPhotos.title}</p>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => setRoomPhotos(null)}
-              className="rounded-lg p-2 text-white/80 hover:bg-white/10"
-            >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-          <div className="flex flex-1 items-center justify-center px-4 pb-8">
-            <div className="w-full max-w-4xl">
-              <HotelCarousel
-                images={roomPhotos.images}
-                alt={roomPhotos.title}
-                className="h-[70vh] w-full"
-                rounded="rounded-xl"
-              />
-            </div>
-          </div>
-        </div>
+        <Lightbox
+          images={roomPhotos.images}
+          startIndex={roomPhotos.index}
+          title={roomPhotos.title}
+          onClose={() => setRoomPhotos(null)}
+        />
       )}
     </div>
   );

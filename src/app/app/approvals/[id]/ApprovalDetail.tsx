@@ -18,6 +18,7 @@ export default function ApprovalDetail({ id }: { id: string }) {
   const { state, userById, spentForScope, approveBooking, cancelBooking } =
     useStore();
   const [note, setNote] = useState('');
+  const [noteVisible, setNoteVisible] = useState(true);
   const [done, setDone] = useState<null | 'approved' | 'declined'>(null);
 
   const b = state.bookings.find((x) => x.id === id);
@@ -61,8 +62,9 @@ export default function ApprovalDetail({ id }: { id: string }) {
       : 'Airfare is re-priced at ticketing — approve promptly to lock the quoted fare; a material change bounces back to the traveler.';
 
   const decide = (kind: 'approved' | 'declined') => {
-    if (kind === 'approved') approveBooking(b.id, note.trim() || undefined);
-    else cancelBooking(b.id, note.trim() || undefined);
+    const comment = note.trim() || undefined;
+    if (kind === 'approved') approveBooking(b.id, comment, noteVisible);
+    else cancelBooking(b.id, comment, noteVisible);
     setDone(kind);
   };
 
@@ -256,6 +258,15 @@ export default function ApprovalDetail({ id }: { id: string }) {
                     placeholder="Optional note to the traveler…"
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
                   />
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={noteVisible}
+                      onChange={(e) => setNoteVisible(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    />
+                    Make this comment visible to the traveler
+                  </label>
                   <div className="mt-3 flex gap-2">
                     <Button className="flex-1" onClick={() => decide('approved')}>
                       <Check className="h-4 w-4" /> Approve

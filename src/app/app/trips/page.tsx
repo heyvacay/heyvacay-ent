@@ -49,6 +49,14 @@ function TripCard({
         <p className="mt-1 text-xs text-slate-400">
           {dateRange(b.startDate, b.endDate)}
         </p>
+        {b.reviewNote && b.reviewNoteVisible && (
+          <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">
+              {b.status === 'cancelled' ? 'Declined' : 'Approved'} with a note:
+            </span>{' '}
+            “{b.reviewNote}”
+          </p>
+        )}
       </div>
       <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
         <div className="text-right">
