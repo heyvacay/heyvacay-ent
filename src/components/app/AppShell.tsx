@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Avatar, cn } from './ui';
+import { ThemeToggle } from './ThemeToggle';
 import {
   ChartBar,
   Users,
@@ -284,6 +285,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle />
             <label className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
               Viewing as
               <select
