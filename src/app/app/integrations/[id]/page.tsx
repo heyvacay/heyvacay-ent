@@ -28,7 +28,7 @@ const CATEGORIES: ExpenseCategory[] = [
   'Supplies',
   'Other',
 ];
-const HR_IDS = ['bamboohr', 'rippling', 'gusto'];
+const HR_IDS = ['workday', 'bamboohr', 'rippling', 'gusto'];
 
 export default function IntegrationDetailPage() {
   const params = useParams<{ id: string }>();

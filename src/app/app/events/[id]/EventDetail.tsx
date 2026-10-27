@@ -10,6 +10,8 @@ import {
   tally,
   winner,
   type DinnerCandidate,
+  type EventAttendee,
+  type RsvpStatus,
 } from '@/lib/events';
 import { getAvailability, bookRestaurant, searchRestaurants } from '@/lib/restaurants';
 import {
@@ -36,6 +38,9 @@ export default function EventDetail({ id }: { id: string }) {
     joinEvent,
     startDinner,
     joinDinner,
+    setRsvp,
+    remindRsvp,
+    sendDinnerDetails,
     advanceToGenre,
     voteGenre,
     setCandidates,
@@ -287,8 +292,12 @@ export default function EventDetail({ id }: { id: string }) {
           activeUserName={activeUser.name}
           booking={booking}
           availNote={availNote}
+          eventAttendees={e.attendees}
           onStart={(date, time, expiresAt) => startDinner(e.id, activeUser.id, date, time, expiresAt)}
           onJoin={() => joinDinner(e.id, activeUser.id, activeUser.name)}
+          onRsvp={(status) => setRsvp(e.id, activeUser.id, activeUser.name, status)}
+          onRemind={(pending) => remindRsvp(e.id, activeUser.name, pending)}
+          onSendDetails={() => sendDinnerDetails(e.id, activeUser.name)}
           onStartGenre={() => advanceToGenre(e.id)}
           onVoteGenre={(g) => {
             voteGenre(e.id, activeUser.id, g);
@@ -317,8 +326,11 @@ function DinnerPanel({
   activeUserId,
   booking,
   availNote,
+  eventAttendees,
   onStart,
-  onJoin,
+  onRsvp,
+  onRemind,
+  onSendDetails,
   onStartGenre,
   onVoteGenre,
   onPickRestaurants,
@@ -333,8 +345,12 @@ function DinnerPanel({
   activeUserName: string;
   booking: boolean;
   availNote: string;
+  eventAttendees: EventAttendee[];
   onStart: (date: string, time: string, expiresAt: string) => void;
   onJoin: () => void;
+  onRsvp: (status: RsvpStatus) => void;
+  onRemind: (pendingNames: string[]) => void;
+  onSendDetails: () => void;
   onStartGenre: () => void;
   onVoteGenre: (g: string) => void;
   onPickRestaurants: () => void;
@@ -352,8 +368,8 @@ function DinnerPanel({
           <Sparkles className="h-5 w-5 text-brand-dark" /> Plan a group dinner
         </h2>
         <p className="mb-4 text-sm text-slate-500">
-          Everyone opts in, votes a food genre, then a restaurant. The winner is auto-booked after
-          your deadline.
+          Collect RSVPs from the group, nudge anyone who hasn&apos;t replied, then about a week out
+          pick the spot and send everyone the details.
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Date">
@@ -384,6 +400,12 @@ function DinnerPanel({
   }
 
   const joined = d.attendees.some((a) => a.userId === activeUserId);
+  const rsvps = d.rsvps ?? {};
+  const myRsvp = rsvps[activeUserId];
+  const yesCount = Object.values(rsvps).filter((r) => r === 'yes').length;
+  const noCount = Object.values(rsvps).filter((r) => r === 'no').length;
+  const maybeCount = Object.values(rsvps).filter((r) => r === 'maybe').length;
+  const pending = eventAttendees.filter((a) => !rsvps[a.userId]);
   const genreTally = tally(d.genreVotes);
   const restTally = tally(d.restaurantVotes);
   const expiresLabel = new Date(d.expiresAt).toLocaleString('en-US', {
@@ -402,7 +424,8 @@ function DinnerPanel({
               Group dinner · {shortDate(d.date)} at {d.time}
             </p>
             <p className="text-sm text-slate-400">
-              {d.attendees.length} joined · auto-books by {expiresLabel}
+              {yesCount} coming · {maybeCount} maybe · {noCount} can&apos;t · auto-books by{' '}
+              {expiresLabel}
             </p>
           </div>
           <Badge color={d.phase === 'booked' ? 'green' : 'amber'}>{d.phase}</Badge>
@@ -414,25 +437,93 @@ function DinnerPanel({
         )}
       </Card>
 
-      {/* JOIN */}
-      {d.phase === 'join' && (
+      {/* RSVP */}
+      {(d.phase === 'rsvp' || d.phase === 'join') && (
         <Card>
-          <h3 className="mb-3 font-display text-base font-bold text-slate-900">Who's in?</h3>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {d.attendees.map((a) => (
-              <span key={a.userId} className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-3 py-1 text-sm text-brand-dark">
-                <Check className="h-3 w-3" /> {a.name}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {!joined && isAttendee && <Button onClick={onJoin}>I&apos;m in</Button>}
-            {isHost && (
-              <Button variant="outline" onClick={onStartGenre} disabled={d.attendees.length < 1}>
-                Start genre vote →
-              </Button>
+          <h3 className="mb-1 font-display text-base font-bold text-slate-900">
+            Can you make it?
+          </h3>
+          <p className="mb-3 text-sm text-slate-500">
+            RSVP so we know the headcount. We&apos;ll pick the spot about a week out and send you
+            the details.
+          </p>
+
+          {isAttendee && (
+            <div className="mb-4 inline-flex rounded-xl bg-slate-100 p-1">
+              {(
+                [
+                  ['yes', "I'm in"],
+                  ['maybe', 'Maybe'],
+                  ['no', "Can't make it"],
+                ] as [RsvpStatus, string][]
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => onRsvp(v)}
+                  className={cn(
+                    'rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors',
+                    myRsvp === v
+                      ? v === 'yes'
+                        ? 'bg-emerald-500 text-white shadow-sm'
+                        : v === 'no'
+                          ? 'bg-slate-500 text-white shadow-sm'
+                          : 'bg-amber-400 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {yesCount > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                  Coming
+                </span>
+                {d.attendees.map((a) => (
+                  <span
+                    key={a.userId}
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-700"
+                  >
+                    <Check className="h-3 w-3" /> {a.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            {pending.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  No reply yet
+                </span>
+                {pending.map((a) => (
+                  <span
+                    key={a.userId}
+                    className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-500"
+                  >
+                    {a.name}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
+
+          {isHost && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => onRemind(pending.map((a) => a.name))}
+                disabled={pending.length === 0}
+              >
+                Remind to RSVP
+              </Button>
+              <Button onClick={onStartGenre} disabled={yesCount < 1}>
+                Close RSVPs &amp; pick a spot →
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
@@ -523,6 +614,16 @@ function DinnerPanel({
             party of {d.reservation.partySize}
           </p>
           <p className="mt-1 text-xs text-emerald-600">Confirmation {d.reservation.confirmation}</p>
+          {isHost && (
+            <Button
+              className="mt-4"
+              variant="outline"
+              onClick={onSendDetails}
+              disabled={d.detailsSent}
+            >
+              {d.detailsSent ? 'Details sent ✓' : 'Send details to the group'}
+            </Button>
+          )}
         </Card>
       )}
     </div>

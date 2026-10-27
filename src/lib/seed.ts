@@ -173,6 +173,7 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'quickbooks', name: 'QuickBooks', category: 'Accounting', blurb: 'Auto-post every expense to the right GL code — reconciled, no receipts chased.', status: 'available' },
   { id: 'netsuite', name: 'NetSuite', category: 'Accounting', blurb: 'Sync trips and expenses straight into NetSuite.', status: 'available' },
   { id: 'xero', name: 'Xero', category: 'Accounting', blurb: 'Reconcile travel spend to Xero automatically.', status: 'available' },
+  { id: 'workday', name: 'Workday', category: 'HR / HRIS', blurb: 'Sync workers, cost centers, and org structure from Workday.', status: 'available' },
   { id: 'bamboohr', name: 'BambooHR', category: 'HR / HRIS', blurb: 'Pull your org chart, departments, and new hires.', status: 'available' },
   { id: 'rippling', name: 'Rippling', category: 'HR / HRIS', blurb: 'Keep people, roles, and departments in sync.', status: 'available' },
   { id: 'gusto', name: 'Gusto', category: 'HR / HRIS', blurb: 'Import your team roster in one click.', status: 'available' },

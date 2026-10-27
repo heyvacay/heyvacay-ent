@@ -59,7 +59,9 @@ export interface DinnerReservation {
   partySize: number;
 }
 
-export type DinnerPhase = 'join' | 'genre' | 'restaurant' | 'booked';
+export type DinnerPhase = 'rsvp' | 'join' | 'genre' | 'restaurant' | 'booked';
+
+export type RsvpStatus = 'yes' | 'no' | 'maybe';
 
 export interface Dinner {
   hostId: string;
@@ -69,11 +71,15 @@ export interface Dinner {
   /** ISO timestamp after which the host's auto-book kicks in. */
   expiresAt: string;
   attendees: EventAttendee[];
+  /** Who's coming, as collected by RSVP (userId -> yes/no/maybe). */
+  rsvps: Record<string, RsvpStatus>;
   genreVotes: Record<string, string>; // userId -> genre
   restaurantVotes: Record<string, string>; // userId -> restaurantId
   winningGenre?: string;
   candidates: DinnerCandidate[];
   reservation?: DinnerReservation;
+  /** true once the host has broadcast the final restaurant details. */
+  detailsSent?: boolean;
 }
 
 export interface TravelEvent {

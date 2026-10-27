@@ -13,6 +13,7 @@ import {
   type DinnerCandidate,
   type DinnerReservation,
   type EventAttendee,
+  type RsvpStatus,
   type TravelEvent,
 } from './events';
 import { uid } from './format';
@@ -38,6 +39,12 @@ interface EventsApi {
 
   startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
   joinDinner: (eventId: string, userId: string, name: string) => void;
+  /** Record an RSVP (yes adds the person to the dinner party). */
+  setRsvp: (eventId: string, userId: string, name: string, status: RsvpStatus) => void;
+  /** Host nudge: post a reminder naming everyone who hasn't RSVP'd yet. */
+  remindRsvp: (eventId: string, hostName: string, pendingNames: string[]) => void;
+  /** Broadcast the final restaurant details to the group. */
+  sendDinnerDetails: (eventId: string, author: string) => void;
   advanceToGenre: (eventId: string) => void;
   voteGenre: (eventId: string, userId: string, genre: string) => void;
   setCandidates: (eventId: string, winningGenre: string, candidates: DinnerCandidate[]) => void;
@@ -138,18 +145,19 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           ...e,
           dinner: {
             hostId,
-            phase: 'join',
+            phase: 'rsvp',
             date,
             time,
             expiresAt,
             attendees: host ? [host] : [],
+            rsvps: host ? { [hostId]: 'yes' as RsvpStatus } : {},
             genreVotes: {},
             restaurantVotes: {},
             candidates: [],
           },
           messages: [
             ...e.messages,
-            msg(hostId, host?.name ?? 'Host', `started planning a group dinner for ${date} at ${time}. Who's in?`, true),
+            msg(hostId, host?.name ?? 'Host', `started planning a group dinner for ${date} at ${time}. Please RSVP in the Dinner tab.`, true),
           ],
         };
       }),
@@ -163,6 +171,64 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           ? e
           : { ...e, dinner: { ...e.dinner, attendees: [...e.dinner.attendees, { userId, name }] } }
       ),
+    [patch]
+  );
+
+  const setRsvp: EventsApi['setRsvp'] = useCallback(
+    (eventId, userId, name, status) =>
+      patch(eventId, (e) => {
+        if (!e.dinner) return e;
+        const rsvps = { ...e.dinner.rsvps, [userId]: status };
+        // "Yes" means you're in the party; anything else removes you from it.
+        const attendees =
+          status === 'yes'
+            ? e.dinner.attendees.some((a) => a.userId === userId)
+              ? e.dinner.attendees
+              : [...e.dinner.attendees, { userId, name }]
+            : e.dinner.attendees.filter((a) => a.userId !== userId);
+        return { ...e, dinner: { ...e.dinner, rsvps, attendees } };
+      }),
+    [patch]
+  );
+
+  const remindRsvp: EventsApi['remindRsvp'] = useCallback(
+    (eventId, hostName, pendingNames) =>
+      patch(eventId, (e) => ({
+        ...e,
+        messages: [
+          ...e.messages,
+          msg(
+            'system',
+            hostName,
+            pendingNames.length
+              ? `⏰ Reminder to RSVP for the group dinner: ${pendingNames.join(', ')}.`
+              : `⏰ Reminder: please RSVP for the group dinner.`,
+            true
+          ),
+        ],
+      })),
+    [patch]
+  );
+
+  const sendDinnerDetails: EventsApi['sendDinnerDetails'] = useCallback(
+    (eventId, author) =>
+      patch(eventId, (e) => {
+        const r = e.dinner?.reservation;
+        if (!e.dinner || !r) return e;
+        return {
+          ...e,
+          dinner: { ...e.dinner, detailsSent: true },
+          messages: [
+            ...e.messages,
+            msg(
+              'system',
+              author,
+              `📍 Dinner is set — ${r.restaurantName} on ${r.date} at ${r.time}, party of ${r.partySize}. Confirmation ${r.confirmation}. See everyone there!`,
+              true
+            ),
+          ],
+        };
+      }),
     [patch]
   );
 
@@ -249,6 +315,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         joinEvent,
         startDinner,
         joinDinner,
+        setRsvp,
+        remindRsvp,
+        sendDinnerDetails,
         advanceToGenre,
         voteGenre,
         setCandidates,
