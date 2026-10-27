@@ -290,9 +290,16 @@ export default function EventDetail({ id }: { id: string }) {
           onStart={(date, time, expiresAt) => startDinner(e.id, activeUser.id, date, time, expiresAt)}
           onJoin={() => joinDinner(e.id, activeUser.id, activeUser.name)}
           onStartGenre={() => advanceToGenre(e.id)}
-          onVoteGenre={(g) => voteGenre(e.id, activeUser.id, g)}
+          onVoteGenre={(g) => {
+            voteGenre(e.id, activeUser.id, g);
+            addMessage(e.id, activeUser.id, activeUser.name, `🍽️ voted for ${g}`);
+          }}
           onPickRestaurants={pickRestaurants}
-          onVoteRestaurant={(rid) => voteRestaurant(e.id, activeUser.id, rid)}
+          onVoteRestaurant={(rid) => {
+            voteRestaurant(e.id, activeUser.id, rid);
+            const r = d?.candidates.find((c) => c.id === rid);
+            addMessage(e.id, activeUser.id, activeUser.name, `🍽️ voted for ${r?.name ?? 'a restaurant'}`);
+          }}
           onBook={bookWinner}
         />
       )}

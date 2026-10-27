@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { searchFlights } from '@/lib/search';
+import { getSeatMap, type SeatRow } from '@/lib/seatmap';
 import type { InventoryOption, FlightDetails } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import {
@@ -402,18 +403,7 @@ const FARES = [
   { label: 'Flex', delta: 120, note: 'Free changes + fully refundable' },
 ];
 
-const SEAT_COLS = ['A', 'B', 'C', 'D', 'E', 'F'];
-
-function seatHash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h >>> 0);
-}
-
-/** Simple seat map (prototype). Real seat maps come from the seat-map API. */
+/** Real seat map from Duffel (via /api/flights/seatmap), with a mock fallback. */
 function SeatMap({
   offerId,
   selected,
@@ -421,39 +411,66 @@ function SeatMap({
 }: {
   offerId: string;
   selected: string | null;
-  onSelect: (s: string) => void;
+  onSelect: (designator: string, amount: number) => void;
 }) {
-  const rows = [10, 11, 12, 13, 14, 15];
+  const [rows, setRows] = useState<SeatRow[] | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    getSeatMap(offerId).then((r) => live && setRows(r.rows));
+    return () => {
+      live = false;
+    };
+  }, [offerId]);
+
+  if (!rows) {
+    return (
+      <div className="grid place-items-center rounded-xl border border-slate-200 py-6 text-xs text-slate-400">
+        Loading seat map…
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-400">
+        No seat map available for this flight.
+      </p>
+    );
+  }
+
+  // Columns from the widest row, split into two halves around the aisle.
+  const maxCols = Math.max(...rows.map((r) => r.seats.length));
+  const aisleAt = Math.ceil(maxCols / 2);
+
   return (
     <div className="rounded-xl border border-slate-200 p-3">
       <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         Front of cabin
       </p>
-      <div className="space-y-1.5">
+      <div className="max-h-56 space-y-1.5 overflow-auto">
         {rows.map((row) => (
-          <div key={row} className="flex items-center justify-center gap-1.5">
-            <span className="w-5 text-right text-[10px] text-slate-400">{row}</span>
-            {SEAT_COLS.map((col, ci) => {
-              const id = `${row}${col}`;
-              const taken = seatHash(offerId + id) % 10 < 3;
-              const isSel = selected === id;
+          <div key={row.label} className="flex items-center justify-center gap-1.5">
+            <span className="w-5 text-right text-[10px] text-slate-400">{row.label}</span>
+            {row.seats.map((s, i) => {
+              const isSel = selected === s.designator;
               return (
-                <span key={id} className="flex items-center">
-                  {ci === 3 && <span className="w-3" />}
+                <span key={s.designator} className="flex items-center">
+                  {i === aisleAt && <span className="w-3" />}
                   <button
                     type="button"
-                    disabled={taken}
-                    onClick={() => onSelect(id)}
-                    aria-label={`Seat ${id}`}
+                    disabled={!s.available}
+                    onClick={() => onSelect(s.designator, s.amount ?? 0)}
+                    title={s.available && s.amount ? `${s.designator} · $${s.amount}` : s.designator}
+                    aria-label={`Seat ${s.designator}`}
                     className={`h-6 w-6 rounded text-[9px] font-semibold ${
-                      taken
+                      !s.available
                         ? 'cursor-not-allowed bg-slate-100 text-slate-300'
                         : isSel
                           ? 'bg-brand text-navy-deep'
                           : 'bg-brand/15 text-brand-dark hover:bg-brand/30'
                     }`}
                   >
-                    {col}
+                    {s.column}
                   </button>
                 </span>
               );
@@ -491,8 +508,9 @@ function CheckoutPanel({
   const { flags, points, needsApproval } = sig(opt);
   const [fareIdx, setFareIdx] = useState(1);
   const [seat, setSeat] = useState<string | null>(null);
+  const [seatFee, setSeatFee] = useState(0);
   const fare = FARES[fareIdx];
-  const total = opt.price + fare.delta;
+  const total = opt.price + fare.delta + seatFee;
   const overBudget = budget != null ? spent + total > budget : false;
   const seatAllowed = fareIdx >= 1; // Basic has no seat selection
   return (
@@ -528,7 +546,10 @@ function CheckoutPanel({
                   type="button"
                   onClick={() => {
                     setFareIdx(i);
-                    if (i < 1) setSeat(null);
+                    if (i < 1) {
+                      setSeat(null);
+                      setSeatFee(0);
+                    }
                   }}
                   className={`flex w-full items-start justify-between gap-2 rounded-xl border p-3 text-left transition ${
                     fareIdx === i ? 'border-brand bg-brand/5' : 'border-slate-200 hover:border-slate-300'
@@ -552,7 +573,14 @@ function CheckoutPanel({
               Seat {seat ? <span className="text-brand-dark">· {seat}</span> : ''}
             </p>
             {seatAllowed ? (
-              <SeatMap offerId={opt.id} selected={seat} onSelect={setSeat} />
+              <SeatMap
+                offerId={opt.id}
+                selected={seat}
+                onSelect={(d, amt) => {
+                  setSeat(d);
+                  setSeatFee(amt);
+                }}
+              />
             ) : (
               <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-400">
                 Seat selection is available on Main and Flex fares.
@@ -569,6 +597,12 @@ function CheckoutPanel({
               <div className="mt-1 flex justify-between">
                 <span className="text-slate-500">{fare.label} fare</span>
                 <span className="text-slate-700">+{money(fare.delta)}</span>
+              </div>
+            )}
+            {seat && seatFee > 0 && (
+              <div className="mt-1 flex justify-between">
+                <span className="text-slate-500">Seat {seat}</span>
+                <span className="text-slate-700">+{money(seatFee)}</span>
               </div>
             )}
             <div className="mt-1 flex justify-between border-t border-slate-200 pt-1">
@@ -597,7 +631,7 @@ function CheckoutPanel({
             </p>
           )}
 
-          <Button className="w-full" onClick={() => onConfirm(fare.delta, fare.label, seat)}>
+          <Button className="w-full" onClick={() => onConfirm(fare.delta + seatFee, fare.label, seat)}>
             {needsApproval ? 'Request this flight' : 'Confirm booking'}
           </Button>
           {needsApproval && (

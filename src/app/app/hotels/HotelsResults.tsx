@@ -7,8 +7,10 @@ import { useStore } from '@/lib/store';
 import {
   startHotels,
   nextHotels,
+  placesHotels,
   nightsBetween,
   type HotelSearchArgs,
+  type HotelPlace,
 } from '@/lib/search';
 import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
@@ -114,6 +116,14 @@ export default function HotelsResults() {
   const [fFreeCancel, setFFreeCancel] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Property-specific search: a live typeahead over the supplier's hotel index,
+  // so a named property (e.g. "Lakeway Resort") can be pulled in and pinned even
+  // when it wasn't in the region's first pages.
+  const [pinned, setPinned] = useState<InventoryOption[]>([]);
+  const [suggest, setSuggest] = useState<HotelPlace[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [pinning, setPinning] = useState(false);
+
   const baseArgs = useCallback((): HotelSearchArgs => {
     const chosen = SORTS.find((s) => s.value === sort) ?? SORTS[0];
     return {
@@ -194,6 +204,65 @@ export default function HotelsResults() {
     return () => obs.disconnect();
   }, [loadMore]);
 
+  // Debounced property typeahead — only hotel (not region) matches, so the
+  // dropdown offers specific properties to jump to.
+  useEffect(() => {
+    const term = fProperty.trim();
+    if (term.length < 2) {
+      setSuggest([]);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const places = await placesHotels(term);
+        if (!live) return;
+        setSuggest(places.filter((p) => p.type === 'hotel' && p.hid != null).slice(0, 6));
+      } catch {
+        if (live) setSuggest([]);
+      }
+    }, 220);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [fProperty]);
+
+  // Jump to a specific property: set the filter to its name and, if it isn't
+  // already loaded, fetch that one hotel for these dates and pin it on top.
+  const pinProperty = useCallback(
+    async (place: HotelPlace) => {
+      if (place.hid == null) return;
+      setFProperty(place.label);
+      setSuggest([]);
+      setSuggestOpen(false);
+      const already =
+        options.some((o) => String(o.hid) === String(place.hid)) ||
+        pinned.some((o) => String(o.hid) === String(place.hid));
+      if (already) return;
+      setPinning(true);
+      try {
+        const page = await startHotels({
+          hid: place.hid,
+          checkin,
+          checkout,
+          adults,
+        });
+        const found = page.options[0];
+        if (found) {
+          setPinned((prev) =>
+            prev.some((o) => String(o.hid) === String(found.hid)) ? prev : [found, ...prev]
+          );
+        }
+      } catch {
+        /* if the single-hotel fetch fails, the text filter still applies */
+      } finally {
+        setPinning(false);
+      }
+    },
+    [options, pinned, checkin, checkout, adults]
+  );
+
   const detailHref = (opt: InventoryOption) => {
     const q = new URLSearchParams();
     q.set('checkin', checkin);
@@ -214,9 +283,17 @@ export default function HotelsResults() {
     ? Math.max(...options.map(perNightOf))
     : 1000;
 
-  // Apply the active filters over the loaded results.
+  // Apply the active filters over the loaded results, plus any pinned property
+  // the user searched for that wasn't in the region pages.
   const q = fProperty.trim().toLowerCase();
-  const visibleOptions = options.filter((opt) => {
+  const pinnedHids = new Set(pinned.map((p) => String(p.hid)));
+  const pinnedExtra = pinned.filter(
+    (p) => !options.some((o) => String(o.hid) === String(p.hid))
+  );
+  const pool = [...pinnedExtra, ...options];
+  const visibleOptions = pool.filter((opt) => {
+    // A property the user explicitly picked is always shown, however it's named.
+    if (pinnedHids.has(String(opt.hid))) return true;
     if (q && !opt.title.toLowerCase().includes(q) && !(opt.location ?? '').toLowerCase().includes(q)) return false;
     if (fStars.size > 0 && !(opt.star && fStars.has(opt.star))) return false;
     if (fMaxNightly != null && perNightOf(opt) > fMaxNightly) return false;
@@ -241,6 +318,8 @@ export default function HotelsResults() {
     setFMaxNightly(null);
     setFMinRating(0);
     setFFreeCancel(false);
+    setPinned([]);
+    setSuggest([]);
   };
 
   return (
@@ -281,12 +360,46 @@ export default function HotelsResults() {
       {!loading && options.length > 0 && (
         <Card pad={false} className="mb-5 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={fProperty}
-              onChange={(e) => setFProperty(e.target.value)}
-              placeholder="Search by property or area…"
-              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                value={fProperty}
+                onChange={(e) => {
+                  setFProperty(e.target.value);
+                  setSuggestOpen(true);
+                }}
+                onFocus={() => setSuggestOpen(true)}
+                onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
+                placeholder="Search a specific hotel (e.g. Lakeway Resort)…"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              />
+              {suggestOpen && (suggest.length > 0 || pinning) && (
+                <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {suggest.map((s) => (
+                    <button
+                      key={String(s.hid)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pinProperty(s);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-slate-800">
+                          {s.label}
+                        </span>
+                        {s.sub && (
+                          <span className="block truncate text-xs text-slate-400">{s.sub}</span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                  {pinning && (
+                    <div className="px-3 py-2 text-xs text-slate-400">Finding that hotel…</div>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setFiltersOpen((v) => !v)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -415,12 +528,19 @@ export default function HotelsResults() {
         <div className="space-y-4">
           {[...visibleOptions]
             .map((opt) => ({ opt, flags: evaluatePolicies(opt, checkin) }))
-            // In-policy first, then needs-approval, then blocked (stable).
-            .sort((a, b) => policySeverity(a.flags) - policySeverity(b.flags))
+            // A property the user searched for goes first; then in-policy,
+            // needs-approval, blocked (stable).
+            .sort((a, b) => {
+              const pa = pinnedHids.has(String(a.opt.hid)) ? 0 : 1;
+              const pb = pinnedHids.has(String(b.opt.hid)) ? 0 : 1;
+              if (pa !== pb) return pa - pb;
+              return policySeverity(a.flags) - policySeverity(b.flags);
+            })
             .map(({ opt, flags }) => {
             const { savings, points } = rewardsFor(opt);
             const severity = policySeverity(flags);
-            const searched = hid != null && String(opt.hid) === hid;
+            const searched =
+              (hid != null && String(opt.hid) === hid) || pinnedHids.has(String(opt.hid));
             const amenities =
               opt.details?.kind === 'hotel' ? opt.details.amenities : [];
             const perNight = Math.round(opt.price / (opt.nights || 1));
