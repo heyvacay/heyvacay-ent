@@ -10,6 +10,7 @@ import {
   PageHeader,
 } from '@/components/app/ui';
 import { money, num, dateRange, daysUntil } from '@/lib/format';
+import { BookingChat } from '@/components/app/BookingChat';
 import { Plane, Receipt } from '@/components/icons';
 import type { Booking } from '@/lib/types';
 
@@ -131,6 +132,9 @@ function DetailsModal({ b, onClose }: { b: Booking; onClose: () => void }) {
             <p className="rounded-lg bg-slate-50 p-2 text-sm text-slate-600">
               <span className="font-semibold">Manager:</span> “{b.reviewNote}”
             </p>
+          )}
+          {(b.chat?.length || b.status === 'pending_approval') && (
+            <BookingChat bookingId={b.id} role="traveler" />
           )}
         </div>
       </div>

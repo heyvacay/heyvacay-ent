@@ -13,6 +13,7 @@ import {
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { sendEmail } from '@/lib/email';
+import { BookingChat } from '@/components/app/BookingChat';
 import { getHotelDetail } from '@/lib/search';
 import {
   defaultSelection,
@@ -307,6 +308,9 @@ export default function ApprovalDetail({ id }: { id: string }) {
             </h3>
             <p className="text-sm text-slate-500">{priceHoldNote}</p>
           </Card>
+
+          {/* chat with traveler */}
+          <BookingChat bookingId={b.id} role="manager" />
         </div>
 
         {/* decision rail */}

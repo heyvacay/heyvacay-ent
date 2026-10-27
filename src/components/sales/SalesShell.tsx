@@ -43,7 +43,7 @@ export default function SalesShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-3">
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);

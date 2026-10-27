@@ -89,6 +89,11 @@ export interface StoreApi {
   proposeChange: (id: string, data: { note: string; newPrice?: number; newRoomType?: string; by: string }) => void;
   /** Traveler responds to a counter-offer. */
   respondOffer: (id: string, accept: boolean) => void;
+  /** Send a message in a booking's traveler↔manager chat. */
+  sendChat: (
+    id: string,
+    msg: { authorId: string; author: string; role: 'traveler' | 'manager'; text: string }
+  ) => void;
   submitExpense: (data: {
     userId: string;
     merchant: string;
@@ -541,6 +546,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 by: data.by,
                 status: 'offered',
               },
+              // Seed the chat with the manager's offer so the traveler sees it.
+              chat: [
+                ...(b.chat ?? []),
+                {
+                  id: uid('cm'),
+                  authorId: s.activeUserId,
+                  author: data.by,
+                  role: 'manager' as const,
+                  text: data.note,
+                  ts: new Date().toISOString(),
+                },
+              ],
+            }
+          : b
+      ),
+    }));
+  }, []);
+
+  const sendChat: StoreApi['sendChat'] = useCallback((id, msg) => {
+    setState((s) => ({
+      ...s,
+      bookings: s.bookings.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              chat: [
+                ...(b.chat ?? []),
+                { id: uid('cm'), ts: new Date().toISOString(), ...msg },
+              ],
             }
           : b
       ),
@@ -774,6 +808,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     approveBooking,
     proposeChange,
     respondOffer,
+    sendChat,
     submitExpense,
     setExpenseStatus,
     redeemPoints,

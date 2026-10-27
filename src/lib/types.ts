@@ -118,6 +118,17 @@ export interface Booking {
     by: string;
     status: 'offered' | 'accepted' | 'declined';
   };
+  /** 1:1 chat thread between the traveler and the approving manager. */
+  chat?: ChatMessage[];
+}
+
+export interface ChatMessage {
+  id: string;
+  authorId: string;
+  author: string;
+  role: 'traveler' | 'manager';
+  text: string;
+  ts: string;
 }
 
 export type ExpenseCategory =

@@ -2,6 +2,7 @@
 
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/app/ui';
+import { BookingChat } from '@/components/app/BookingChat';
 import { money } from '@/lib/format';
 import { Sparkles } from '@/components/icons';
 
@@ -38,6 +39,9 @@ export function OfferBanner() {
             <Button size="sm" variant="outline" onClick={() => respondOffer(b.id, false)}>
               Decline
             </Button>
+          </div>
+          <div className="mt-3 bg-white/60 sm:max-w-md">
+            <BookingChat bookingId={b.id} role="traveler" />
           </div>
         </div>
       ))}

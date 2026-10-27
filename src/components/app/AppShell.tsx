@@ -54,13 +54,17 @@ export function userNumber(companyId: string, userId: string): string {
 const ADMIN_NAV: NavSection[] = [
   {
     title: null,
-    items: [{ href: '/app/dashboard', label: 'Dashboard', icon: ChartBar }],
+    items: [
+      { href: '/app/dashboard', label: 'Dashboard', icon: ChartBar },
+      { href: '/app/book', label: 'Book travel', icon: MapPin },
+    ],
   },
   {
     title: 'Travel',
     items: [
       { href: '/app/bookings', label: 'Bookings', icon: Plane },
       { href: '/app/events', label: 'Events', icon: Calendar },
+      { href: '/app/restaurants', label: 'Dining', icon: Receipt },
       { href: '/app/approvals', label: 'Approvals', icon: Bell },
       { href: '/app/reports', label: 'Analytics', icon: TrendUp },
     ],
@@ -168,7 +172,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-5 px-3">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-3">
         {nav.map((section, si) => (
           <div key={section.title ?? si} className="space-y-1">
             {section.title && (
