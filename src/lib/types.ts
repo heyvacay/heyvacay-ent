@@ -127,6 +127,11 @@ export interface Booking {
     note: string;
     newPrice?: number;
     newRoomType?: string;
+    /** Photo of the proposed room, for the traveler's full-change summary. */
+    newImage?: string;
+    /** Snapshot of what's being changed from, so the traveler sees before→after. */
+    oldPrice?: number;
+    oldRoomType?: string;
     by: string;
     status: 'offered' | 'accepted' | 'declined';
   };

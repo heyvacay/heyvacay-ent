@@ -6,23 +6,31 @@
  * preview when no key is set. Branded to match the HeyVacay look.
  */
 
-const NAVY = '#0a1426';
+const NAVY = '#0b1b2b';
 const BRAND = '#23e3ef';
+const INK = '#1b2537';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
+/**
+ * Email chrome matched to HeyVacay.co: a clean white card on a soft page, the
+ * lowercase "heyvacay" wordmark with the brand cyan dot, Inter, and the same
+ * footer the consumer site uses. Kept to inline styles + a table so it renders
+ * the same in Gmail / Outlook / Apple Mail.
+ */
 function wrap(title: string, bodyHtml: string): string {
-  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Inter,Arial,sans-serif;color:#0f172a">
-  <div style="max-width:560px;margin:0 auto;padding:24px">
-    <div style="background:${NAVY};border-radius:16px 16px 0 0;padding:20px 24px">
-      <span style="color:${BRAND};font-weight:800;letter-spacing:.14em;font-size:12px">HEYVACAY ENTERPRISE</span>
+  return `<!doctype html><html><body style="margin:0;background:#eef2f6;font-family:Inter,-apple-system,Segoe UI,Arial,sans-serif;color:${INK}">
+  <div style="max-width:560px;margin:0 auto;padding:28px 20px">
+    <div style="text-align:center;padding:4px 0 20px">
+      <span style="font-size:26px;font-weight:800;letter-spacing:-.02em;color:${NAVY}">heyvacay<span style="color:${BRAND}">.</span></span>
     </div>
-    <div style="background:#fff;border-radius:0 0 16px 16px;padding:24px;border:1px solid #e2e8f0;border-top:0">
-      <h1 style="margin:0 0 12px;font-size:20px;color:${NAVY}">${title}</h1>
+    <div style="background:#fff;border-radius:20px;padding:30px;box-shadow:0 1px 3px rgba(15,23,42,.06);border:1px solid #e7edf3">
+      <h1 style="margin:0 0 14px;font-size:21px;line-height:1.25;color:${NAVY};font-weight:800">${title}</h1>
       ${bodyHtml}
     </div>
-    <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:16px">
-      HeyVacay, Inc. · Corporate travel &amp; expense, 100% free.
+    <p style="text-align:center;color:#8aa0b5;font-size:12px;line-height:1.6;margin-top:20px">
+      HeyVacay, Inc. · Corporate travel &amp; expense, 100% free.<br/>
+      Questions? <a href="mailto:support@heyvacay.co" style="color:#64748b;text-decoration:underline">support@heyvacay.co</a>
     </p>
   </div></body></html>`;
 }

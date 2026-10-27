@@ -46,21 +46,24 @@ export default function ApprovalDetail({ id }: { id: string }) {
   const [done, setDone] = useState<null | 'approved' | 'declined' | 'offered'>(null);
   // "Approve if changed" counter-offer form.
   const [offerMode, setOfferMode] = useState(false);
-  const [offer, setOffer] = useState({ note: '', newRoomType: '', newPrice: 0 });
+  const [offer, setOffer] = useState({ note: '', newRoomType: '', newPrice: 0, newImage: '' });
   const [rooms, setRooms] = useState<UiRoom[] | null>(null);
   const [loadingRooms, setLoadingRooms] = useState(false);
+  const [popupDismissed, setPopupDismissed] = useState(false);
 
-  // When proposing a change on a hotel booking, load its real room options so
-  // the manager can pick a different room (with photos) by a click.
+  // Load the hotel's real room options up front for a pending hotel booking —
+  // both to power "approve if changed" and to proactively spot a cheaper room
+  // the manager can swap in.
   const b0 = state.bookings.find((x) => x.id === id);
   useEffect(() => {
-    if (!offerMode || rooms !== null || !b0 || b0.type !== 'hotel' || !b0.hid) return;
+    if (rooms !== null || !b0 || b0.type !== 'hotel' || !b0.hid || b0.status !== 'pending_approval')
+      return;
     setLoadingRooms(true);
     getHotelDetail({ hid: b0.hid, checkin: b0.startDate, checkout: b0.endDate, adults: 1 })
       .then((d) => setRooms(d.uiRooms))
       .catch(() => setRooms([]))
       .finally(() => setLoadingRooms(false));
-  }, [offerMode, rooms, b0]);
+  }, [rooms, b0]);
 
   const b = state.bookings.find((x) => x.id === id);
 
@@ -123,12 +126,40 @@ export default function ApprovalDetail({ id }: { id: string }) {
       note: offer.note.trim() || 'Proposed a change to your booking.',
       newRoomType: offer.newRoomType.trim() || undefined,
       newPrice: offer.newPrice > 0 ? offer.newPrice : undefined,
+      newImage: offer.newImage || undefined,
+      oldPrice: b.price,
+      oldRoomType: b.roomType,
       by: activeUser.name,
     });
     setDone('offered');
   };
 
   const pending = b.status === 'pending_approval';
+
+  // Cheapest live room vs. what the traveler picked — powers the proactive
+  // "a cheaper room is available" prompt.
+  const roomInfos = (rooms ?? [])
+    .map(roomAllIn)
+    .filter((r): r is { title: string; price: number; image?: string } => r !== null);
+  const cheapest = roomInfos.length
+    ? roomInfos.reduce((m, r) => (r.price < m.price ? r : m))
+    : null;
+  const cheaperSaving = cheapest && b.price - cheapest.price >= 25 ? b.price - cheapest.price : 0;
+  const showCheaperPopup = pending && !done && !offerMode && cheaperSaving > 0 && !popupDismissed;
+
+  const useCheaperRoom = () => {
+    if (!cheapest) return;
+    setOffer({
+      note: `A lower-priced room, ${cheapest.title}, is available — this saves ${money(
+        cheaperSaving
+      )}. Approve if you're happy with the swap.`,
+      newRoomType: cheapest.title,
+      newPrice: cheapest.price,
+      newImage: cheapest.image ?? '',
+    });
+    setOfferMode(true);
+    setPopupDismissed(true);
+  };
 
   return (
     <div className="pb-10">
@@ -402,6 +433,7 @@ export default function ApprovalDetail({ id }: { id: string }) {
                                     ...offer,
                                     newRoomType: info.title,
                                     newPrice: info.price,
+                                    newImage: info.image ?? '',
                                     note:
                                       offer.note ||
                                       `Proposed ${info.title}${diff > 0 ? ` — saves ${money(diff)}` : ''}.`,
@@ -487,6 +519,63 @@ export default function ApprovalDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {/* Proactive popup: a cheaper room is available for this stay. */}
+      {showCheaperPopup && cheapest && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
+          onClick={() => setPopupDismissed(true)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 bg-emerald-50 px-5 py-3">
+              <Gift className="h-5 w-5 text-emerald-600" />
+              <p className="font-display text-sm font-bold text-emerald-800">
+                A cheaper room is available
+              </p>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm text-slate-600">
+                The traveler picked{' '}
+                <span className="font-semibold text-slate-800">{b.roomType ?? 'a room'}</span> at{' '}
+                {money(b.price)}. A lower-priced room is available for the same stay — you can approve
+                it with that room swapped in.
+              </p>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                {cheapest.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={cheapest.image}
+                    alt=""
+                    className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <span className="h-16 w-16 shrink-0 rounded-lg bg-slate-100" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-800">{cheapest.title}</p>
+                  <p className="text-sm text-slate-500">
+                    {money(cheapest.price)} total{' '}
+                    <span className="font-semibold text-emerald-600">
+                      · saves {money(cheaperSaving)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button className="flex-1" onClick={useCheaperRoom}>
+                  Approve if changed →
+                </Button>
+                <Button variant="outline" onClick={() => setPopupDismissed(true)}>
+                  Keep reviewing
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

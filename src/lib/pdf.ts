@@ -402,6 +402,189 @@ export function pipelineReportPdf(companies: SalesCompany[], rep: string) {
   d.pdf.save(`pipeline-report-${slug(rep)}.pdf`);
 }
 
+/* ---------------- savings report ---------------- */
+
+const EMER: [number, number, number] = [5, 150, 105];
+const RED: [number, number, number] = [220, 38, 38];
+
+export interface SavingsReportData {
+  companyName: string;
+  generatedFor?: string;
+  customerSince?: string;
+  history: { month: string; spend: number; savings: number }[];
+  byDept: { label: string; spend: number; savings: number }[];
+  topSavers: { name: string; savings: number; trips: number }[];
+}
+
+export function savingsReportPdf(data: SavingsReportData) {
+  const d = newDoc();
+  brandHeader(d, 'Savings report', data.companyName);
+
+  const months = data.history;
+  const totalSaved = months.reduce((s, h) => s + h.savings, 0);
+  const totalSpend = months.reduce((s, h) => s + h.spend, 0);
+  const belowPct =
+    totalSpend + totalSaved > 0
+      ? Math.round((totalSaved / (totalSpend + totalSaved)) * 100)
+      : 0;
+  const last = months[months.length - 1];
+  const prev = months[months.length - 2];
+  const momDelta = last && prev ? last.savings - prev.savings : 0;
+  const momPct = prev && prev.savings > 0 ? Math.round((momDelta / prev.savings) * 100) : null;
+
+  // Year-over-year once there are at least two years of history.
+  const hasYear = months.length >= 24;
+  const last12 = months.slice(-12).reduce((s, h) => s + h.savings, 0);
+  const prior12 = months.slice(-24, -12).reduce((s, h) => s + h.savings, 0);
+  const yoyDelta = last12 - prior12;
+  const yoyPct = prior12 > 0 ? Math.round((yoyDelta / prior12) * 100) : null;
+
+  paragraph(
+    d,
+    `${data.generatedFor ? `Prepared for ${data.generatedFor} · ` : ''}${
+      data.customerSince ? `Customer since ${data.customerSince} · ` : ''
+    }Generated ${today()}`,
+    { size: 10, color: LIGHT }
+  );
+  d.y += 10;
+
+  // Hero — total saved.
+  ensureSpace(d, 120);
+  d.pdf.setFillColor(...NAVY);
+  d.pdf.roundedRect(MARGIN, d.y, CONTENT_W, 104, 12, 12, 'F');
+  d.pdf.setTextColor(...BRAND);
+  d.pdf.setFont('helvetica', 'bold');
+  d.pdf.setFontSize(9);
+  d.pdf.text('TOTAL SAVED WITH HEYVACAY', MARGIN + 24, d.y + 30);
+  d.pdf.setTextColor(255, 255, 255);
+  d.pdf.setFontSize(40);
+  d.pdf.text(money(totalSaved), MARGIN + 24, d.y + 70);
+  d.pdf.setFont('helvetica', 'normal');
+  d.pdf.setFontSize(10);
+  d.pdf.setTextColor(200, 230, 236);
+  d.pdf.text(
+    `${belowPct}% below market across ${money(totalSpend)} of managed travel`,
+    MARGIN + 24,
+    d.y + 90
+  );
+  d.y += 124;
+
+  // Stat tiles — MoM and YoY (or lifetime when not a full year yet).
+  const tiles: { label: string; value: string; delta?: string; good?: boolean }[] = [
+    {
+      label: 'Saved this month',
+      value: last ? money(last.savings) : '—',
+      delta:
+        prev != null
+          ? `${momDelta >= 0 ? '▲' : '▼'} ${money(Math.abs(momDelta))}${
+              momPct != null ? ` (${momPct >= 0 ? '+' : ''}${momPct}%)` : ''
+            } vs last month`
+          : undefined,
+      good: momDelta >= 0,
+    },
+    hasYear
+      ? {
+          label: 'Saved this year',
+          value: money(last12),
+          delta:
+            prior12 > 0
+              ? `${yoyDelta >= 0 ? '▲' : '▼'} ${money(Math.abs(yoyDelta))}${
+                  yoyPct != null ? ` (${yoyPct >= 0 ? '+' : ''}${yoyPct}%)` : ''
+                } vs last year`
+              : undefined,
+          good: yoyDelta >= 0,
+        }
+      : {
+          label: `Saved over ${months.length} months`,
+          value: money(totalSaved),
+          delta: 'Full-year comparison unlocks at 12 months',
+        },
+    { label: 'Below market', value: `${belowPct}%`, delta: 'Blended across all trips' },
+  ];
+  const tileW = (CONTENT_W - 2 * 12) / 3;
+  ensureSpace(d, 86);
+  tiles.forEach((t, i) => {
+    const x = MARGIN + i * (tileW + 12);
+    d.pdf.setFillColor(247, 250, 252);
+    d.pdf.roundedRect(x, d.y, tileW, 78, 10, 10, 'F');
+    d.pdf.setFont('helvetica', 'normal');
+    d.pdf.setFontSize(8);
+    d.pdf.setTextColor(...LIGHT);
+    d.pdf.text(t.label.toUpperCase(), x + 14, d.y + 20);
+    d.pdf.setFont('helvetica', 'bold');
+    d.pdf.setFontSize(18);
+    d.pdf.setTextColor(...NAVY);
+    d.pdf.text(t.value, x + 14, d.y + 44);
+    if (t.delta) {
+      d.pdf.setFont('helvetica', 'normal');
+      d.pdf.setFontSize(7.5);
+      d.pdf.setTextColor(...(t.good === undefined ? LIGHT : t.good ? EMER : RED));
+      const dl = d.pdf.splitTextToSize(t.delta, tileW - 22) as string[];
+      dl.slice(0, 2).forEach((ln, li) => d.pdf.text(ln, x + 14, d.y + 60 + li * 10));
+    }
+  });
+  d.y += 98;
+
+  // Monthly savings bar chart.
+  if (months.length) {
+    heading(d, 'Savings by month');
+    const chartH = 120;
+    ensureSpace(d, chartH + 24);
+    const maxSav = Math.max(1, ...months.map((m) => m.savings));
+    const gap = 10;
+    const barW = (CONTENT_W - gap * (months.length - 1)) / months.length;
+    const baseY = d.y + chartH;
+    months.forEach((m, i) => {
+      const h = Math.max(2, (m.savings / maxSav) * (chartH - 20));
+      const x = MARGIN + i * (barW + gap);
+      d.pdf.setFillColor(...BRAND);
+      d.pdf.roundedRect(x, baseY - h, barW, h, 3, 3, 'F');
+      d.pdf.setFont('helvetica', 'bold');
+      d.pdf.setFontSize(7);
+      d.pdf.setTextColor(...NAVY);
+      d.pdf.text(money(m.savings), x + barW / 2, baseY - h - 5, { align: 'center' });
+      d.pdf.setFont('helvetica', 'normal');
+      d.pdf.setTextColor(...LIGHT);
+      d.pdf.text(m.month, x + barW / 2, baseY + 12, { align: 'center' });
+    });
+    d.y = baseY + 28;
+  }
+
+  // Department breakdown.
+  if (data.byDept.length) {
+    heading(d, 'Savings by department');
+    data.byDept
+      .slice()
+      .sort((a, b) => b.savings - a.savings)
+      .forEach((dep) => {
+        ensureSpace(d, 18);
+        d.pdf.setFont('helvetica', 'bold');
+        d.pdf.setFontSize(10);
+        d.pdf.setTextColor(...NAVY);
+        d.pdf.text(dep.label, MARGIN, d.y);
+        d.pdf.setFont('helvetica', 'normal');
+        d.pdf.setTextColor(...EMER);
+        d.pdf.text(`saved ${money(dep.savings)}`, PAGE_W - MARGIN, d.y, { align: 'right' });
+        d.pdf.setTextColor(...LIGHT);
+        d.pdf.setFontSize(8);
+        d.pdf.text(`${money(dep.spend)} spend`, PAGE_W - MARGIN - 120, d.y, { align: 'right' });
+        d.y += 18;
+      });
+    d.y += 6;
+  }
+
+  // Top savers.
+  if (data.topSavers.length) {
+    heading(d, 'Top savers');
+    data.topSavers.slice(0, 6).forEach((p, i) =>
+      bullet(d, `${i + 1}. ${p.name} — saved ${money(p.savings)} across ${p.trips} trip${p.trips === 1 ? '' : 's'}`)
+    );
+  }
+
+  footer(d, `HeyVacay Enterprise · Savings report · ${data.companyName} · ${today()}`);
+  d.pdf.save(`${slug(data.companyName)}-savings-report.pdf`);
+}
+
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

@@ -30,13 +30,16 @@ export async function POST(req: Request) {
   if (EMAIL.live) {
     try {
       const base = process.env.EMAIL_API_BASE || 'https://api.resend.com';
+      // Match the consumer sender identity: a friendly "HeyVacay" display name
+      // unless the configured address already carries one.
+      const from = EMAIL.from.includes('<') ? EMAIL.from : `HeyVacay <${EMAIL.from}>`;
       const res = await fetch(`${base}/emails`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${EMAIL.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ from: EMAIL.from, to: body.to, subject, html, text }),
+        body: JSON.stringify({ from, to: body.to, subject, html, text }),
         cache: 'no-store',
       });
       if (res.ok) return NextResponse.json({ sent: true, source: 'provider' });

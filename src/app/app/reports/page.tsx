@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Button, Card, PageHeader, StatCard, cn } from '@/components/app/ui';
 import { money, money2, num, pct, shortDate, dateRange } from '@/lib/format';
+import { savingsReportPdf } from '@/lib/pdf';
 
 // Deeper brand cyan for data marks — validated for >=3:1 contrast on white,
 // unlike the light brand token (#23e3ef) used for accents.
@@ -289,15 +290,33 @@ export default function ReportsPage() {
     [state.bookings]
   );
 
+  const downloadPdf = () => {
+    savingsReportPdf({
+      companyName: state.company.name,
+      customerSince: state.onboarding?.completedAt?.slice(0, 10) ?? state.history[0]?.month,
+      history: state.history,
+      byDept: byDept.map((d) => ({ label: d.label, spend: d.spend, savings: d.savings })),
+      topSavers: [...byEmployee]
+        .sort((a, b) => b.savings - a.savings)
+        .slice(0, 6)
+        .map((e) => ({ name: e.name, savings: e.savings, trips: e.trips })),
+    });
+  };
+
   return (
     <div>
       <PageHeader
         title="Reports"
         subtitle="Drill from the whole company down to a single trip — and pull the raw data anytime."
         actions={
-          <Button variant="outline" size="sm" onClick={exportBookings}>
-            ↓ Export bookings (CSV)
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={downloadPdf}>
+              ↓ Savings report (PDF)
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportBookings}>
+              CSV
+            </Button>
+          </div>
         }
       />
 

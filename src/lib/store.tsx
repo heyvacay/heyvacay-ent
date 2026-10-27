@@ -95,7 +95,18 @@ export interface StoreApi {
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Manager "approve if changed": sends a counter-offer to the traveler. */
-  proposeChange: (id: string, data: { note: string; newPrice?: number; newRoomType?: string; by: string }) => void;
+  proposeChange: (
+    id: string,
+    data: {
+      note: string;
+      newPrice?: number;
+      newRoomType?: string;
+      newImage?: string;
+      oldPrice?: number;
+      oldRoomType?: string;
+      by: string;
+    }
+  ) => void;
   /** Traveler responds to a counter-offer. */
   respondOffer: (id: string, accept: boolean) => void;
   /** Send a message in a booking's traveler↔manager chat. */
@@ -586,6 +597,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 note: data.note,
                 newPrice: data.newPrice,
                 newRoomType: data.newRoomType,
+                newImage: data.newImage,
+                oldPrice: data.oldPrice ?? b.price,
+                oldRoomType: data.oldRoomType ?? b.roomType,
                 by: data.by,
                 status: 'offered',
               },
