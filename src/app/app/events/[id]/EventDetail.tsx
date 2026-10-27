@@ -21,11 +21,11 @@ import {
   EmptyState,
   Field,
   Input,
-  PageHeader,
   Select,
   cn,
 } from '@/components/app/ui';
 import { shortDate } from '@/lib/format';
+import { EventChat } from '@/components/app/EventChat';
 import { MapPin, Users, Check, Shield, Plane, Sparkles } from '@/components/icons';
 
 type Tab = 'overview' | 'chat' | 'dinner';
@@ -35,6 +35,7 @@ export default function EventDetail({ id }: { id: string }) {
   const {
     eventById,
     addMessage,
+    toggleReaction,
     joinEvent,
     startDinner,
     joinDinner,
@@ -49,7 +50,6 @@ export default function EventDetail({ id }: { id: string }) {
   } = useEvents();
   const e = eventById(id);
   const [tab, setTab] = useState<Tab>('overview');
-  const [msg, setMsg] = useState('');
   const [booking, setBooking] = useState(false);
   const [availNote, setAvailNote] = useState('');
   const bookedRef = useRef(false);
@@ -144,26 +144,69 @@ export default function EventDetail({ id }: { id: string }) {
     );
   }
 
-  const send = () => {
-    if (!msg.trim()) return;
-    addMessage(e.id, activeUser.id, activeUser.name, msg.trim());
-    setMsg('');
-  };
-
   return (
     <div>
       <Link href="/app/events" className="text-sm font-medium text-brand-dark hover:underline">
         ← All events
       </Link>
-      <PageHeader
-        title={e.name}
-        subtitle={`${e.city} · ${shortDate(e.startDate)}–${shortDate(e.endDate)} · ${e.attendees.length} attending`}
-        actions={
-          !isAttendee ? (
-            <Button onClick={() => joinEvent(e.id, activeUser.id, activeUser.name)}>Join event</Button>
-          ) : undefined
-        }
-      />
+      <section className="relative mt-3 overflow-hidden rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-6 text-white ring-1 ring-white/10 sm:p-7">
+        <span className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand/25 blur-3xl" />
+        <span className="pointer-events-none absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-brand/10 blur-3xl" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand">Company event</p>
+            <h1 className="mt-1 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
+              {e.name}
+            </h1>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-mist/80">
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-4 w-4" /> {e.city}
+              </span>
+              <span>
+                {shortDate(e.startDate)}–{shortDate(e.endDate)}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Users className="h-4 w-4" /> {e.attendees.length} attending
+              </span>
+            </p>
+            <div className="mt-3 flex items-center -space-x-2">
+              {e.attendees.slice(0, 7).map((a) => (
+                <span
+                  key={a.userId}
+                  title={a.name}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-[10px] font-bold text-white ring-2 ring-navy"
+                >
+                  {a.name.split(' ').map((x) => x[0]).slice(0, 2).join('')}
+                </span>
+              ))}
+              {e.attendees.length > 7 && (
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-[10px] font-bold text-white ring-2 ring-navy">
+                  +{e.attendees.length - 7}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {d && (
+              <span
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-semibold',
+                  d.phase === 'booked' ? 'bg-emerald-400/20 text-emerald-200' : 'bg-amber-400/20 text-amber-200'
+                )}
+              >
+                {d.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
+              </span>
+            )}
+            {!isAttendee && (
+              <Button onClick={() => joinEvent(e.id, activeUser.id, activeUser.name)}>
+                Join event
+              </Button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-5" />
 
       <div className="mb-5 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
         {(['overview', 'chat', 'dinner'] as Tab[]).map((t) => (
@@ -243,43 +286,12 @@ export default function EventDetail({ id }: { id: string }) {
       )}
 
       {tab === 'chat' && (
-        <Card pad={false} className="flex h-[60vh] flex-col">
-          <div className="flex-1 space-y-3 overflow-auto p-4">
-            {e.messages.map((m) =>
-              m.system ? (
-                <p key={m.id} className="text-center text-xs text-slate-400">
-                  {m.text}
-                </p>
-              ) : (
-                <div key={m.id} className={cn('flex', m.authorId === activeUser.id && 'justify-end')}>
-                  <div
-                    className={cn(
-                      'max-w-[80%] rounded-2xl px-3 py-2 text-sm',
-                      m.authorId === activeUser.id
-                        ? 'bg-brand text-navy-deep'
-                        : 'bg-slate-100 text-slate-700'
-                    )}
-                  >
-                    {m.authorId !== activeUser.id && (
-                      <p className="mb-0.5 text-xs font-semibold text-slate-500">{m.author}</p>
-                    )}
-                    {m.text}
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-          <div className="flex gap-2 border-t border-slate-100 p-3">
-            <input
-              value={msg}
-              onChange={(ev) => setMsg(ev.target.value)}
-              onKeyDown={(ev) => ev.key === 'Enter' && send()}
-              placeholder="Message the group…"
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-            />
-            <Button onClick={send}>Send</Button>
-          </div>
-        </Card>
+        <EventChat
+          messages={e.messages}
+          activeUserId={activeUser.id}
+          onSend={(text, replyTo) => addMessage(e.id, activeUser.id, activeUser.name, text, replyTo)}
+          onReact={(mid, emoji) => toggleReaction(e.id, mid, activeUser.id, emoji)}
+        />
       )}
 
       {tab === 'dinner' && (

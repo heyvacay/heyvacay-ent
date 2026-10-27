@@ -32,7 +32,14 @@ export interface EventMessage {
   ts: string;
   /** System messages (e.g. "dinner booked") render differently. */
   system?: boolean;
+  /** Emoji → the userIds who reacted with it. */
+  reactions?: Record<string, string[]>;
+  /** id of the message this one replies to. */
+  replyTo?: string;
 }
+
+/** The small reaction palette shown on hover in the event chat. */
+export const REACTIONS = ['👍', '❤️', '😂', '🎉', '🔥', '👀'] as const;
 
 export interface EventAttendee {
   userId: string;

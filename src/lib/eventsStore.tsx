@@ -34,7 +34,14 @@ interface EventsApi {
     allowFlights: string[];
     attendees: EventAttendee[];
   }) => TravelEvent;
-  addMessage: (eventId: string, authorId: string, author: string, text: string) => void;
+  addMessage: (
+    eventId: string,
+    authorId: string,
+    author: string,
+    text: string,
+    replyTo?: string
+  ) => void;
+  toggleReaction: (eventId: string, messageId: string, userId: string, emoji: string) => void;
   joinEvent: (eventId: string, userId: string, name: string) => void;
 
   startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
@@ -118,8 +125,29 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addMessage: EventsApi['addMessage'] = useCallback(
-    (eventId, authorId, author, text) =>
-      patch(eventId, (e) => ({ ...e, messages: [...e.messages, msg(authorId, author, text)] })),
+    (eventId, authorId, author, text, replyTo) =>
+      patch(eventId, (e) => ({
+        ...e,
+        messages: [...e.messages, { ...msg(authorId, author, text), replyTo }],
+      })),
+    [patch]
+  );
+
+  const toggleReaction: EventsApi['toggleReaction'] = useCallback(
+    (eventId, messageId, userId, emoji) =>
+      patch(eventId, (e) => ({
+        ...e,
+        messages: e.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const reactions = { ...(m.reactions ?? {}) };
+          const arr = reactions[emoji] ?? [];
+          reactions[emoji] = arr.includes(userId)
+            ? arr.filter((u) => u !== userId)
+            : [...arr, userId];
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+          return { ...m, reactions };
+        }),
+      })),
     [patch]
   );
 
@@ -312,6 +340,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         eventById,
         createEvent,
         addMessage,
+        toggleReaction,
         joinEvent,
         startDinner,
         joinDinner,

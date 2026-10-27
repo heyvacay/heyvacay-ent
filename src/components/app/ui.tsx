@@ -229,7 +229,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cn(CONTROL, 'pr-8', props.className)} />;
 }
 
-export function Avatar({ name }: { name: string }) {
+export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
   const init = name
     .split(' ')
     .map((p) => p[0])
@@ -237,7 +237,12 @@ export function Avatar({ name }: { name: string }) {
     .join('')
     .toUpperCase();
   return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">
+    <span
+      className={cn(
+        'grid shrink-0 place-items-center rounded-full bg-slate-900 font-bold text-white',
+        size === 'sm' ? 'h-7 w-7 text-[10px]' : 'h-9 w-9 text-xs'
+      )}
+    >
       {init}
     </span>
   );

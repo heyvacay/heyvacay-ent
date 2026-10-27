@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
-import { Badge, Button, Card, EmptyState, Field, Input, PageHeader } from '@/components/app/ui';
+import { Button, Card, EmptyState, Field, Input, PageHeader } from '@/components/app/ui';
 import { shortDate, todayISO } from '@/lib/format';
-import { Calendar, MapPin, Users, Sparkles } from '@/components/icons';
+import { Calendar, MapPin, Sparkles } from '@/components/icons';
 
 export default function EventsPage() {
   const { state, activeUser, role } = useStore();
@@ -146,29 +146,60 @@ export default function EventsPage() {
       {shown.length === 0 ? (
         <EmptyState title="No events yet" sub="Create one to coordinate a company trip." />
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {shown.map((e) => (
             <Link
               key={e.id}
               href={`/app/events/${e.id}`}
-              className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 sm:flex-row sm:items-center"
+              className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-900 text-white">
-                <Calendar className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-800">{e.name}</p>
-                <p className="flex flex-wrap items-center gap-x-3 text-xs text-slate-400">
-                  <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {e.city}</span>
-                  <span>{shortDate(e.startDate)}–{shortDate(e.endDate)}</span>
-                  <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" /> {e.attendees.length}</span>
-                </p>
+              <div className="relative h-20 overflow-hidden bg-gradient-to-br from-navy via-surface to-brand-dark">
+                <span className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-brand/30 blur-2xl" />
+                <span className="absolute left-4 top-4 grid h-9 w-9 place-items-center rounded-xl bg-white/15 text-white ring-1 ring-white/20">
+                  <Calendar className="h-5 w-5" />
+                </span>
+                {e.dinner && (
+                  <span
+                    className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      e.dinner.phase === 'booked'
+                        ? 'bg-emerald-400/20 text-emerald-100'
+                        : 'bg-amber-400/20 text-amber-100'
+                    }`}
+                  >
+                    {e.dinner.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
+                  </span>
+                )}
               </div>
-              {e.dinner && (
-                <Badge color={e.dinner.phase === 'booked' ? 'green' : 'amber'}>
-                  {e.dinner.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
-                </Badge>
-              )}
+              <div className="p-4">
+                <p className="font-display font-bold text-slate-900 group-hover:text-brand-dark">
+                  {e.name}
+                </p>
+                <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {e.city}
+                  </span>
+                  <span>
+                    {shortDate(e.startDate)}–{shortDate(e.endDate)}
+                  </span>
+                </p>
+                <div className="mt-3 flex items-center -space-x-1.5">
+                  {e.attendees.slice(0, 6).map((a) => (
+                    <span
+                      key={a.userId}
+                      title={a.name}
+                      className="grid h-7 w-7 place-items-center rounded-full bg-slate-900 text-[10px] font-bold text-white ring-2 ring-white"
+                    >
+                      {a.name.split(' ').map((x) => x[0]).slice(0, 2).join('')}
+                    </span>
+                  ))}
+                  {e.attendees.length > 6 && (
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-500 ring-2 ring-white">
+                      +{e.attendees.length - 6}
+                    </span>
+                  )}
+                  <span className="pl-3 text-xs text-slate-400">{e.attendees.length} attending</span>
+                </div>
+              </div>
             </Link>
           ))}
         </div>
