@@ -13,6 +13,7 @@ import type {
   AppState,
   Billing,
   Booking,
+  BookingApprovalMode,
   BudgetScope,
   Expense,
   ExpenseStatus,
@@ -65,7 +66,13 @@ export interface StoreApi {
     title: string;
     role: Role;
   }) => void;
-  updateUser: (id: string, patch: Partial<Pick<User, 'name' | 'title' | 'department' | 'role' | 'status'>>) => void;
+  updateUser: (id: string, patch: Partial<Pick<User, 'name' | 'title' | 'department' | 'role' | 'status' | 'approvalMode'>>) => void;
+  /** Effective booking approval mode for a traveler (employee override ∨ company default). */
+  approvalModeFor: (userId: string) => BookingApprovalMode;
+  /** Set the company-wide default approval mode. */
+  setCompanyApprovalMode: (mode: BookingApprovalMode) => void;
+  /** Set (or clear → 'default') a single employee's approval-mode override. */
+  setUserApprovalMode: (userId: string, mode: BookingApprovalMode | 'default') => void;
   setBillingMode: (mode: Billing['mode']) => void;
   linkCard: (brand: string, last4: string) => void;
   requestNet30: () => void;
@@ -82,6 +89,8 @@ export interface StoreApi {
     roomType?: string;
     images?: string[];
     travelerNote?: string;
+    eventId?: string;
+    eventName?: string;
   }) => Booking;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
@@ -323,6 +332,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [state.policies]
   );
 
+  const approvalModeFor = useCallback(
+    (userId: string): BookingApprovalMode => {
+      const u = state.users.find((x) => x.id === userId);
+      if (u?.approvalMode && u.approvalMode !== 'default') return u.approvalMode;
+      return state.company.approvalMode ?? 'open';
+    },
+    [state.users, state.company.approvalMode]
+  );
+
+  const setCompanyApprovalMode: StoreApi['setCompanyApprovalMode'] = useCallback(
+    (mode) => setState((s) => ({ ...s, company: { ...s.company, approvalMode: mode } })),
+    []
+  );
+
+  const setUserApprovalMode: StoreApi['setUserApprovalMode'] = useCallback(
+    (userId, mode) =>
+      setState((s) => ({
+        ...s,
+        users: s.users.map((u) => (u.id === userId ? { ...u, approvalMode: mode } : u)),
+      })),
+    []
+  );
+
   const inviteUser: StoreApi['inviteUser'] = useCallback((data) => {
     setState((s) => ({
       ...s,
@@ -406,13 +438,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote }) => {
+    ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote, eventId, eventName }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
       const flags = evaluatePolicies(opt, startDate);
-      const needsApproval = flags.some(
-        (f) => f.policy.action === 'approve' || f.policy.action === 'block'
-      );
+      // Approval mode gates on top of the travel policy: pre-approval forces
+      // every trip through a manager; event-scoped trips not tied to an event
+      // also route for approval (the UI normally prevents that case).
       const traveler = state.users.find((u) => u.id === travelerId);
+      let mode: BookingApprovalMode = 'open';
+      {
+        const am = traveler?.approvalMode;
+        mode = am && am !== 'default' ? am : state.company.approvalMode ?? 'open';
+      }
+      const needsApproval =
+        flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block') ||
+        mode === 'pre_approval' ||
+        (mode === 'event_required' && !eventId);
 
       const booking: Booking = {
         id: uid('bk'),
@@ -443,6 +484,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         roomType,
         hid: opt.hid,
         travelerNote,
+        eventId,
+        eventName,
       };
 
       setState((s) => {
@@ -473,7 +516,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return booking;
     },
-    [evaluatePolicies, state.activeUserId, state.users, activeUser.department]
+    [evaluatePolicies, state.activeUserId, state.users, state.company.approvalMode, activeUser.department]
   );
 
   const approveBooking: StoreApi['approveBooking'] = useCallback(
@@ -795,6 +838,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     evaluatePolicies,
     inviteUser,
     updateUser,
+    approvalModeFor,
+    setCompanyApprovalMode,
+    setUserApprovalMode,
     setBillingMode,
     linkCard,
     requestNet30,

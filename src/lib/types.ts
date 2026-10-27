@@ -8,11 +8,21 @@
 
 export type Role = 'admin' | 'booker' | 'employee';
 
+/**
+ * How much gating a booking goes through before it's confirmed:
+ * - 'open'           — employee books freely (travel policy still applies).
+ * - 'pre_approval'   — a manager must approve every booking before it's live.
+ * - 'event_required' — a trip can only be booked against a manager-approved event.
+ */
+export type BookingApprovalMode = 'open' | 'pre_approval' | 'event_required';
+
 export interface Company {
   id: string;
   name: string;
   currency: string; // ISO 4217, e.g. "USD"
   domain: string;
+  /** Company-wide default booking approval mode (per-employee can override). */
+  approvalMode?: BookingApprovalMode;
 }
 
 export interface User {
@@ -25,6 +35,8 @@ export interface User {
   status: 'active' | 'invited' | 'deactivated';
   loyalty: { program: string; number: string }[];
   personalLinked: boolean;
+  /** Per-employee booking approval mode; omitted/'default' inherits the company. */
+  approvalMode?: BookingApprovalMode | 'default';
 }
 
 export type BudgetScope = 'company' | 'department' | 'employee';
@@ -120,6 +132,9 @@ export interface Booking {
   };
   /** 1:1 chat thread between the traveler and the approving manager. */
   chat?: ChatMessage[];
+  /** The event this trip is tied to (when booking is event-scoped). */
+  eventId?: string;
+  eventName?: string;
 }
 
 export interface ChatMessage {

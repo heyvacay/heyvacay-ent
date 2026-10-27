@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '@/lib/store';
+import { useEvents } from '@/lib/eventsStore';
 import {
   Button,
   Field,
@@ -590,8 +591,9 @@ type FlightSug = FlightPlace & Suggestion;
 type HotelSug = HotelPlace & Suggestion;
 
 export default function BookPage() {
-  const { state, role, activeUser, evaluatePolicies, book, pointsBalance } =
+  const { state, role, activeUser, evaluatePolicies, book, pointsBalance, approvalModeFor } =
     useStore();
+  const { events } = useEvents();
   const router = useRouter();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
@@ -613,6 +615,15 @@ export default function BookPage() {
   const [start, setStart] = useState(addDays(todayISO(), 14));
   const [end, setEnd] = useState(addDays(todayISO(), 17));
   const [travelerId, setTravelerId] = useState(activeUser.id);
+  const [eventId, setEventId] = useState('');
+
+  // Booking approval mode for whoever the trip is for.
+  const approvalMode = approvalModeFor(travelerId);
+  // Events this traveler can book against (they're an attendee; admins see all).
+  const bookableEvents = events.filter(
+    (e) => role === 'admin' || e.attendees.some((a) => a.userId === travelerId)
+  );
+  const selectedEvent = bookableEvents.find((e) => e.id === eventId);
 
   const [results, setResults] = useState<InventoryOption[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -678,6 +689,12 @@ export default function BookPage() {
   const runSearch = async () => {
     setError(null);
     setConfirmed(null);
+    if (approvalMode === 'event_required' && !eventId) {
+      setError(
+        'Your company only allows booking against an approved event. Pick an event to continue.'
+      );
+      return;
+    }
     setLoading(true);
     setResults(null);
     try {
@@ -697,6 +714,11 @@ export default function BookPage() {
         q.set('depart', start);
         if (roundTrip) q.set('return', end);
         q.set('cabin', cabin);
+        q.set('travelerId', travelerId);
+        if (eventId && selectedEvent) {
+          q.set('eventId', eventId);
+          q.set('eventName', selectedEvent.name);
+        }
         router.push(`/app/flights?${q.toString()}`);
         return;
       } else {
@@ -718,6 +740,11 @@ export default function BookPage() {
           q.set('lng', String(p.lng));
         }
         if (p.hid) q.set('hid', String(p.hid));
+        q.set('travelerId', travelerId);
+        if (eventId && selectedEvent) {
+          q.set('eventId', eventId);
+          q.set('eventName', selectedEvent.name);
+        }
         router.push(`/app/hotels?${q.toString()}`);
         return;
       }
@@ -730,7 +757,14 @@ export default function BookPage() {
 
   const confirm = (opt: InventoryOption) => {
     const { pending, points } = sig(opt);
-    book({ opt, travelerId, startDate: start, endDate: end });
+    book({
+      opt,
+      travelerId,
+      startDate: start,
+      endDate: end,
+      eventId: eventId || undefined,
+      eventName: selectedEvent?.name,
+    });
     setConfirmed({ opt, pending, points });
     setResults(null);
   };
@@ -981,6 +1015,45 @@ export default function BookPage() {
         ) : (
           <ComingSoon product={type} />
         )}
+
+            {(type === 'flight' || type === 'hotel') && (
+              <div className="mt-3">
+                <Field
+                  label={approvalMode === 'event_required' ? 'Event (required)' : 'Event'}
+                  hint={
+                    approvalMode === 'event_required'
+                      ? 'Your company only allows booking against an approved event.'
+                      : 'Optional — tie this trip to a company event.'
+                  }
+                >
+                  <Select value={eventId} onChange={(e) => setEventId(e.target.value)}>
+                    <option value="">
+                      {approvalMode === 'event_required'
+                        ? 'Select an event…'
+                        : 'No event (personal / ad-hoc)'}
+                    </option>
+                    {bookableEvents.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name} · {ev.city}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {approvalMode === 'event_required' && bookableEvents.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    You&apos;re not part of any event yet.{' '}
+                    {role === 'admin' || role === 'booker'
+                      ? 'Create one on the Events page.'
+                      : 'Ask your manager to add you to one.'}
+                  </p>
+                )}
+                {approvalMode === 'pre_approval' && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Every booking is sent to your manager for approval before it&apos;s confirmed.
+                  </p>
+                )}
+              </div>
+            )}
 
             {(type === 'flight' || type === 'hotel') && (
               <Button className="mt-4" onClick={runSearch} disabled={loading}>

@@ -2,8 +2,31 @@
 
 import { useStore } from '@/lib/store';
 import { Button, Card, PageHeader, Select, cn } from '@/components/app/ui';
-import { Plane, Receipt, Shield, Check, Calendar } from '@/components/icons';
-import type { FlightCabinTier, Policy, PolicyAction } from '@/lib/types';
+import { Plane, Receipt, Shield, Check, Calendar, Users } from '@/components/icons';
+import type {
+  BookingApprovalMode,
+  FlightCabinTier,
+  Policy,
+  PolicyAction,
+} from '@/lib/types';
+
+const APPROVAL_MODES: { value: BookingApprovalMode; label: string; desc: string }[] = [
+  {
+    value: 'open',
+    label: 'Book freely — no approval',
+    desc: 'Employees book on their own. Your travel policy above still flags anything out of policy.',
+  },
+  {
+    value: 'pre_approval',
+    label: 'Require approval before booking',
+    desc: 'Every trip is sent to a manager and only confirmed once they approve it.',
+  },
+  {
+    value: 'event_required',
+    label: 'Only against an approved event',
+    desc: 'Employees can only book travel tied to a manager-approved event.',
+  },
+];
 
 const CABINS = ['Economy', 'Premium economy', 'Business', 'First'];
 const ACTIONS: { value: PolicyAction; label: string }[] = [
@@ -202,8 +225,17 @@ function FlightPreview({ tiers }: { tiers: FlightCabinTier[] }) {
 /* ---------------- page ---------------- */
 
 export default function PoliciesPage() {
-  const { state, togglePolicy, updatePolicy, addPolicy, removePolicy } = useStore();
+  const {
+    state,
+    togglePolicy,
+    updatePolicy,
+    addPolicy,
+    removePolicy,
+    setCompanyApprovalMode,
+    setUserApprovalMode,
+  } = useStore();
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
+  const companyMode = state.company.approvalMode ?? 'open';
 
   // Multiple nightly-rate rules (e.g. >$400 approve, >$1000 block, per city).
   const nightlyRules = state.policies.filter((p) => p.type === 'max_nightly');
@@ -249,6 +281,80 @@ export default function PoliciesPage() {
       />
 
       <div className="space-y-6">
+        {/* Approval workflow */}
+        <SectionCard
+          icon={<Users className="h-5 w-5" />}
+          title="Booking approval"
+          sub="Decide how much sign-off a trip needs before it's booked. Set a company default, then override it for any individual."
+        >
+          <div className="space-y-2">
+            {APPROVAL_MODES.map((m) => (
+              <label
+                key={m.value}
+                className={cn(
+                  'flex cursor-pointer gap-3 rounded-xl border p-4 transition-colors',
+                  companyMode === m.value
+                    ? 'border-brand bg-brand/5'
+                    : 'border-slate-200 hover:border-slate-300'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="company-approval-mode"
+                  checked={companyMode === m.value}
+                  onChange={() => setCompanyApprovalMode(m.value)}
+                  className="mt-0.5 h-4 w-4 shrink-0 text-brand focus:ring-brand"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">{m.label}</span>
+                  <span className="block text-xs text-slate-400">{m.desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Per-employee override
+              </p>
+              <p className="text-xs text-slate-400">Company default applies unless set</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {state.users
+                .filter((u) => u.status === 'active')
+                .map((u) => (
+                  <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{u.name}</p>
+                      <p className="truncate text-xs text-slate-400">
+                        {u.title} · {u.department}
+                      </p>
+                    </div>
+                    <span className="inline-block w-56 shrink-0">
+                      <Select
+                        value={u.approvalMode ?? 'default'}
+                        onChange={(e) =>
+                          setUserApprovalMode(
+                            u.id,
+                            e.target.value as BookingApprovalMode | 'default'
+                          )
+                        }
+                      >
+                        <option value="default">Company default</option>
+                        {APPROVAL_MODES.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </SectionCard>
+
         {/* Hotels */}
         <SectionCard
           icon={<Receipt className="h-5 w-5" />}

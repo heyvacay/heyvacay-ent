@@ -122,6 +122,7 @@ function DetailsModal({ b, onClose }: { b: Booking; onClose: () => void }) {
             {b.savings > 0 && <Row k="Saved vs market" v={money(b.savings)} tone="emerald" />}
             <Row k="Points earned" v={`+${num(b.pointsEarned)}`} tone="brand" />
             <Row k="Status" v={b.status.replace('_', ' ')} />
+            {b.eventName && <Row k="Event" v={b.eventName} />}
           </div>
           {b.travelerNote && (
             <p className="rounded-lg bg-slate-50 p-2 text-sm text-slate-600">

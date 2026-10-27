@@ -234,13 +234,15 @@ export default function FlightsResults() {
   const departDate = params.get('depart') || '';
   const returnDate = params.get('return') || undefined;
   const cabin = params.get('cabin') || 'economy';
+  const eventId = params.get('eventId') || undefined;
+  const eventName = params.get('eventName') || undefined;
 
   const [results, setResults] = useState<InventoryOption[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detailOpt, setDetailOpt] = useState<InventoryOption | null>(null);
   const [selected, setSelected] = useState<InventoryOption | null>(null);
-  const [travelerId, setTravelerId] = useState(activeUser.id);
+  const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
   const [confirmed, setConfirmed] = useState<{ opt: InventoryOption; pending: boolean } | null>(null);
 
   useEffect(() => {
@@ -279,7 +281,14 @@ export default function FlightsResults() {
       detail: `${opt.detail}${fareLabel ? ` · ${fareLabel}` : ''}${seat ? ` · Seat ${seat}` : ''}`,
     };
     const { needsApproval } = sig(finalOpt);
-    book({ opt: finalOpt, travelerId, startDate: departDate, endDate: returnDate || departDate });
+    book({
+      opt: finalOpt,
+      travelerId,
+      startDate: departDate,
+      endDate: returnDate || departDate,
+      eventId,
+      eventName,
+    });
     setConfirmed({ opt: finalOpt, pending: needsApproval });
     setSelected(null);
   };

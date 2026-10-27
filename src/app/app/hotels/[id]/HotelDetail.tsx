@@ -41,8 +41,11 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const { state, role, activeUser, evaluatePolicies, book, spentForScope } =
     useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
-  const [travelerId, setTravelerId] = useState(activeUser.id);
+  const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
   const [review, setReview] = useState(false);
+
+  const eventId = params.get('eventId') || undefined;
+  const eventName = params.get('eventName') || undefined;
 
   const checkin = params.get('checkin') || '';
   const checkout = params.get('checkout') || '';
@@ -164,6 +167,8 @@ export default function HotelDetail({ hid }: { hid: string }) {
       roomType: selected?.roomTitle,
       images,
       travelerNote: bookNote.trim() || undefined,
+      eventId,
+      eventName,
     });
     setConfirmed({ pending: needsApproval, points });
     setReview(false);
