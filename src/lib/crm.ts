@@ -37,7 +37,25 @@ export const QUOTA: Record<string, number> = {
   'Marcus L.': 900_000,
 };
 
-export type RepRole = 'Admin' | 'Account Executive' | 'SDR';
+export type RepRole = 'C-Suite' | 'Admin' | 'Account Executive' | 'SDR';
+
+/** How far a non-C-Suite rep may move a company's commission before it needs
+ *  C-Suite approval: down 1 point, up 2 points from the global rate. */
+export const REP_COMMISSION_DOWN = 1;
+export const REP_COMMISSION_UP = 2;
+
+export interface CommissionApproval {
+  id: string;
+  companyId: string;
+  companyName: string;
+  starRating: number;
+  fromPercent: number;
+  toPercent: number;
+  globalPercent: number;
+  requestedBy: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
 
 export interface Rep {
   name: string;
@@ -49,7 +67,7 @@ export interface Rep {
 
 /** Seed sales team. Danil is the admin and can manage the others. */
 export const SEED_REPS: Rep[] = [
-  { name: 'Danil B.', role: 'Admin', quota: QUOTA['Danil B.'], email: 'danilb@heyvacay.co' },
+  { name: 'Danil B.', role: 'C-Suite', quota: QUOTA['Danil B.'], email: 'danilb@heyvacay.co' },
   { name: 'Priya N.', role: 'Account Executive', quota: QUOTA['Priya N.'], email: 'priya@heyvacay.co' },
   { name: 'Marcus L.', role: 'Account Executive', quota: QUOTA['Marcus L.'], email: 'marcus@heyvacay.co' },
 ];
@@ -327,6 +345,11 @@ export interface SalesCompany {
   tasks: CrmTask[];
   notes: Note[];
   activity: ActivityEntry[];
+  /** When true, this account uses its own star-tier commission and is NOT
+   *  affected by global commission changes. */
+  customCommission?: boolean;
+  /** Per-company star-tier rates (used only when customCommission is on). */
+  commissionStars?: Record<string, number>;
 }
 
 function steps(done: string[]): OnboardingStep[] {

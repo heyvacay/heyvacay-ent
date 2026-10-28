@@ -26,8 +26,9 @@ import { pipelineReportPdf } from '@/lib/pdf';
 import { Receipt, Sparkles } from '@/components/icons';
 
 export default function SalesDashboard() {
-  const { companies, reps } = useCrm();
+  const { companies, reps, commissionApprovals } = useCrm();
   const today = todayISO();
+  const pendingCommission = commissionApprovals.filter((a) => a.status === 'pending');
   const quotaFor = (name: string) => reps.find((r) => r.name === name)?.quota ?? 0;
 
   const count = (s: AccountStatus) => companies.filter((c) => c.status === s).length;
@@ -69,6 +70,27 @@ export default function SalesDashboard() {
           </Button>
         }
       />
+
+      {pendingCommission.length > 0 && (
+        <Link
+          href="/sales/commission"
+          className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 transition hover:border-amber-300"
+        >
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              {pendingCommission.length} commission change
+              {pendingCommission.length === 1 ? '' : 's'} need C-Suite approval
+            </p>
+            <p className="text-xs text-amber-700">
+              {pendingCommission
+                .slice(0, 3)
+                .map((a) => `${a.companyName} ${a.starRating}★→${a.toPercent}%`)
+                .join(' · ')}
+            </p>
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-amber-800">Review →</span>
+        </Link>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard accent label="Weighted forecast" value={money(Math.round(weightedPipeline(myDeals)))} sub="Your open deals" />

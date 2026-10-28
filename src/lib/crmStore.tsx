@@ -14,10 +14,14 @@ import {
   ONBOARDING_TEMPLATE,
   STAGE_PROBABILITY,
   DEFAULT_COMMISSION,
+  REP_COMMISSION_DOWN,
+  REP_COMMISSION_UP,
   ME,
   type AccountStatus,
   type CommissionState,
   type CommissionHistoryEntry,
+  type CommissionApproval,
+  type RepRole,
   type Contact,
   type Contract,
   type ContractTerms,
@@ -30,6 +34,7 @@ import {
   type Tier,
 } from './crm';
 import { todayISO, uid } from './format';
+import { sendEmail } from './email';
 
 const KEY = 'hv_crm_demo_v2';
 const REPS_KEY = 'hv_crm_reps_v1';
@@ -102,6 +107,26 @@ interface CrmApi {
     reason?: string;
   }) => void;
 
+  /** Who's viewing Nova — gates commission management (C-Suite only globally). */
+  viewerRole: RepRole;
+  setViewerRole: (r: RepRole) => void;
+  /** Effective global star-rate for a rating. */
+  globalStarRate: (starRating: number) => number;
+  /** Turn a company's own commission on/off (seeds from global on enable). */
+  setCompanyCustomCommission: (id: string, on: boolean) => void;
+  /**
+   * Set a company's star-rate. Reps can move it within [global-1, global+2];
+   * beyond that it's filed for C-Suite approval instead of applied. Returns
+   * what happened.
+   */
+  setCompanyStarRate: (
+    id: string,
+    starRating: number,
+    pct: number
+  ) => 'applied' | 'approval_requested';
+  commissionApprovals: CommissionApproval[];
+  resolveCommissionApproval: (approvalId: string, approve: boolean) => void;
+
   reset: () => void;
 }
 
@@ -126,6 +151,8 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<SalesCompany[]>(SEED_COMPANIES);
   const [reps, setReps] = useState<Rep[]>(SEED_REPS);
   const [commission, setCommissionState] = useState<CommissionState>(DEFAULT_COMMISSION);
+  const [viewerRole, setViewerRole] = useState<RepRole>('C-Suite');
+  const [commissionApprovals, setCommissionApprovals] = useState<CommissionApproval[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -554,6 +581,100 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const globalStarRate: CrmApi['globalStarRate'] = useCallback(
+    (starRating) =>
+      commission.starRules.find((r) => r.starRating === starRating)?.commissionPercent ?? 0,
+    [commission]
+  );
+
+  const setCompanyCustomCommission: CrmApi['setCompanyCustomCommission'] = useCallback(
+    (id, on) =>
+      patch(id, (c) => {
+        if (on && !c.commissionStars) {
+          const stars: Record<string, number> = {};
+          commission.starRules.forEach((r) => {
+            stars[String(r.starRating)] = r.commissionPercent;
+          });
+          return { ...c, customCommission: true, commissionStars: stars };
+        }
+        return { ...c, customCommission: on };
+      }),
+    [patch, commission]
+  );
+
+  const setCompanyStarRate: CrmApi['setCompanyStarRate'] = useCallback(
+    (id, starRating, pct) => {
+      const company = companies.find((c) => c.id === id);
+      const globalPct =
+        commission.starRules.find((r) => r.starRating === starRating)?.commissionPercent ?? 0;
+      const withinBand =
+        pct >= globalPct - REP_COMMISSION_DOWN && pct <= globalPct + REP_COMMISSION_UP;
+      if (viewerRole !== 'C-Suite' && !withinBand) {
+        // File for C-Suite approval; notify every C-Suite member.
+        const approval: CommissionApproval = {
+          id: uid('capp'),
+          companyId: id,
+          companyName: company?.name ?? id,
+          starRating,
+          fromPercent: company?.commissionStars?.[String(starRating)] ?? globalPct,
+          toPercent: pct,
+          globalPercent: globalPct,
+          requestedBy: ME,
+          requestedAt: new Date().toISOString(),
+          status: 'pending',
+        };
+        setCommissionApprovals((a) => [approval, ...a]);
+        reps
+          .filter((r) => r.role === 'C-Suite' && r.email)
+          .forEach((r) =>
+            sendEmail('approvalPending', r.email as string, {
+              manager: r.name,
+              travelerName: ME,
+              title: `Commission change — ${company?.name ?? id} ${starRating}★`,
+              dates: `${pct}% (global ${globalPct}%)`,
+              total: 0,
+              savings: 0,
+            })
+          );
+        return 'approval_requested';
+      }
+      patch(id, (c) => ({
+        ...c,
+        customCommission: true,
+        commissionStars: { ...(c.commissionStars ?? {}), [String(starRating)]: pct },
+      }));
+      return 'applied';
+    },
+    [companies, commission, viewerRole, reps, patch]
+  );
+
+  const resolveCommissionApproval: CrmApi['resolveCommissionApproval'] = useCallback(
+    (approvalId, approve) =>
+      setCommissionApprovals((list) =>
+        list.map((a) => {
+          if (a.id !== approvalId || a.status !== 'pending') return a;
+          if (approve) {
+            setCompanies((cs) =>
+              cs.map((c) =>
+                c.id === a.companyId
+                  ? {
+                      ...c,
+                      customCommission: true,
+                      commissionStars: {
+                        ...(c.commissionStars ?? {}),
+                        [String(a.starRating)]: a.toPercent,
+                      },
+                    }
+                  : c
+              )
+            );
+          }
+          return { ...a, status: approve ? 'approved' : 'rejected' };
+        })
+      ),
+    []
+  );
+
   const reset = useCallback(() => {
     try {
       localStorage.removeItem(KEY);
@@ -565,6 +686,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     setCompanies(SEED_COMPANIES);
     setReps(SEED_REPS);
     setCommissionState(DEFAULT_COMMISSION);
+    setCommissionApprovals([]);
   }, []);
 
   return (
@@ -596,6 +718,13 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         removeStarRule,
         upsertOverride,
         removeOverride,
+        viewerRole,
+        setViewerRole,
+        globalStarRate,
+        setCompanyCustomCommission,
+        setCompanyStarRate,
+        commissionApprovals,
+        resolveCommissionApproval,
         reset,
       }}
     >

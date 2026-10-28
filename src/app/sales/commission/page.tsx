@@ -5,7 +5,7 @@ import { useCrm } from '@/lib/crmStore';
 import type { CommissionScope } from '@/lib/crm';
 import { placesHotels, type HotelPlace } from '@/lib/search';
 import { Button, Card, PageHeader, cn } from '@/components/app/ui';
-import { MapPin, Building, Check } from '@/components/icons';
+import { MapPin, Building, Check, Lock } from '@/components/icons';
 
 /* ---------------- inline-editable percent (mirrors Nova) ---------------- */
 
@@ -13,10 +13,12 @@ function InlineEditablePercent({
   value,
   onSave,
   ariaLabel,
+  canEdit = true,
 }: {
   value: number;
   onSave: (pct: number) => void;
   ariaLabel?: string;
+  canEdit?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -40,6 +42,10 @@ function InlineEditablePercent({
     setEditing(false);
     setErr(null);
   };
+
+  if (!canEdit) {
+    return <span>{value.toFixed(2)}%</span>;
+  }
 
   if (!editing) {
     return (
@@ -301,7 +307,21 @@ const TABS: { id: Tab; label: string }[] = [
 const ALL_STARS = [0, 1, 2, 3, 4, 5];
 
 export default function CommissionPage() {
-  const { commission, upsertStarRule, removeStarRule, upsertOverride, removeOverride } = useCrm();
+  const {
+    commission,
+    upsertStarRule,
+    removeStarRule,
+    upsertOverride,
+    removeOverride,
+    viewerRole,
+    setViewerRole,
+    companies,
+    commissionApprovals,
+    resolveCommissionApproval,
+  } = useCrm();
+  const canManage = viewerRole === 'C-Suite';
+  const overrideCos = companies.filter((c) => c.customCommission);
+  const pending = commissionApprovals.filter((a) => a.status === 'pending');
   const [tab, setTab] = useState<Tab>('active');
   const [addStar, setAddStar] = useState(false);
   const [historyFor, setHistoryFor] = useState<{ scope: CommissionScope; label: string } | null>(null);
@@ -344,7 +364,75 @@ export default function CommissionPage() {
       <PageHeader
         title="Commission"
         subtitle="Set commission per hotel or region, with star ratings as the fallback. Hotel rules beat region rules; region rules beat the star-based rate."
+        actions={
+          <div className="inline-flex rounded-full bg-slate-100 p-1 text-xs">
+            {(['C-Suite', 'Account Executive'] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setViewerRole(r)}
+                className={cn(
+                  'rounded-full px-3 py-1 font-semibold',
+                  viewerRole === r ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                )}
+              >
+                {r === 'C-Suite' ? 'View as C-Suite' : 'View as Rep'}
+              </button>
+            ))}
+          </div>
+        }
       />
+
+      {!canManage && (
+        <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <span>
+            Only C-Suite can change the global commission. Reps manage per-company rates on each
+            company&apos;s Commission tab (within −{1}%/+{2}% of global before approval).
+          </span>
+        </div>
+      )}
+
+      {overrideCos.length > 0 && (
+        <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          <span className="font-semibold text-slate-800">Not applying to:</span>{' '}
+          {overrideCos.map((c) => c.name).join(', ')} — these accounts have a company-specific
+          override. Visit the company profile to change it.
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <Card className="mb-5 border-amber-200 bg-amber-50/60">
+          <h2 className="font-display text-base font-bold text-slate-900">
+            {pending.length} commission change{pending.length === 1 ? '' : 's'} awaiting approval
+          </h2>
+          <div className="mt-2 space-y-1.5">
+            {pending.map((a) => (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-amber-100"
+              >
+                <span className="text-slate-700">
+                  <span className="font-medium">{a.companyName}</span> · {a.starRating}★ →{' '}
+                  <span className="font-semibold">{a.toPercent}%</span>{' '}
+                  <span className="text-slate-400">(global {a.globalPercent}%, by {a.requestedBy})</span>
+                </span>
+                {canManage ? (
+                  <span className="flex gap-2">
+                    <Button size="sm" onClick={() => resolveCommissionApproval(a.id, true)}>
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => resolveCommissionApproval(a.id, false)}>
+                      Reject
+                    </Button>
+                  </span>
+                ) : (
+                  <span className="text-xs font-medium text-amber-700">Pending C-Suite</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="mb-6 flex gap-1 border-b border-slate-200">
         {TABS.map((t) => (
@@ -370,9 +458,11 @@ export default function CommissionPage() {
               Every active commission rule — star tiers, region rules, and hotel overrides — in one
               place. Hotel beats region; region beats star.
             </p>
-            <Button onClick={() => setAddStar(true)} disabled={availableStars.length === 0}>
-              + Add star tier
-            </Button>
+            {canManage && (
+              <Button onClick={() => setAddStar(true)} disabled={availableStars.length === 0}>
+                + Add star tier
+              </Button>
+            )}
           </div>
 
           <Card pad={false} className="overflow-x-auto">
@@ -395,6 +485,7 @@ export default function CommissionPage() {
                     <td className="px-4 py-3 font-semibold text-slate-800">
                       <InlineEditablePercent
                         value={r.pct}
+                        canEdit={canManage}
                         ariaLabel={`Commission for ${r.label}`}
                         onSave={(p) =>
                           r.scope === 'star'
@@ -418,22 +509,24 @@ export default function CommissionPage() {
                         >
                           History
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            r.scope === 'star'
-                              ? removeStarRule(r.starRating as number)
-                              : removeOverride({
-                                  scope: r.scope,
-                                  hotelHid: r.hotelHid,
-                                  regionId: r.regionId,
-                                  targetLabel: r.label,
-                                })
-                          }
-                        >
-                          <span className="text-red-600">Remove</span>
-                        </Button>
+                        {canManage && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              r.scope === 'star'
+                                ? removeStarRule(r.starRating as number)
+                                : removeOverride({
+                                    scope: r.scope,
+                                    hotelHid: r.hotelHid,
+                                    regionId: r.regionId,
+                                    targetLabel: r.label,
+                                  })
+                            }
+                          >
+                            <span className="text-red-600">Remove</span>
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -446,15 +539,15 @@ export default function CommissionPage() {
 
       {tab === 'region' && (
         <div className="space-y-8">
-          <OverrideAdder scope="region" />
-          <OverrideList scope="region" />
+          {canManage && <OverrideAdder scope="region" />}
+          <OverrideList scope="region" canEdit={canManage} />
         </div>
       )}
 
       {tab === 'hotel' && (
         <div className="space-y-8">
-          <OverrideAdder scope="hotel" />
-          <OverrideList scope="hotel" />
+          {canManage && <OverrideAdder scope="hotel" />}
+          <OverrideList scope="hotel" canEdit={canManage} />
         </div>
       )}
 
@@ -485,7 +578,7 @@ export default function CommissionPage() {
   );
 }
 
-function OverrideList({ scope }: { scope: 'hotel' | 'region' }) {
+function OverrideList({ scope, canEdit = true }: { scope: 'hotel' | 'region'; canEdit?: boolean }) {
   const { commission, upsertOverride, removeOverride } = useCrm();
   const scoped = commission.overrides.filter((o) => o.scope === scope);
   const isRegion = scope === 'region';
@@ -522,6 +615,7 @@ function OverrideList({ scope }: { scope: 'hotel' | 'region' }) {
                   <td className="px-4 py-3 font-semibold text-slate-800">
                     <InlineEditablePercent
                       value={o.commissionPercent}
+                      canEdit={canEdit}
                       ariaLabel={`Commission for ${o.targetLabel}`}
                       onSave={(p) =>
                         upsertOverride({
@@ -535,23 +629,25 @@ function OverrideList({ scope }: { scope: 'hotel' | 'region' }) {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 hover:bg-red-50"
-                        onClick={() =>
-                          removeOverride({
-                            scope: o.scope,
-                            hotelHid: o.hotelHid,
-                            regionId: o.regionId,
-                            targetLabel: o.targetLabel,
-                          })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() =>
+                            removeOverride({
+                              scope: o.scope,
+                              hotelHid: o.hotelHid,
+                              regionId: o.regionId,
+                              targetLabel: o.targetLabel,
+                            })
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

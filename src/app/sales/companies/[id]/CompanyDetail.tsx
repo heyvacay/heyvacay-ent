@@ -31,10 +31,15 @@ import {
   healthColor,
   nextBestAction,
   onboardingPct,
+  REP_COMMISSION_DOWN,
+  REP_COMMISSION_UP,
   type AccountStatus,
   type ContractStatus,
   type DealStage,
   type TaskType,
+  type SalesCompany,
+  type CommissionApproval,
+  type RepRole,
 } from '@/lib/crm';
 import { accountOnePagerPdf, contractPdf } from '@/lib/pdf';
 import { useAppLink } from '@/lib/appLink';
@@ -47,14 +52,16 @@ import {
   Receipt,
 } from '@/components/icons';
 
-type Tab = 'overview' | 'deals' | 'contracts' | 'tasks' | 'notes';
+type Tab = 'overview' | 'deals' | 'contracts' | 'commission' | 'tasks' | 'notes';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'deals', label: 'Deals' },
   { key: 'contracts', label: 'Contracts' },
+  { key: 'commission', label: 'Commission' },
   { key: 'tasks', label: 'Tasks' },
   { key: 'notes', label: 'Notes' },
 ];
+const COMMISSION_STARS = [5, 4, 3, 2, 1, 0];
 
 export default function CompanyDetail({ id }: { id: string }) {
   const {
@@ -69,6 +76,11 @@ export default function CompanyDetail({ id }: { id: string }) {
     toggleTask,
     setContractStatus,
     addNote,
+    viewerRole,
+    globalStarRate,
+    setCompanyCustomCommission,
+    setCompanyStarRate,
+    commissionApprovals,
   } = useCrm();
   const router = useRouter();
   const c = companyById(id);
@@ -309,6 +321,18 @@ export default function CompanyDetail({ id }: { id: string }) {
               company={c}
               onGenerate={() => setWizard(true)}
               setContractStatus={setContractStatus}
+            />
+          )}
+          {tab === 'commission' && (
+            <CommissionTab
+              company={c}
+              viewerRole={viewerRole}
+              globalStarRate={globalStarRate}
+              setCompanyCustomCommission={setCompanyCustomCommission}
+              setCompanyStarRate={setCompanyStarRate}
+              pending={commissionApprovals.filter(
+                (a) => a.companyId === c.id && a.status === 'pending'
+              )}
             />
           )}
           {tab === 'tasks' && <TasksTab company={c} addTask={addTask} toggleTask={toggleTask} />}
@@ -744,5 +768,142 @@ function NotesTab({
         </div>
       )}
     </Card>
+  );
+}
+
+function CommissionTab({
+  company,
+  viewerRole,
+  globalStarRate,
+  setCompanyCustomCommission,
+  setCompanyStarRate,
+  pending,
+}: {
+  company: SalesCompany;
+  viewerRole: RepRole;
+  globalStarRate: (star: number) => number;
+  setCompanyCustomCommission: (id: string, on: boolean) => void;
+  setCompanyStarRate: (id: string, star: number, pct: number) => 'applied' | 'approval_requested';
+  pending: CommissionApproval[];
+}) {
+  const [flash, setFlash] = useState<string | null>(null);
+  const on = !!company.customCommission;
+  const isCSuite = viewerRole === 'C-Suite';
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <Card>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={on}
+            onChange={(e) => setCompanyCustomCommission(company.id, e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+          />
+          <span>
+            <span className="block font-semibold text-slate-800">
+              Custom commission for {company.name}
+            </span>
+            <span className="block text-sm text-slate-400">
+              When on, this account uses its own star-tier rates and is excluded from global
+              commission changes.
+            </span>
+          </span>
+        </label>
+
+        {on && (
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <p className="mb-3 text-sm text-slate-500">
+              {isCSuite
+                ? 'As C-Suite you can set any rate.'
+                : `Reps can move each rate from −${REP_COMMISSION_DOWN}% to +${REP_COMMISSION_UP}% of the global rate; beyond that it's sent to C-Suite for approval.`}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {COMMISSION_STARS.map((s) => {
+                const g = globalStarRate(s);
+                const val = company.commissionStars?.[String(s)] ?? g;
+                return (
+                  <StarRateInput
+                    key={s}
+                    label={s === 0 ? '0★ (unrated)' : `${s}★`}
+                    global={g}
+                    value={val}
+                    onSave={(p) => {
+                      const r = setCompanyStarRate(company.id, s, p);
+                      setFlash(
+                        r === 'approval_requested'
+                          ? `${s}★ → ${p}% is outside the rep band — sent to C-Suite for approval.`
+                          : `${s}★ set to ${p}%.`
+                      );
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {flash && (
+          <p className="mt-4 rounded-lg bg-slate-50 p-2 text-sm text-slate-600">{flash}</p>
+        )}
+      </Card>
+
+      {pending.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/60">
+          <h3 className="font-display text-sm font-bold text-slate-900">Pending C-Suite approval</h3>
+          <div className="mt-2 space-y-1.5">
+            {pending.map((a) => (
+              <p key={a.id} className="text-sm text-slate-700">
+                {a.starRating}★ → <span className="font-semibold">{a.toPercent}%</span>{' '}
+                <span className="text-slate-400">
+                  (global {a.globalPercent}%, requested by {a.requestedBy})
+                </span>
+              </p>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function StarRateInput({
+  label,
+  global,
+  value,
+  onSave,
+}: {
+  label: string;
+  global: number;
+  value: number;
+  onSave: (pct: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-amber-500">{label}</span>
+        <span className="text-xs text-slate-400">global {global}%</span>
+      </div>
+      <div className="relative mt-2">
+        <input
+          type="number"
+          step="0.5"
+          min={0}
+          max={100}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            const n = Number(draft);
+            if (Number.isFinite(n) && n >= 0 && n <= 100 && n !== value) onSave(n);
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-7 text-right text-sm font-semibold text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+          %
+        </span>
+      </div>
+    </div>
   );
 }
