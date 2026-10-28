@@ -247,30 +247,58 @@ export interface Contract {
 
 /**
  * Commission configuration — how much HeyVacay earns on a booking. Mirrors the
- * consumer commission controls: a rate per hotel star tier, hotel-specific
- * overrides, and a base flight rate. A company either follows the global config
- * or (when customCommission is on) carries its own.
+ * Nova admin commission panel exactly: a rate per hotel star tier (the
+ * fallback) plus region and hotel overrides. Precedence: hotel beats region,
+ * region beats the star-based rate. Every change is logged to history.
  */
-export interface CommissionConfig {
-  /** Percent commission by hotel star rating, keyed "1".."5". */
-  starRates: Record<string, number>;
-  /** Hotel-specific overrides that beat the star tier. */
-  hotelOverrides: { hid?: string; name: string; pct: number }[];
-  /** Base commission on flights. */
-  flightPct: number;
+export type CommissionScope = 'star' | 'region' | 'hotel';
+
+export interface CommissionRule {
+  starRating: number; // 0–5 (0 = unrated/unknown)
+  commissionPercent: number;
 }
 
-export const DEFAULT_COMMISSION: CommissionConfig = {
-  starRates: { '1': 8, '2': 8, '3': 10, '4': 12, '5': 15 },
-  hotelOverrides: [],
-  flightPct: 5,
+export interface CommissionOverride {
+  id: string;
+  scope: 'hotel' | 'region';
+  hotelHid?: number | null;
+  regionId?: number | null;
+  targetLabel: string;
+  commissionPercent: number;
+  lastChangedBy: string | null;
+  lastChangedAt: string | null;
+}
+
+export interface CommissionHistoryEntry {
+  id: string;
+  scope: CommissionScope;
+  targetLabel: string;
+  action: 'created' | 'updated' | 'removed';
+  oldPercent: number | null;
+  newPercent: number | null;
+  changedBy: string;
+  changedAt: string;
+  reason?: string;
+}
+
+export interface CommissionState {
+  starRules: CommissionRule[];
+  overrides: CommissionOverride[];
+  history: CommissionHistoryEntry[];
+}
+
+export const DEFAULT_COMMISSION: CommissionState = {
+  starRules: [
+    { starRating: 0, commissionPercent: 8 },
+    { starRating: 1, commissionPercent: 8 },
+    { starRating: 2, commissionPercent: 9 },
+    { starRating: 3, commissionPercent: 10 },
+    { starRating: 4, commissionPercent: 12 },
+    { starRating: 5, commissionPercent: 15 },
+  ],
+  overrides: [],
+  history: [],
 };
-
-/** Blended rate for a company's hotel spend, from its star-tier rates. */
-export function blendedHotelRate(cfg: CommissionConfig): number {
-  const vals = [5, 4, 3, 2, 1].map((s) => cfg.starRates[String(s)] ?? 0);
-  return vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
-}
 
 export interface SalesCompany {
   id: string;
@@ -299,10 +327,6 @@ export interface SalesCompany {
   tasks: CrmTask[];
   notes: Note[];
   activity: ActivityEntry[];
-  /** When true, this account uses its own `commission` and is NOT affected by
-   *  global commission changes. */
-  customCommission?: boolean;
-  commission?: CommissionConfig;
 }
 
 function steps(done: string[]): OnboardingStep[] {

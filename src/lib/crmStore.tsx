@@ -16,7 +16,8 @@ import {
   DEFAULT_COMMISSION,
   ME,
   type AccountStatus,
-  type CommissionConfig,
+  type CommissionState,
+  type CommissionHistoryEntry,
   type Contact,
   type Contract,
   type ContractTerms,
@@ -81,15 +82,25 @@ interface CrmApi {
   updateRep: (name: string, patch: Partial<Rep>) => void;
   removeRep: (name: string) => void;
 
-  /** Global commission config that governs every non-custom company. */
-  commission: CommissionConfig;
-  setCommission: (cfg: CommissionConfig) => void;
-  /** Turn custom commission on/off for a company (seeds from global on enable). */
-  setCustomCommission: (id: string, on: boolean) => void;
-  /** Update a single company's own commission config. */
-  setCompanyCommission: (id: string, cfg: CommissionConfig) => void;
-  /** Effective config for a company (its own when custom, else global). */
-  commissionFor: (id: string) => CommissionConfig;
+  /** Global commission config (star fallback + region/hotel overrides). */
+  commission: CommissionState;
+  upsertStarRule: (starRating: number, commissionPercent: number, reason?: string) => void;
+  removeStarRule: (starRating: number, reason?: string) => void;
+  upsertOverride: (args: {
+    scope: 'hotel' | 'region';
+    hotelHid?: number | null;
+    regionId?: number | null;
+    targetLabel: string;
+    commissionPercent: number;
+    reason?: string;
+  }) => void;
+  removeOverride: (args: {
+    scope: 'hotel' | 'region';
+    hotelHid?: number | null;
+    regionId?: number | null;
+    targetLabel: string;
+    reason?: string;
+  }) => void;
 
   reset: () => void;
 }
@@ -114,7 +125,7 @@ function hydrateCompany(c: Partial<SalesCompany>): SalesCompany {
 export function CrmProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<SalesCompany[]>(SEED_COMPANIES);
   const [reps, setReps] = useState<Rep[]>(SEED_REPS);
-  const [commission, setCommissionState] = useState<CommissionConfig>(DEFAULT_COMMISSION);
+  const [commission, setCommissionState] = useState<CommissionState>(DEFAULT_COMMISSION);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -131,8 +142,8 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       }
       const rawComm = localStorage.getItem(COMMISSION_KEY);
       if (rawComm) {
-        const parsed = JSON.parse(rawComm) as CommissionConfig;
-        if (parsed?.starRates) setCommissionState(parsed);
+        const parsed = JSON.parse(rawComm) as CommissionState;
+        if (parsed?.starRules) setCommissionState(parsed);
       }
     } catch {
       /* ignore */
@@ -412,29 +423,135 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const setCommission: CrmApi['setCommission'] = useCallback((cfg) => setCommissionState(cfg), []);
+  const hist = (
+    e: Omit<CommissionHistoryEntry, 'id' | 'changedBy' | 'changedAt'>
+  ): CommissionHistoryEntry => ({
+    id: uid('ch'),
+    changedBy: ME,
+    changedAt: new Date().toISOString(),
+    ...e,
+  });
 
-  const setCustomCommission: CrmApi['setCustomCommission'] = useCallback(
-    (id, on) =>
-      patch(id, (c) => ({
-        ...c,
-        customCommission: on,
-        commission: on ? c.commission ?? { ...commission } : c.commission,
-      })),
-    [patch, commission]
+  const upsertStarRule: CrmApi['upsertStarRule'] = useCallback(
+    (starRating, commissionPercent, reason) =>
+      setCommissionState((s) => {
+        const existing = s.starRules.find((r) => r.starRating === starRating);
+        const starRules = existing
+          ? s.starRules.map((r) => (r.starRating === starRating ? { ...r, commissionPercent } : r))
+          : [...s.starRules, { starRating, commissionPercent }];
+        return {
+          ...s,
+          starRules,
+          history: [
+            hist({
+              scope: 'star',
+              targetLabel: `${starRating}★`,
+              action: existing ? 'updated' : 'created',
+              oldPercent: existing?.commissionPercent ?? null,
+              newPercent: commissionPercent,
+              reason,
+            }),
+            ...s.history,
+          ],
+        };
+      }),
+    []
   );
 
-  const setCompanyCommission: CrmApi['setCompanyCommission'] = useCallback(
-    (id, cfg) => patch(id, (c) => ({ ...c, commission: cfg, customCommission: true })),
-    [patch]
+  const removeStarRule: CrmApi['removeStarRule'] = useCallback(
+    (starRating, reason) =>
+      setCommissionState((s) => {
+        const existing = s.starRules.find((r) => r.starRating === starRating);
+        if (!existing) return s;
+        return {
+          ...s,
+          starRules: s.starRules.filter((r) => r.starRating !== starRating),
+          history: [
+            hist({
+              scope: 'star',
+              targetLabel: `${starRating}★`,
+              action: 'removed',
+              oldPercent: existing.commissionPercent,
+              newPercent: null,
+              reason,
+            }),
+            ...s.history,
+          ],
+        };
+      }),
+    []
   );
 
-  const commissionFor: CrmApi['commissionFor'] = useCallback(
-    (id) => {
-      const c = companies.find((x) => x.id === id);
-      return c?.customCommission && c.commission ? c.commission : commission;
-    },
-    [companies, commission]
+  const overrideKey = (o: { scope: string; hotelHid?: number | null; regionId?: number | null }) =>
+    o.scope === 'hotel' ? `hotel-${o.hotelHid}` : `region-${o.regionId}`;
+
+  const upsertOverride: CrmApi['upsertOverride'] = useCallback(
+    ({ scope, hotelHid, regionId, targetLabel, commissionPercent, reason }) =>
+      setCommissionState((s) => {
+        const key = overrideKey({ scope, hotelHid, regionId });
+        const existing = s.overrides.find((o) => overrideKey(o) === key);
+        const now = new Date().toISOString();
+        const overrides = existing
+          ? s.overrides.map((o) =>
+              overrideKey(o) === key
+                ? { ...o, commissionPercent, targetLabel, lastChangedBy: ME, lastChangedAt: now }
+                : o
+            )
+          : [
+              ...s.overrides,
+              {
+                id: uid('cov'),
+                scope,
+                hotelHid: scope === 'hotel' ? hotelHid ?? null : null,
+                regionId: scope === 'region' ? regionId ?? null : null,
+                targetLabel,
+                commissionPercent,
+                lastChangedBy: ME,
+                lastChangedAt: now,
+              },
+            ];
+        return {
+          ...s,
+          overrides,
+          history: [
+            hist({
+              scope,
+              targetLabel,
+              action: existing ? 'updated' : 'created',
+              oldPercent: existing?.commissionPercent ?? null,
+              newPercent: commissionPercent,
+              reason,
+            }),
+            ...s.history,
+          ],
+        };
+      }),
+    []
+  );
+
+  const removeOverride: CrmApi['removeOverride'] = useCallback(
+    ({ scope, hotelHid, regionId, targetLabel, reason }) =>
+      setCommissionState((s) => {
+        const key = overrideKey({ scope, hotelHid, regionId });
+        const existing = s.overrides.find((o) => overrideKey(o) === key);
+        if (!existing) return s;
+        return {
+          ...s,
+          overrides: s.overrides.filter((o) => overrideKey(o) !== key),
+          history: [
+            hist({
+              scope,
+              targetLabel: targetLabel || existing.targetLabel,
+              action: 'removed',
+              oldPercent: existing.commissionPercent,
+              newPercent: null,
+              reason,
+            }),
+            ...s.history,
+          ],
+        };
+      }),
+    []
   );
 
   const reset = useCallback(() => {
@@ -475,10 +592,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         updateRep,
         removeRep,
         commission,
-        setCommission,
-        setCustomCommission,
-        setCompanyCommission,
-        commissionFor,
+        upsertStarRule,
+        removeStarRule,
+        upsertOverride,
+        removeOverride,
         reset,
       }}
     >

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
 import { Button, Card, Field, Input, cn } from '@/components/app/ui';
 import { HotelAllowPicker, type AllowHotel } from '@/components/app/HotelAllowPicker';
+import { placesHotels, type HotelPlace } from '@/lib/search';
 import { HvRangeField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
 import { addDays, todayISO, shortDate, dateRange } from '@/lib/format';
@@ -31,6 +32,7 @@ export default function NewEventPage() {
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
+  const [cityPlace, setCityPlace] = useState<HotelPlace | null>(null);
   const [start, setStart] = useState(params.get('start') || addDays(todayISO(), 21));
   const [end, setEnd] = useState(params.get('end') || addDays(todayISO(), 23));
   const activeUsers = state.users.filter((u) => u.status === 'active');
@@ -83,6 +85,9 @@ export default function NewEventPage() {
       allowHotelList,
       allowFlights: routes,
       attendees,
+      regionId: cityPlace?.regionId,
+      lat: cityPlace?.lat,
+      lng: cityPlace?.lng,
     });
     // Let everyone who was added know (no-ops without an email provider key).
     activeUsers
@@ -179,8 +184,18 @@ export default function NewEventPage() {
                   autoFocus
                 />
               </Field>
-              <Field label="City">
-                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Austin" />
+              <Field label="City" hint="Pick a city from search — event-only booking is locked to it.">
+                <CityPicker
+                  value={city}
+                  onText={(v) => {
+                    setCity(v);
+                    setCityPlace(null);
+                  }}
+                  onPick={(p) => {
+                    setCity(p.label);
+                    setCityPlace(p);
+                  }}
+                />
               </Field>
               <Field label="Dates">
                 <HvRangeField
@@ -352,6 +367,80 @@ export default function NewEventPage() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function CityPicker({
+  value,
+  onText,
+  onPick,
+}: {
+  value: string;
+  onText: (v: string) => void;
+  onPick: (p: HotelPlace) => void;
+}) {
+  const [items, setItems] = useState<HotelPlace[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const term = value.trim();
+    if (term.length < 2) {
+      setItems([]);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const places = await placesHotels(term);
+        if (live) setItems(places.filter((p) => p.type === 'region').slice(0, 6));
+      } catch {
+        if (live) setItems([]);
+      }
+    }, 240);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [value]);
+
+  return (
+    <div className="relative">
+      <Input
+        value={value}
+        onChange={(e) => {
+          onText(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search a city…"
+        autoComplete="off"
+      />
+      {open && items.length > 0 && (
+        <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          {items.map((p, i) => (
+            <li key={`${p.regionId}-${i}`}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick(p);
+                  setItems([]);
+                  setOpen(false);
+                }}
+                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+              >
+                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-dark" />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-slate-800">{p.label}</span>
+                  {p.sub && <span className="block truncate text-xs text-slate-400">{p.sub}</span>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
