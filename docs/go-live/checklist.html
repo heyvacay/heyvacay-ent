@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HeyVacay Enterprise — Go-Live Checklist</title>
+<style>
+  :root {
+    --brand: #23e3ef;
+    --brand-dark: #10c3d4;
+    --navy: #0a1426;
+    --navy-deep: #060d1b;
+    --ink: #0f172a;
+    --slate: #475569;
+    --muted: #94a3b8;
+    --line: #e2e8f0;
+    --bg-soft: #f1f5f9;
+    --green: #059669;
+    --green-bg: #ecfdf5;
+    --amber: #b45309;
+    --amber-bg: #fffbeb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 820px;
+    margin: 0 auto;
+    padding: 0 48px 40px;
+  }
+  /* cover / header */
+  .cover {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+    color: #fff;
+    margin: 0 -48px 28px;
+    padding: 44px 48px 40px;
+  }
+  .cover .logo { height: 34px; margin-bottom: 26px; filter: brightness(0) invert(1); }
+  .cover .ent {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--brand);
+    font-weight: 700;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+  .cover h1 { font-size: 30px; line-height: 1.15; margin: 0 0 10px; font-weight: 800; letter-spacing: -0.5px; }
+  .cover p { margin: 0; color: #cbd5e1; max-width: 560px; font-size: 13px; }
+  .cover .meta { margin-top: 22px; font-size: 11px; color: #64748b; }
+
+  h2 {
+    font-size: 17px;
+    font-weight: 800;
+    margin: 30px 0 4px;
+    letter-spacing: -0.3px;
+    color: var(--ink);
+  }
+  h2 .num {
+    display: inline-grid; place-items: center;
+    width: 24px; height: 24px; border-radius: 7px;
+    background: var(--brand); color: var(--navy-deep);
+    font-size: 12px; font-weight: 800; margin-right: 9px;
+    vertical-align: 2px;
+  }
+  .sub { color: var(--slate); margin: 0 0 14px; font-size: 12px; }
+
+  .tag {
+    display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: .04em;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px; vertical-align: 2px;
+    margin-left: 8px;
+  }
+  .tag.done { background: var(--green-bg); color: var(--green); border: 1px solid #a7f3d0; }
+  .tag.action { background: var(--amber-bg); color: var(--amber); border: 1px solid #fcd34d; }
+
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 10px 0; }
+  .card.soft { background: var(--bg-soft); border-color: transparent; }
+
+  ol.steps { margin: 8px 0 0; padding-left: 0; counter-reset: step; list-style: none; }
+  ol.steps > li {
+    position: relative; padding: 0 0 10px 30px; counter-increment: step;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 0;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--navy); color: #fff; font-size: 10.5px; font-weight: 700;
+    display: grid; place-items: center;
+  }
+  ol.steps ul { margin: 5px 0 0; padding-left: 16px; color: var(--slate); }
+  ol.steps ul li { margin: 2px 0; }
+
+  code, .mono {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    background: #0f1d35; color: #7dd3fc; padding: 1.5px 6px; border-radius: 5px;
+    font-size: 10.5px; word-break: break-all;
+  }
+  .kv { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .kv td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .kv td:first-child { color: var(--slate); white-space: nowrap; width: 38%; font-weight: 600; }
+  .kv tr:last-child td { border-bottom: none; }
+
+  .note {
+    border-left: 3px solid var(--brand); background: #ecfeff;
+    padding: 9px 13px; border-radius: 0 8px 8px 0; margin: 10px 0; color: #0e7490; font-size: 11.5px;
+  }
+  .warn { border-left-color: #f59e0b; background: var(--amber-bg); color: #92400e; }
+
+  .check { display: flex; align-items: flex-start; gap: 9px; margin: 7px 0; }
+  .box { width: 14px; height: 14px; border: 2px solid var(--muted); border-radius: 4px; flex: none; margin-top: 2px; }
+
+  .section-break { page-break-before: always; }
+  .where { font-size: 11px; color: var(--slate); margin: 2px 0 8px; }
+  .where b { color: var(--ink); }
+  a { color: var(--brand-dark); text-decoration: none; }
+  .foot { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; text-align: center; }
+  .pill-legend { display: flex; gap: 18px; margin-top: 14px; font-size: 11px; color: var(--slate); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="cover">
+    <img class="logo" src="./logo.svg" alt="HeyVacay" /><span class="ent">Enterprise</span>
+    <h1>Go-Live Checklist &amp; Setup Guide</h1>
+    <p>Exact, step-by-step instructions to take HeyVacay Enterprise from staging to production — every
+       integration, where to go, and precisely what to click. Items marked <b style="color:#6ee7b7">DONE</b>
+       are already built and deployed; items marked <b style="color:#fcd34d">ACTION NEEDED</b> are yours.</p>
+    <div class="meta">Prepared for Danil B. · ent.stage.heyvacay.co · AWS account 256309399831 · us-west-2</div>
+    <div class="pill-legend">
+      <span><span class="tag done" style="margin:0">Done</span> built &amp; shipped by us</span>
+      <span><span class="tag action" style="margin:0">Action needed</span> a key, DNS record, or merge you perform</span>
+    </div>
+  </div>
+
+  <!-- 0 -->
+  <h2><span class="num">0</span>How deploys work <span class="tag done">Done</span></h2>
+  <p class="sub">So the steps below make sense, here is the pipeline that is already wired up.</p>
+  <div class="card soft">
+    <table class="kv">
+      <tr><td>Staging app</td><td><a>https://ent.stage.heyvacay.co</a> (live now)</td></tr>
+      <tr><td>Deploy trigger</td><td>Merging a PR into the <code>stage</code> branch auto-deploys. (Or run the <b>Stage Web Enterprise - Deploy</b> workflow manually from the Actions tab.)</td></tr>
+      <tr><td>AWS runtime</td><td>ECS Fargate — cluster <code>stage-heyvacay-cluster</code>, service &amp; task <code>stage-heyvacay-ent</code>, container name <code>ent</code>, region <code>us-west-2</code>.</td></tr>
+      <tr><td>Infra as code</td><td>The task definition (CPU, memory, env vars, secrets) lives in the <b>heyvacay-iac</b> repo → <code>ent.tf</code>.</td></tr>
+      <tr><td>Current branch</td><td>All the work described here is on <code>claude/real-search</code>, ready to merge.</td></tr>
+    </table>
+  </div>
+  <div class="note">Every integration below follows the <b>same pattern</b>: the app already calls the live API when its
+    secret is present, and falls back to realistic demo data when it isn't. So "turning it on" always means the same
+    three moves — <b>(a)</b> store the key in AWS Secrets Manager, <b>(b)</b> reference it in <code>ent.tf</code>,
+    <b>(c)</b> redeploy. No code changes needed.</div>
+
+  <!-- A -->
+  <h2 class="section-break"><span class="num">1</span>Ship everything to production <span class="tag action">Action needed</span></h2>
+  <p class="sub">Promote the completed work so it is live on the real domain.</p>
+  <div class="card">
+    <ol class="steps">
+      <li><b>Open the pull request.</b>
+        <ul>
+          <li>Go to <code>github.com/heyvacay/heyvacay-ent</code> → <b>Pull requests</b> → <b>New pull request</b>.</li>
+          <li>Base = <code>stage</code>, compare = <code>claude/real-search</code>. Click <b>Create pull request</b>, then <b>Merge</b>.</li>
+          <li>The merge auto-runs the deploy workflow. Watch it under the <b>Actions</b> tab → <b>Stage Web Enterprise - Deploy</b>.</li>
+        </ul>
+      </li>
+      <li><b>Verify staging.</b> When the workflow is green, open <a>https://ent.stage.heyvacay.co</a> and spot-check sign-in, a booking, and Nova.</li>
+      <li><b>Promote to production</b> (once a prod environment/branch exists — e.g. <code>main</code> → <code>ent.heyvacay.co</code>). Repeat the merge into the production branch. If production infra isn't stood up yet, see step&nbsp;8 (DNS).</li>
+    </ol>
+  </div>
+
+  <!-- B: STRIPE -->
+  <h2><span class="num">2</span>Payments — Stripe (same processor as heyvacay.co) <span class="tag action">Action needed</span></h2>
+  <p class="sub">The checkout already initializes payment through the shared HeyVacay backend and the same tracking tags.
+     You only need to make sure the keys are present.</p>
+  <div class="card">
+    <div class="where"><b>Where:</b> AWS Secrets Manager → then heyvacay-iac → then redeploy.</div>
+    <ol class="steps">
+      <li><b>Get the exact keys heyvacay.co uses.</b> In the Stripe Dashboard (<a>dashboard.stripe.com</a>) → <b>Developers → API keys</b>, copy the <b>same</b> live <b>Secret key</b> (<code>sk_live_…</code>) and <b>Publishable key</b> (<code>pk_live_…</code>) that heyvacay.co runs on. (Same Stripe account = same processor, same payout, same reporting.)</li>
+      <li><b>Store them as secrets.</b> AWS Console → <b>Secrets Manager</b> (us-west-2) → <b>Store a new secret</b> → <b>Other type of secret</b> → add key/value pairs:
+        <ul>
+          <li><code>STRIPE_SECRET_KEY</code> = your <code>sk_live_…</code></li>
+          <li><code>STRIPE_PUBLISHABLE_KEY</code> = your <code>pk_live_…</code></li>
+        </ul>
+        Name it e.g. <code>stage/heyvacay-ent/stripe</code> and save. Copy the resulting secret ARN.
+      </li>
+      <li><b>Reference them on the container.</b> In <b>heyvacay-iac</b> → <code>ent.tf</code>, add to the task definition's <code>secrets</code> block (one entry per key), pointing <code>valueFrom</code> at the secret ARN + JSON key. Run <code>terraform apply</code>.</li>
+      <li><b>Confirm the payment-tracking endpoint.</b> The app POSTs to <code>&#123;ENT_API_BASE_URL&#125;/bookings/payment/init-stripe</code> with metadata tags <code>source: heyvacay-enterprise</code>, <code>product: corporate-travel</code>. Make sure <code>ENT_API_BASE_URL</code> points at the same backend heyvacay.co uses so charges land in the same ledger. (Defaults to <code>https://api.stage.heyvacay.co</code>.)</li>
+      <li><b>Redeploy &amp; test</b> (step 1). Do a $1 test booking; confirm it appears in the Stripe Dashboard → <b>Payments</b> with the metadata tags, then refund it.</li>
+    </ol>
+  </div>
+  <div class="note">Already done for you: the full Stripe Elements checkout, saved-card option, the booking + <b>booking-confirmed</b>
+    screens matched to heyvacay.co (including the confetti), and the metadata tags. Without keys, checkout stays in clearly-labelled DEMO MODE — no real charge.</div>
+
+  <!-- C: OPENTABLE -->
+  <h2 class="section-break"><span class="num">3</span>Dining — OpenTable API <span class="tag action">Action needed</span></h2>
+  <p class="sub">Powers the restaurant directory, availability and reservations used by the Events dinner flow.</p>
+  <div class="card">
+    <div class="where"><b>Where:</b> OpenTable for Partners → AWS Secrets Manager → heyvacay-iac → redeploy.</div>
+    <ol class="steps">
+      <li><b>Request API access.</b> Go to <a>https://platform.opentable.com</a> (OpenTable Partner / Affiliate program). Sign in with the HeyVacay OpenTable partner account, or click <b>Become a partner</b> and complete the application for API access.</li>
+      <li><b>Create an app / credentials.</b> In the partner portal → <b>Apps</b> (or <b>Credentials</b>) → <b>Create app</b>. OpenTable will issue either a single <b>API key</b> or an OAuth <b>Client ID + Client Secret</b>.</li>
+      <li><b>Note the base URL.</b> Default is <code>https://platform.opentable.com</code>. If your partner docs specify a different host, keep it handy for <code>OPENTABLE_API_BASE</code>.</li>
+      <li><b>Store the secret(s)</b> in Secrets Manager (as in step 2), using whichever you were issued:
+        <ul>
+          <li><code>OPENTABLE_API_KEY</code>, <b>or</b></li>
+          <li><code>OPENTABLE_CLIENT_ID</code> + <code>OPENTABLE_CLIENT_SECRET</code></li>
+          <li>(optional) <code>OPENTABLE_API_BASE</code> if non-default</li>
+        </ul>
+      </li>
+      <li><b>Reference in <code>ent.tf</code></b> → <code>terraform apply</code> → <b>redeploy</b> (step 1).</li>
+      <li><b>Verify.</b> Open the app → <b>Events → dinner</b> flow; live restaurants and times should now appear instead of demo data.</li>
+    </ol>
+  </div>
+  <div class="note">Already done: the full dining UI, search, RSVP and dinner-invite emails. The moment the key is present the same screens call OpenTable live.</div>
+
+  <!-- D: EMAIL -->
+  <h2><span class="num">4</span>Transactional email <span class="tag action">Action needed</span></h2>
+  <p class="sub">Sends approval requests, offers, event-added notices, dinner invites, and the C-Suite commission alerts.</p>
+  <div class="card">
+    <div class="where"><b>Where:</b> your email provider → Secrets Manager → heyvacay-iac → redeploy.</div>
+    <ol class="steps">
+      <li><b>Pick/confirm the provider heyvacay.co uses</b> (e.g. SendGrid, Postmark, or AWS SES). Log in and create an <b>API key</b> with send permission.</li>
+      <li><b>Verify the sender domain</b> in the provider so mail from <code>notifications@heyvacay.co</code> passes SPF/DKIM. (For SES: Verified identities → add domain → publish the DNS records it gives you.)</li>
+      <li><b>Store secrets:</b> <code>EMAIL_API_KEY</code> = the key; <code>EMAIL_FROM</code> = <code>notifications@heyvacay.co</code> (or your preferred from-address).</li>
+      <li><b>Reference in <code>ent.tf</code></b> → <code>terraform apply</code> → <b>redeploy</b>.</li>
+      <li><b>Verify.</b> Submit a trip for approval; the approver should receive a branded email. Also confirm a C-Suite commission-limit alert sends when a rep exceeds the ±band.</li>
+    </ol>
+  </div>
+
+  <!-- E: WEATHER + FLIGHT -->
+  <h2><span class="num">5</span>Live trip data — Weather &amp; Flight status <span class="tag action">Action needed</span></h2>
+  <p class="sub">Optional polish for the active-trip view. Everything works without them (demo data); add keys to go live.</p>
+  <div class="card">
+    <b>Weather (OpenWeather)</b>
+    <ol class="steps">
+      <li>Create a free key at <a>https://openweathermap.org/api</a> → <b>Sign up</b> → <b>API keys</b>.</li>
+      <li>Store <code>WEATHER_API_KEY</code> in Secrets Manager (base defaults to OpenWeather; override with <code>WEATHER_API_BASE</code> if needed).</li>
+      <li>Reference in <code>ent.tf</code> → apply → redeploy.</li>
+    </ol>
+    <div style="height:10px"></div>
+    <b>Flight status</b>
+    <ol class="steps">
+      <li>Choose a provider (e.g. AviationStack <a>aviationstack.com</a>, or FlightAware AeroAPI). Sign up and copy the API key + its base URL.</li>
+      <li>Store both: <code>FLIGHT_STATUS_API_KEY</code> and <code>FLIGHT_STATUS_API_BASE</code> (both are required for it to go live).</li>
+      <li>Reference in <code>ent.tf</code> → apply → redeploy.</li>
+    </ol>
+  </div>
+
+  <!-- F: DNS + LOGIN + DOMAIN JOIN -->
+  <h2 class="section-break"><span class="num">6</span>DNS, login screens &amp; domain self-join <span class="tag action">Action needed</span></h2>
+  <p class="sub">The login screens are built and waiting; they go live the moment DNS points at the app.</p>
+  <div class="card">
+    <div class="where"><b>Where:</b> your DNS provider (Route 53 / registrar) + heyvacay-iac.</div>
+    <ol class="steps">
+      <li><b>Production subdomain.</b> In Route 53 (or your DNS host) create an <b>A / ALIAS</b> record for <code>ent.heyvacay.co</code> pointing at the Enterprise load balancer (ALB) created by heyvacay-iac. Add it to the ALB listener + ACM certificate (SAN) so HTTPS is valid.</li>
+      <li><b>Internal Nova subdomain</b> (optional). Point <code>ent.nova.heyvacay.co</code> at the same service if you want the internal console on its own host; otherwise it stays at <code>/nova</code> on the app.</li>
+      <li><b>Login screens</b> — already built at <code>/signin</code> (SSO buttons, work-email, and a domain-join hint) and <code>/signup</code>. No action beyond DNS; they render on the new domain automatically.</li>
+      <li><b>Domain self-join backend.</b> The UI is done: on each company profile (Sales → Companies → a company → <b>Domain self-join</b>) you register the company's email domain and toggle auto-join. To make it enforce for real, the auth backend must, on email verification: match the verified domain to a company with self-join enabled and create the user at the <b>lowest (traveler)</b> role. Hand this spec to the backend team — the enterprise app reads the flag and surfaces the hint today.</li>
+      <li><b>Verify.</b> Hit <code>https://ent.heyvacay.co/signin</code>, type a corporate-domain email, and confirm the "you'll be added automatically once verified" hint appears.</li>
+    </ol>
+  </div>
+
+  <!-- G: WHAT'S ALREADY DONE -->
+  <h2 class="section-break"><span class="num">7</span>Everything already built for you <span class="tag done">Done</span></h2>
+  <p class="sub">Shipped on <code>claude/real-search</code> and covered by this UAT round — no action required.</p>
+  <div class="card">
+    <div class="check"><span class="box"></span><div><b>Dark-mode &amp; contrast fixes</b> — swept the whole app (incl. Nova) for invisible text; fixed the hotel/flights buttons and the white-on-white pricing calculator input.</div></div>
+    <div class="check"><span class="box"></span><div><b>Booking + booking-confirmed screens</b> rebuilt to match heyvacay.co exactly, including the confetti animation.</div></div>
+    <div class="check"><span class="box"></span><div><b>Stripe checkout</b> (Elements + saved card) routed through the same backend, same keys, same tracking tags.</div></div>
+    <div class="check"><span class="box"></span><div><b>Home-city prompt</b> for new users; attendees &gt;50&nbsp;mi away flagged as needing a hotel, and unbooked attendees light up <b>red</b> on the event dashboard.</div></div>
+    <div class="check"><span class="box"></span><div><b>Per-company commission tab</b> with an override checkbox; the commission dashboard lists which companies won't follow global changes.</div></div>
+    <div class="check"><span class="box"></span><div><b>C-Suite role</b> — only C-Suite manages the commission dashboard; reps can move company rates only 1% down / 2% up before it emails every C-Suite member and flags the CRM dashboard.</div></div>
+    <div class="check"><span class="box"></span><div><b>Nova booking management</b> — full cross-account console (cancel, special requests, detail drawer) matching heyvacay.co's admin, with the same information.</div></div>
+    <div class="check"><span class="box"></span><div><b>Events</b> — clearer city selection, click-to-autofill (city/dates), allow-list-only hotels with a traveler warning, and "booking for this event" context.</div></div>
+    <div class="check"><span class="box"></span><div><b>Allow-list policy bug fixed</b> — in-policy event bookings no longer force manager approval.</div></div>
+    <div class="check"><span class="box"></span><div><b>Natural-language reporting</b> — type a phrase (e.g. "amount for Lufthansa in 2018 by top 10 countries by report owner") and it builds the structured report.</div></div>
+    <div class="check"><span class="box"></span><div><b>Supplier names removed</b> from the trip-approval screen.</div></div>
+    <div class="check"><span class="box"></span><div><b>Access control</b> — employees no longer see admin controls; a scoped access-denied screen shows while keeping the sidebar.</div></div>
+    <div class="check"><span class="box"></span><div><b>Points consistency</b> — search and approval now award points the same way, and the <b>0.0 rating badge</b> is gone.</div></div>
+    <div class="check"><span class="box"></span><div><b>Expenses overhaul</b> — receipt scanning, virtual cards, per diems and calendar sync delivered.</div></div>
+    <div class="check"><span class="box"></span><div><b>Real HeyVacay logo</b> with the blue "Enterprise" lockup across the app, Nova, login, contracts and reports.</div></div>
+    <div class="check"><span class="box"></span><div><b>Interactive New Company flow</b> that captures account reps (points of contact) and domain self-join.</div></div>
+  </div>
+
+  <!-- H: quick reference -->
+  <h2><span class="num">8</span>Quick reference — all env vars <span class="tag action">Action needed</span></h2>
+  <div class="card soft">
+    <table class="kv">
+      <tr><td>ENT_API_BASE_URL</td><td>Shared HeyVacay backend (flights, hotels, Stripe init). Point at the same backend as heyvacay.co.</td></tr>
+      <tr><td>STRIPE_SECRET_KEY</td><td><code>sk_live_…</code> — same Stripe account as heyvacay.co.</td></tr>
+      <tr><td>STRIPE_PUBLISHABLE_KEY</td><td><code>pk_live_…</code></td></tr>
+      <tr><td>OPENTABLE_API_KEY <span style="color:#94a3b8">or</span> OPENTABLE_CLIENT_ID + OPENTABLE_CLIENT_SECRET</td><td>Dining. Optional <code>OPENTABLE_API_BASE</code>.</td></tr>
+      <tr><td>EMAIL_API_KEY / EMAIL_FROM</td><td>Transactional email + sender.</td></tr>
+      <tr><td>WEATHER_API_KEY</td><td>OpenWeather (active-trip view).</td></tr>
+      <tr><td>FLIGHT_STATUS_API_KEY / FLIGHT_STATUS_API_BASE</td><td>Live flight status (both required).</td></tr>
+    </table>
+  </div>
+  <div class="note warn"><b>Golden rule:</b> each secret goes into <b>AWS Secrets Manager</b> (us-west-2), is referenced in
+    <b>heyvacay-iac → ent.tf</b> under the task's <code>secrets</code>, then a <b>redeploy</b> picks it up. Missing keys never
+    break the app — they just keep that one feature in demo mode.</div>
+
+  <div class="foot">HeyVacay Enterprise · Go-Live Checklist · Generated for the ent.stage.heyvacay.co rollout · Confidential</div>
+
+</div>
+</body>
+</html>
