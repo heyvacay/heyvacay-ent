@@ -277,6 +277,13 @@ export default function HotelsResults() {
     if (opt.rating != null) q.set('rating', String(opt.rating));
     if (opt.reviews != null) q.set('reviews', String(opt.reviews));
     if (opt.location) q.set('loc', opt.location);
+    // Carry traveler + event context through to the detail/booking page.
+    const travelerId = params.get('travelerId');
+    const eventId = params.get('eventId');
+    const eventName = params.get('eventName');
+    if (travelerId) q.set('travelerId', travelerId);
+    if (eventId) q.set('eventId', eventId);
+    if (eventName) q.set('eventName', eventName);
     return `/app/hotels/${opt.hid}?${q.toString()}`;
   };
 
@@ -357,6 +364,17 @@ export default function HotelsResults() {
           </Select>
         </div>
       </div>
+
+      {params.get('eventName') && (
+        <div className="mb-5 flex items-start gap-2 rounded-xl border border-brand/30 bg-brand/5 p-3 text-sm text-slate-700">
+          <Gift className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
+          <span>
+            You&apos;re booking for{' '}
+            <span className="font-semibold">{params.get('eventName')}</span>. These results follow
+            your normal travel policy; the event&apos;s allow-listed hotels book without approval.
+          </span>
+        </div>
+      )}
 
       {forceApproval && (
         <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">

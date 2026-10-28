@@ -38,6 +38,7 @@ export default function NewEventPage() {
   const activeUsers = state.users.filter((u) => u.status === 'active');
   const [attendeeIds, setAttendeeIds] = useState<string[]>(activeUsers.map((u) => u.id));
   const [allowHotelList, setAllowHotelList] = useState<AllowHotel[]>([]);
+  const [whitelistOnly, setWhitelistOnly] = useState(false);
   const [routeText, setRouteText] = useState('');
   const [routes, setRoutes] = useState<string[]>([]);
 
@@ -83,6 +84,7 @@ export default function NewEventPage() {
       hostName: activeUser.name,
       allowHotels: allowHotelList.map((h) => h.name),
       allowHotelList,
+      whitelistOnly: whitelistOnly && allowHotelList.length > 0,
       allowFlights: routes,
       attendees,
       regionId: cityPlace?.regionId,
@@ -282,6 +284,31 @@ export default function NewEventPage() {
                 shown — and they book without approval, even if out of policy.
               </p>
               <HotelAllowPicker value={allowHotelList} onChange={setAllowHotelList} />
+              <label
+                className={cn(
+                  'mt-4 flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors',
+                  whitelistOnly ? 'border-brand bg-brand/5' : 'border-slate-200',
+                  allowHotelList.length === 0 && 'pointer-events-none opacity-50'
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={whitelistOnly}
+                  disabled={allowHotelList.length === 0}
+                  onChange={(e) => setWhitelistOnly(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    Only allow the hotels listed above
+                  </span>
+                  <span className="block text-xs text-slate-400">
+                    Travelers booking for this event can only pick from the allow-list — other
+                    hotels won&apos;t be searchable. Leave off to let them also search in-policy
+                    hotels in {city.trim() || 'the event city'}.
+                  </span>
+                </span>
+              </label>
             </div>
           )}
 

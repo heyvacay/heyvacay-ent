@@ -40,6 +40,7 @@ export default function EventDetail({ id }: { id: string }) {
     addMessage,
     toggleReaction,
     setHotelAllowList,
+    setWhitelistOnly,
     joinEvent,
     startDinner,
     joinDinner,
@@ -214,10 +215,12 @@ export default function EventDetail({ id }: { id: string }) {
                 {d.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
               </span>
             )}
-            {!isAttendee && (
+            {!isAttendee ? (
               <Button onClick={() => joinEvent(e.id, activeUser.id, activeUser.name)}>
                 Join event
               </Button>
+            ) : (
+              <Button href={`/app/book?eventId=${e.id}`}>Book travel</Button>
             )}
           </div>
         </div>
@@ -255,10 +258,29 @@ export default function EventDetail({ id }: { id: string }) {
                     <MapPin className="h-4 w-4 text-brand-dark" /> Hotels
                   </p>
                   {role === 'admin' ? (
-                    <HotelAllowPicker
-                      value={e.allowHotelList ?? []}
-                      onChange={(list) => setHotelAllowList(e.id, list)}
-                    />
+                    <>
+                      <HotelAllowPicker
+                        value={e.allowHotelList ?? []}
+                        onChange={(list) => setHotelAllowList(e.id, list)}
+                      />
+                      <label
+                        className={cn(
+                          'mt-2 flex items-start gap-2 text-xs',
+                          (e.allowHotelList?.length ?? 0) === 0 && 'opacity-50'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!e.whitelistOnly}
+                          disabled={(e.allowHotelList?.length ?? 0) === 0}
+                          onChange={(ev) => setWhitelistOnly(e.id, ev.target.checked)}
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-brand focus:ring-brand"
+                        />
+                        <span className="text-slate-600">
+                          Only allow these hotels (travelers can&apos;t book elsewhere for this event)
+                        </span>
+                      </label>
+                    </>
                   ) : (e.allowHotelList?.length ?? e.allowHotels.length) === 0 ? (
                     <p className="text-sm text-slate-400">No restriction</p>
                   ) : (

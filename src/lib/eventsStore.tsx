@@ -32,6 +32,7 @@ interface EventsApi {
     hostName: string;
     allowHotels: string[];
     allowHotelList?: { hid: string; name: string }[];
+    whitelistOnly?: boolean;
     allowFlights: string[];
     attendees: EventAttendee[];
     regionId?: number;
@@ -48,6 +49,8 @@ interface EventsApi {
   toggleReaction: (eventId: string, messageId: string, userId: string, emoji: string) => void;
   /** Replace an event's smart hotel allow-list (admins). */
   setHotelAllowList: (eventId: string, list: { hid: string; name: string }[]) => void;
+  /** Toggle whether this event restricts booking to only its allow-listed hotels. */
+  setWhitelistOnly: (eventId: string, on: boolean) => void;
   joinEvent: (eventId: string, userId: string, name: string) => void;
 
   startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
@@ -123,6 +126,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           : [{ userId: data.hostId, name: data.hostName }],
       allowHotels: data.allowHotels,
       allowHotelList: data.allowHotelList,
+      whitelistOnly: data.whitelistOnly,
       allowFlights: data.allowFlights,
       regionId: data.regionId,
       lat: data.lat,
@@ -168,6 +172,11 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         allowHotelList: list,
         allowHotels: list.map((h) => h.name),
       })),
+    [patch]
+  );
+
+  const setWhitelistOnly: EventsApi['setWhitelistOnly'] = useCallback(
+    (eventId, on) => patch(eventId, (e) => ({ ...e, whitelistOnly: on })),
     [patch]
   );
 
@@ -362,6 +371,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         addMessage,
         toggleReaction,
         setHotelAllowList,
+        setWhitelistOnly,
         joinEvent,
         startDinner,
         joinDinner,

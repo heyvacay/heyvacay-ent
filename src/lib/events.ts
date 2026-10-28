@@ -105,6 +105,10 @@ export interface TravelEvent {
    * pre-cleared: it books without approval even if out of policy.
    */
   allowHotelList?: { hid: string; name: string }[];
+  /** When true, hotels for this event can ONLY be the allow-listed ones. When
+   *  false, the allow-list hotels are pre-cleared (book without approval) but
+   *  travelers may still search other in-policy hotels in the event city. */
+  whitelistOnly?: boolean;
   /** Allowed flight routes e.g. "SFO→AUS"; empty = no restriction. */
   allowFlights: string[];
   /** Event-city coordinates/region, used to anchor hotel search. */

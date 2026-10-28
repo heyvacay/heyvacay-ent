@@ -26,7 +26,7 @@ import {
   type FlightPlace,
   type HotelPlace,
 } from '@/lib/search';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Train, Car } from 'lucide-react';
 
 type ProductType = BookingType | 'train' | 'car';
@@ -597,6 +597,7 @@ export default function BookPage() {
     useStore();
   const { events } = useEvents();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
   const [type, setType] = useState<ProductType>('hotel');
@@ -617,7 +618,7 @@ export default function BookPage() {
   const [start, setStart] = useState(addDays(todayISO(), 14));
   const [end, setEnd] = useState(addDays(todayISO(), 17));
   const [travelerId, setTravelerId] = useState(activeUser.id);
-  const [eventId, setEventId] = useState('');
+  const [eventId, setEventId] = useState(searchParams.get('eventId') ?? '');
 
   // Booking approval mode for whoever the trip is for.
   const approvalMode = approvalModeFor(travelerId);
@@ -628,9 +629,20 @@ export default function BookPage() {
   const selectedEvent = bookableEvents.find((e) => e.id === eventId);
   // Company requires approval on every booking.
   const forceApproval = approvalMode === 'pre_approval';
-  // Event-only hotel flow: lock to the event city and the allow-listed hotels.
-  const eventOnlyHotel = approvalMode === 'event_required' && !!selectedEvent;
+  // Booking against an event: show its allow-list; whitelist-only events hide
+  // the free search entirely. Any selected event anchors the hotel flow.
+  const whitelistMode = !!selectedEvent?.whitelistOnly;
+  const eventHotelMode = !!selectedEvent && type === 'hotel';
   const allowHotels = selectedEvent?.allowHotelList ?? [];
+
+  // Picking an event autofills its dates (traveler can still change them).
+  useEffect(() => {
+    if (selectedEvent) {
+      setStart(selectedEvent.startDate);
+      setEnd(selectedEvent.endDate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
 
   const bookAllowHotel = (h: { hid: string; name: string }) => {
     if (!selectedEvent) return;
@@ -648,6 +660,30 @@ export default function BookPage() {
     q.set('eventName', selectedEvent.name);
     q.set('eventAllow', '1');
     router.push(`/app/hotels/${h.hid}?${q.toString()}`);
+  };
+
+  // Non-whitelist events: let the traveler search other in-policy hotels in the
+  // event city (normal policy — in-policy books instantly, no forced approval).
+  const searchEventCity = () => {
+    if (!selectedEvent) return;
+    if (new Date(end) <= new Date(start)) {
+      setError('Check-out must be after check-in.');
+      return;
+    }
+    const q = new URLSearchParams();
+    q.set('checkin', start);
+    q.set('checkout', end);
+    q.set('adults', '1');
+    q.set('label', selectedEvent.city);
+    q.set('travelerId', travelerId);
+    q.set('eventId', selectedEvent.id);
+    q.set('eventName', selectedEvent.name);
+    if (selectedEvent.regionId) q.set('regionId', String(selectedEvent.regionId));
+    else if (selectedEvent.lat != null && selectedEvent.lng != null) {
+      q.set('lat', String(selectedEvent.lat));
+      q.set('lng', String(selectedEvent.lng));
+    }
+    router.push(`/app/hotels?${q.toString()}`);
   };
 
   const [results, setResults] = useState<InventoryOption[] | null>(null);
@@ -1040,8 +1076,28 @@ export default function BookPage() {
             </div>
           </>
         ) : type === 'hotel' ? (
-          eventOnlyHotel ? (
+          eventHotelMode ? (
             <div>
+              <div
+                className={cn(
+                  'mb-3 flex items-start gap-2 rounded-xl border p-3 text-sm',
+                  whitelistMode ? 'border-amber-300 bg-amber-50' : 'border-brand/30 bg-brand/5'
+                )}
+              >
+                <Sparkles
+                  className={cn(
+                    'mt-0.5 h-4 w-4 shrink-0',
+                    whitelistMode ? 'text-amber-600' : 'text-brand-dark'
+                  )}
+                />
+                <span className={whitelistMode ? 'text-amber-800' : 'text-slate-700'}>
+                  Booking for <span className="font-semibold">{selectedEvent!.name}</span> in{' '}
+                  {selectedEvent!.city}.{' '}
+                  {whitelistMode
+                    ? 'This event only allows booking on its allow-listed hotels — results are limited to those.'
+                    : 'Allow-listed hotels book without approval; you can also search other in-policy hotels in the city.'}
+                </span>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Destination (event city)">
                   <Input value={selectedEvent!.city} disabled />
@@ -1073,43 +1129,52 @@ export default function BookPage() {
                 </Field>
               </div>
               <div className="mt-4">
-                <p className="mb-2 text-sm font-semibold text-slate-700">
-                  Allowed hotels for {selectedEvent!.name}
-                </p>
-                {allowHotels.length === 0 ? (
+                {allowHotels.length > 0 && (
+                  <>
+                    <p className="mb-2 text-sm font-semibold text-slate-700">
+                      Allow-listed hotels{whitelistMode ? '' : ' · book without approval'}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {allowHotels.map((h) => (
+                        <div
+                          key={h.hid}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 p-3"
+                        >
+                          <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-slate-800">
+                            <Building className="h-4 w-4 shrink-0 text-brand-dark" />
+                            <span className="truncate">{h.name}</span>
+                          </span>
+                          <Button size="sm" onClick={() => bookAllowHotel(h)}>
+                            Select
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {whitelistMode && allowHotels.length === 0 && (
                   <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">
                     No hotels have been allow-listed for this event yet.{' '}
                     {role === 'admin'
                       ? 'Add them on the event page.'
                       : 'Ask your admin to add hotels to the event.'}
                   </p>
-                ) : (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {allowHotels.map((h) => (
-                      <div
-                        key={h.hid}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 p-3"
-                      >
-                        <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-slate-800">
-                          <Building className="h-4 w-4 shrink-0 text-brand-dark" />
-                          <span className="truncate">{h.name}</span>
-                        </span>
-                        <Button size="sm" onClick={() => bookAllowHotel(h)}>
-                          Select
-                        </Button>
-                      </div>
-                    ))}
+                )}
+                {!whitelistMode && (
+                  <div className={cn(allowHotels.length > 0 && 'mt-4 border-t border-slate-100 pt-4')}>
+                    <Button variant="outline" onClick={searchEventCity}>
+                      Search all hotels in {selectedEvent!.city} →
+                    </Button>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Other hotels follow your normal travel policy — in-policy stays book instantly.
+                    </p>
                   </div>
                 )}
-                <p className="mt-2 text-xs text-slate-400">
-                  In event-only booking you can book any allow-listed hotel without approval — even
-                  if it&apos;s outside normal policy.
-                </p>
               </div>
             </div>
           ) : approvalMode === 'event_required' ? (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">
-              Choose an event below to see its allow-listed hotels.
+              Choose an event below to start booking for it.
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1199,7 +1264,7 @@ export default function BookPage() {
               </div>
             )}
 
-            {(type === 'flight' || (type === 'hotel' && !eventOnlyHotel)) && (
+            {(type === 'flight' || (type === 'hotel' && !eventHotelMode)) && (
               <Button className="mt-4" onClick={runSearch} disabled={loading}>
                 {loading ? (
                   <span className="inline-flex items-center gap-2">
