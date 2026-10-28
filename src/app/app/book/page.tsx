@@ -367,7 +367,7 @@ function HotelDetailBody({ d, opt }: { d: HotelDetails; opt: InventoryOption }) 
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Stars n={opt.star} />
-        {opt.rating != null && (
+        {opt.rating != null && opt.rating > 0 && (
           <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-xs font-bold text-brand-dark">
             {opt.rating.toFixed(1)}
           </span>
@@ -931,7 +931,7 @@ export default function BookPage() {
                 className={cn(
                   'flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors',
                   type === key
-                    ? 'bg-white text-navy shadow-sm'
+                    ? 'bg-brand text-navy-deep shadow-sm'
                     : 'text-white/70 hover:text-white'
                 )}
               >
@@ -1423,7 +1423,7 @@ export default function BookPage() {
                   <div className="flex flex-1 flex-col gap-2 p-4">
                     <div className="flex items-center justify-between gap-2">
                       <Stars n={opt.star} />
-                      {opt.rating != null && (
+                      {opt.rating != null && opt.rating > 0 && (
                         <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-xs font-bold text-brand-dark">
                           {opt.rating.toFixed(1)}
                         </span>

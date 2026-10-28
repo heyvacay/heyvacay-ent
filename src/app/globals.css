@@ -153,14 +153,14 @@ html.dark {
   color-scheme: dark;
 }
 
-/* surfaces */
+/* surfaces — raised (card/white) sits above recessed tracks */
 .dark .bg-white,
 .dark .bg-white\/90,
 .dark .bg-white\/95,
 .dark .bg-white\/80,
-.dark .bg-white\/60 { background-color: #121a2d !important; }
+.dark .bg-white\/60 { background-color: #16223c !important; }
 .dark .bg-slate-50 { background-color: #0e1627 !important; }
-.dark .bg-slate-100 { background-color: #1b2740 !important; }
+.dark .bg-slate-100 { background-color: #111d33 !important; }
 .dark .bg-slate-900\/50,
 .dark .bg-slate-900\/40 { background-color: rgba(2, 6, 16, 0.6) !important; }
 .dark .hover\:bg-slate-50:hover { background-color: #15203a !important; }

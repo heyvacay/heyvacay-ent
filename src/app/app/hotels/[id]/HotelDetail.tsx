@@ -346,7 +346,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
         {star ? <Stars n={star} /> : null}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
-        {rating != null && (
+        {rating != null && rating > 0 && (
           <span className="inline-flex items-center gap-1">
             <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-xs font-bold text-brand-dark">
               {rating.toFixed(1)}

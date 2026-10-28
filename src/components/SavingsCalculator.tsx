@@ -52,7 +52,7 @@ export function SavingsCalculator() {
             onChange={(e) => setSpend(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)}
             onFocus={(e) => e.currentTarget.select()}
             placeholder="2,500,000"
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 pl-7 text-center text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 pl-7 text-center text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           />
         </div>
       </div>

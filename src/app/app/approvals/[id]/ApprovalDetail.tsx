@@ -104,7 +104,7 @@ export default function ApprovalDetail({ id }: { id: string }) {
     b.type === 'hotel'
       ? b.freeCancellation
         ? 'Free-cancellation rate — the price is held by the reservation. If you decline, it cancels at no cost before the deadline.'
-        : 'Non-refundable rate — RateHawk prices are live and cannot be held, so the fare is re-confirmed the moment you approve. If it has moved materially, the traveler is asked to re-confirm before it books.'
+        : 'Non-refundable rate — live supplier pricing cannot be held, so the fare is re-confirmed the moment you approve. If it has moved materially, the traveler is asked to re-confirm before it books.'
       : 'Airfare is re-priced at ticketing — approve promptly to lock the quoted fare; a material change bounces back to the traveler.';
 
   const decide = (kind: 'approved' | 'declined') => {

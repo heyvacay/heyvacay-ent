@@ -126,7 +126,7 @@ const bookings: Booking[] = [
     id: 'bk_2', type: 'hotel', title: 'The Standard, New York', detail: '3 nights · King · refundable',
     travelerId: 'u_marcus', bookedById: 'u_dana', department: 'Sales',
     startDate: addDays(T, -18), endDate: addDays(T, -15),
-    marketPrice: 1290, price: 1044, savings: 246, pointsEarned: 246,
+    marketPrice: 1290, price: 1044, savings: 246, pointsEarned: 492,
     status: 'confirmed', createdAt: addDays(T, -26),
   },
   {
@@ -140,7 +140,7 @@ const bookings: Booking[] = [
     id: 'bk_4', type: 'hotel', title: 'Hotel Van Zandt, Austin', detail: '3 nights · Queen · breakfast',
     travelerId: 'u_priya', bookedById: 'u_priya', department: 'Engineering',
     startDate: addDays(T, 9), endDate: addDays(T, 12),
-    marketPrice: 960, price: 828, savings: 132, pointsEarned: 132,
+    marketPrice: 960, price: 828, savings: 132, pointsEarned: 264,
     status: 'pending_approval', createdAt: addDays(T, -4),
   },
   {

@@ -582,7 +582,7 @@ export default function HotelsResults() {
                     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                       <div className="flex items-center gap-2">
                         <Stars n={opt.star} />
-                        {opt.rating != null && (
+                        {opt.rating != null && opt.rating > 0 && (
                           <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-xs font-bold text-brand-dark">
                             {opt.rating.toFixed(1)}
                           </span>

@@ -187,6 +187,7 @@ export default function NewEventPage() {
               <Field label="City" hint="Pick a city from search — event-only booking is locked to it.">
                 <CityPicker
                   value={city}
+                  selected={!!cityPlace}
                   onText={(v) => {
                     setCity(v);
                     setCityPlace(null);
@@ -196,6 +197,12 @@ export default function NewEventPage() {
                     setCityPlace(p);
                   }}
                 />
+                {cityPlace && (
+                  <p className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                    <Check className="h-3.5 w-3.5" /> {cityPlace.label} selected — booking for this
+                    event is anchored here
+                  </p>
+                )}
               </Field>
               <Field label="Dates">
                 <HvRangeField
@@ -373,10 +380,12 @@ export default function NewEventPage() {
 
 function CityPicker({
   value,
+  selected,
   onText,
   onPick,
 }: {
   value: string;
+  selected?: boolean;
   onText: (v: string) => void;
   onPick: (p: HotelPlace) => void;
 }) {
@@ -406,17 +415,23 @@ function CityPicker({
 
   return (
     <div className="relative">
-      <Input
-        value={value}
-        onChange={(e) => {
-          onText(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Search a city…"
-        autoComplete="off"
-      />
+      <div className="relative">
+        <Input
+          value={value}
+          onChange={(e) => {
+            onText(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search a city…"
+          autoComplete="off"
+          className={selected ? 'border-emerald-300 bg-emerald-50/40 pr-9' : undefined}
+        />
+        {selected && (
+          <Check className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600" />
+        )}
+      </div>
       {open && items.length > 0 && (
         <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
           {items.map((p, i) => (

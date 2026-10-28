@@ -133,6 +133,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const nav = role === 'admin' ? ADMIN_NAV : EMPLOYEE_NAV;
 
+  // Admin-only areas: if the viewer isn't an admin (e.g. you switched to an
+  // employee while on one of these pages), show an access notice instead of the
+  // admin controls — the sidebar stays so you can navigate away.
+  const ADMIN_ONLY = [
+    '/app/dashboard',
+    '/app/bookings',
+    '/app/approvals',
+    '/app/reports',
+    '/app/budgets',
+    '/app/billing',
+    '/app/people',
+    '/app/policies',
+    '/app/integrations',
+  ];
+  const blocked =
+    role !== 'admin' &&
+    ADMIN_ONLY.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
   const onSwitch = (id: string) => {
     const u = state.users.find((x) => x.id === id);
     if (!u) return;
@@ -357,7 +375,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-9">
-          {children}
+          {blocked ? (
+            <div className="grid min-h-[50vh] place-items-center">
+              <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center">
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-400">
+                  <Lock className="h-6 w-6" />
+                </span>
+                <h2 className="mt-4 font-display text-lg font-bold text-slate-900">
+                  No access to this page
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  <span className="font-medium text-slate-700">{activeUser.name}</span> ({role}) can&apos;t
+                  view this admin area. Switch back to an admin from the top-right to manage it.
+                </p>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
     </div>
