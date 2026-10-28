@@ -124,10 +124,99 @@ export function approvalDecidedEmail(d: {
   };
 }
 
+export function eventAddedEmail(d: {
+  name: string;
+  event: string;
+  city: string;
+  dates: string;
+  host: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.name}, ${d.host} added you to a company trip.</p>
+    <div style="font-weight:700;font-size:16px;color:${NAVY};margin-top:8px">${d.event}</div>
+    ${kv([
+      ['Where', d.city],
+      ['When', d.dates],
+    ])}
+    <p style="font-size:14px;color:#334155">Open HeyVacay to see the allowed hotels, chat with the group, and RSVP for the dinner.</p>
+    <a href="#" style="display:inline-block;margin-top:8px;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px">View the event</a>`;
+  return {
+    subject: `You're going to ${d.event}`,
+    html: wrap('You were added to an event', body),
+    text: `${d.host} added you to ${d.event} — ${d.city}, ${d.dates}.`,
+  };
+}
+
+export function dinnerInviteEmail(d: {
+  name: string;
+  event: string;
+  date: string;
+  time: string;
+  city: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.name}, there's a group dinner being planned for <strong>${d.event}</strong>.</p>
+    ${kv([
+      ['Date', d.date],
+      ['Time', d.time],
+      ['City', d.city],
+    ])}
+    <p style="font-size:14px;color:#334155">Can you make it? Please RSVP in the event so we can get the headcount right.</p>
+    <a href="#" style="display:inline-block;margin-top:8px;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px">RSVP now</a>`;
+  return {
+    subject: `RSVP: group dinner for ${d.event}`,
+    html: wrap('You’re invited to dinner', body),
+    text: `Group dinner for ${d.event} on ${d.date} at ${d.time}. Please RSVP.`,
+  };
+}
+
+export function dinnerReminderEmail(d: { name: string; event: string }): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.name}, a quick nudge — we still need your RSVP for the <strong>${d.event}</strong> group dinner.</p>
+    <a href="#" style="display:inline-block;margin-top:8px;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px">RSVP now</a>`;
+  return {
+    subject: `Reminder: RSVP for the ${d.event} dinner`,
+    html: wrap('Don’t forget to RSVP', body),
+    text: `Reminder: please RSVP for the ${d.event} group dinner.`,
+  };
+}
+
+export function dinnerBookedEmail(d: {
+  name: string;
+  restaurant: string;
+  date: string;
+  time: string;
+  partySize: number;
+  confirmation: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.name}, the group dinner is booked — see you there!</p>
+    <div style="font-weight:700;font-size:16px;color:${NAVY};margin-top:8px">${d.restaurant}</div>
+    ${kv([
+      ['Date', d.date],
+      ['Time', d.time],
+      ['Party', `${d.partySize}`],
+      ['Confirmation', d.confirmation],
+    ])}`;
+  return {
+    subject: `Dinner booked — ${d.restaurant}`,
+    html: wrap('Your group dinner is set 🍽️', body),
+    text: `Dinner booked: ${d.restaurant} on ${d.date} at ${d.time}, party of ${d.partySize}. Confirmation ${d.confirmation}.`,
+  };
+}
+
 export const TEMPLATES = {
   confirmation: confirmationEmail,
   approvalPending: approvalPendingEmail,
   approvalDecided: approvalDecidedEmail,
+  eventAdded: eventAddedEmail,
+  dinnerInvite: dinnerInviteEmail,
+  dinnerReminder: dinnerReminderEmail,
+  dinnerBooked: dinnerBookedEmail,
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

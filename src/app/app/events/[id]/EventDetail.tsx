@@ -27,12 +27,14 @@ import {
 import { shortDate } from '@/lib/format';
 import { EventChat } from '@/components/app/EventChat';
 import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
+import { sendEmail } from '@/lib/email';
 import { MapPin, Users, Check, Shield, Plane, Sparkles } from '@/components/icons';
 
 type Tab = 'overview' | 'chat' | 'dinner';
 
 export default function EventDetail({ id }: { id: string }) {
-  const { activeUser, role } = useStore();
+  const { state, activeUser, role } = useStore();
+  const emailById = (userId: string) => state.users.find((u) => u.id === userId)?.email;
   const {
     eventById,
     addMessage,
@@ -117,6 +119,19 @@ export default function EventDetail({ id }: { id: string }) {
           },
           activeUser.name
         );
+        // Email everyone who's coming the final reservation details.
+        d.attendees.forEach((a) => {
+          const email = emailById(a.userId);
+          if (email)
+            sendEmail('dinnerBooked', email, {
+              name: a.name,
+              restaurant: rest.name,
+              date: d.date,
+              time: bookTime,
+              partySize: party,
+              confirmation: r.confirmation,
+            });
+        });
       }
     } finally {
       setBooking(false);
@@ -312,10 +327,34 @@ export default function EventDetail({ id }: { id: string }) {
           booking={booking}
           availNote={availNote}
           eventAttendees={e.attendees}
-          onStart={(date, time, expiresAt) => startDinner(e.id, activeUser.id, date, time, expiresAt)}
+          onStart={(date, time, expiresAt) => {
+            startDinner(e.id, activeUser.id, date, time, expiresAt);
+            // Invite every attendee to RSVP.
+            e.attendees.forEach((a) => {
+              const email = emailById(a.userId);
+              if (email && a.userId !== activeUser.id)
+                sendEmail('dinnerInvite', email, {
+                  name: a.name,
+                  event: e.name,
+                  date,
+                  time,
+                  city: e.city,
+                });
+            });
+          }}
           onJoin={() => joinDinner(e.id, activeUser.id, activeUser.name)}
           onRsvp={(status) => setRsvp(e.id, activeUser.id, activeUser.name, status)}
-          onRemind={(pending) => remindRsvp(e.id, activeUser.name, pending)}
+          onRemind={(pending) => {
+            remindRsvp(e.id, activeUser.name, pending);
+            // Email everyone who hasn't replied yet.
+            const rsvps = e.dinner?.rsvps ?? {};
+            e.attendees
+              .filter((a) => !rsvps[a.userId])
+              .forEach((a) => {
+                const email = emailById(a.userId);
+                if (email) sendEmail('dinnerReminder', email, { name: a.name, event: e.name });
+              });
+          }}
           onSendDetails={() => sendDinnerDetails(e.id, activeUser.name)}
           onStartGenre={() => advanceToGenre(e.id)}
           onVoteGenre={(g) => {

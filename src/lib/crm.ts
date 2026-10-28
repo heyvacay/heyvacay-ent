@@ -245,6 +245,33 @@ export interface Contract {
 
 /* ---------------- company ---------------- */
 
+/**
+ * Commission configuration — how much HeyVacay earns on a booking. Mirrors the
+ * consumer commission controls: a rate per hotel star tier, hotel-specific
+ * overrides, and a base flight rate. A company either follows the global config
+ * or (when customCommission is on) carries its own.
+ */
+export interface CommissionConfig {
+  /** Percent commission by hotel star rating, keyed "1".."5". */
+  starRates: Record<string, number>;
+  /** Hotel-specific overrides that beat the star tier. */
+  hotelOverrides: { hid?: string; name: string; pct: number }[];
+  /** Base commission on flights. */
+  flightPct: number;
+}
+
+export const DEFAULT_COMMISSION: CommissionConfig = {
+  starRates: { '1': 8, '2': 8, '3': 10, '4': 12, '5': 15 },
+  hotelOverrides: [],
+  flightPct: 5,
+};
+
+/** Blended rate for a company's hotel spend, from its star-tier rates. */
+export function blendedHotelRate(cfg: CommissionConfig): number {
+  const vals = [5, 4, 3, 2, 1].map((s) => cfg.starRates[String(s)] ?? 0);
+  return vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
+}
+
 export interface SalesCompany {
   id: string;
   name: string;
@@ -272,6 +299,10 @@ export interface SalesCompany {
   tasks: CrmTask[];
   notes: Note[];
   activity: ActivityEntry[];
+  /** When true, this account uses its own `commission` and is NOT affected by
+   *  global commission changes. */
+  customCommission?: boolean;
+  commission?: CommissionConfig;
 }
 
 function steps(done: string[]): OnboardingStep[] {

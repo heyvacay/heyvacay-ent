@@ -1,32 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
-import { Button, Card, EmptyState, Field, Input, PageHeader } from '@/components/app/ui';
-import { HotelAllowPicker, type AllowHotel } from '@/components/app/HotelAllowPicker';
-import { shortDate, todayISO } from '@/lib/format';
+import { Button, Card, EmptyState, PageHeader } from '@/components/app/ui';
+import { shortDate } from '@/lib/format';
 import { Calendar, MapPin, Sparkles } from '@/components/icons';
 
 export default function EventsPage() {
   const { state, activeUser, role } = useStore();
-  const { events, createEvent } = useEvents();
-  const router = useRouter();
-  // Events can edit policy (allow-lists), so only admins / bookers create them.
-  // Everyone else can still be added to and join events.
+  const { events } = useEvents();
+  // Events edit policy (allow-lists), so only admins / bookers create them.
   const canCreate = role === 'admin' || role === 'booker';
-
-  const [open, setOpen] = useState(false);
-  const [allowHotelList, setAllowHotelList] = useState<AllowHotel[]>([]);
-  const [form, setForm] = useState({
-    name: '',
-    city: '',
-    startDate: todayISO(),
-    endDate: todayISO(),
-    allowFlights: '',
-  });
 
   // Auto-detection: confirmed hotel bookings that share a check-in date are
   // likely the same company trip — suggest spinning up an event + group chat.
@@ -44,31 +30,7 @@ export default function EventsPage() {
       .map(([start, v]) => ({ start, end: v.end, count: v.travelers.size }));
   }, [state.bookings, events]);
 
-  const create = (prefill?: { startDate: string; endDate: string }) => {
-    const f = prefill ? { ...form, ...prefill } : form;
-    if (!f.name.trim() || !f.city.trim()) {
-      setOpen(true);
-      return;
-    }
-    const ev = createEvent({
-      name: f.name.trim(),
-      city: f.city.trim(),
-      startDate: f.startDate,
-      endDate: f.endDate,
-      hostId: activeUser.id,
-      hostName: activeUser.name,
-      allowHotels: allowHotelList.map((h) => h.name),
-      allowHotelList,
-      allowFlights: f.allowFlights.split(',').map((s) => s.trim()).filter(Boolean),
-      attendees: state.users
-        .filter((u) => u.status === 'active')
-        .map((u) => ({ userId: u.id, name: u.name })),
-    });
-    setOpen(false);
-    router.push(`/app/events/${ev.id}`);
-  };
-
-  const mine = events.filter((e) => e.attendees.some((a) => a.userId === activeUser.id)) ;
+  const mine = events.filter((e) => e.attendees.some((a) => a.userId === activeUser.id));
   const shown = role === 'admin' ? events : mine;
 
   return (
@@ -76,11 +38,7 @@ export default function EventsPage() {
       <PageHeader
         title="Events"
         subtitle="Company trips with an allow-list of travel, a group chat, and group dinners."
-        actions={
-          canCreate ? (
-            <Button onClick={() => setOpen((v) => !v)}>{open ? 'Close' : 'New event'}</Button>
-          ) : undefined
-        }
+        actions={canCreate ? <Button href="/app/events/new">New event</Button> : undefined}
       />
 
       {canCreate && suggestions.length > 0 && (
@@ -94,59 +52,11 @@ export default function EventsPage() {
                 {s.count} teammates travelling {shortDate(s.start)}–{shortDate(s.end)}. Create an event
                 so they can coordinate and get dinner together?
               </p>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setForm((f) => ({
-                    ...f,
-                    name: f.name || 'Team trip',
-                    startDate: s.start,
-                    endDate: s.end,
-                  }));
-                  setOpen(true);
-                }}
-              >
+              <Button size="sm" href={`/app/events/new?start=${s.start}&end=${s.end}`}>
                 Create event
               </Button>
             </div>
           ))}
-        </Card>
-      )}
-
-      {open && (
-        <Card className="mb-6">
-          <h2 className="mb-4 font-display text-lg font-bold text-slate-900">New event</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Event name">
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Austin Q4 Offsite" autoFocus />
-            </Field>
-            <Field label="City">
-              <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="Austin" />
-            </Field>
-            <Field label="Start date">
-              <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-            </Field>
-            <Field label="End date">
-              <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-            </Field>
-            <div className="sm:col-span-2">
-              <Field
-                label="Allowed hotels"
-                hint="Search and add real properties. In event-only booking these are the only hotels shown — and they book without approval, even if out of policy."
-              >
-                <HotelAllowPicker value={allowHotelList} onChange={setAllowHotelList} />
-              </Field>
-            </div>
-            <Field label="Allowed flight routes" hint="e.g. SFO→AUS. Blank = no limit.">
-              <Input value={form.allowFlights} onChange={(e) => setForm({ ...form, allowFlights: e.target.value })} placeholder="SFO→AUS, JFK→AUS" />
-            </Field>
-          </div>
-          <div className="mt-5 flex gap-2">
-            <Button onClick={() => create()} disabled={!form.name.trim() || !form.city.trim()}>
-              Create event
-            </Button>
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          </div>
         </Card>
       )}
 

@@ -12,6 +12,7 @@ import {
   Calendar,
   Receipt,
   Users,
+  Wallet,
 } from '@/components/icons';
 import { ME } from '@/lib/crm';
 
@@ -19,6 +20,7 @@ const NAV = [
   { href: '/sales', label: 'Dashboard', icon: ChartBar },
   { href: '/sales/pipeline', label: 'Pipeline', icon: TrendUp },
   { href: '/sales/companies', label: 'Companies', icon: Building },
+  { href: '/sales/commission', label: 'Commission', icon: Wallet },
   { href: '/sales/tasks', label: 'Tasks', icon: Calendar },
   { href: '/sales/contracts', label: 'Contracts', icon: Receipt },
   { href: '/sales/team', label: 'Team', icon: Users },

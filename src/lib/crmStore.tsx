@@ -13,8 +13,10 @@ import {
   SEED_REPS,
   ONBOARDING_TEMPLATE,
   STAGE_PROBABILITY,
+  DEFAULT_COMMISSION,
   ME,
   type AccountStatus,
+  type CommissionConfig,
   type Contact,
   type Contract,
   type ContractTerms,
@@ -30,6 +32,7 @@ import { todayISO, uid } from './format';
 
 const KEY = 'hv_crm_demo_v2';
 const REPS_KEY = 'hv_crm_reps_v1';
+const COMMISSION_KEY = 'hv_crm_commission_v1';
 
 interface CrmApi {
   companies: SalesCompany[];
@@ -78,6 +81,16 @@ interface CrmApi {
   updateRep: (name: string, patch: Partial<Rep>) => void;
   removeRep: (name: string) => void;
 
+  /** Global commission config that governs every non-custom company. */
+  commission: CommissionConfig;
+  setCommission: (cfg: CommissionConfig) => void;
+  /** Turn custom commission on/off for a company (seeds from global on enable). */
+  setCustomCommission: (id: string, on: boolean) => void;
+  /** Update a single company's own commission config. */
+  setCompanyCommission: (id: string, cfg: CommissionConfig) => void;
+  /** Effective config for a company (its own when custom, else global). */
+  commissionFor: (id: string) => CommissionConfig;
+
   reset: () => void;
 }
 
@@ -101,6 +114,7 @@ function hydrateCompany(c: Partial<SalesCompany>): SalesCompany {
 export function CrmProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<SalesCompany[]>(SEED_COMPANIES);
   const [reps, setReps] = useState<Rep[]>(SEED_REPS);
+  const [commission, setCommissionState] = useState<CommissionConfig>(DEFAULT_COMMISSION);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -115,6 +129,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(rawReps) as Rep[];
         if (Array.isArray(parsed) && parsed.length) setReps(parsed);
       }
+      const rawComm = localStorage.getItem(COMMISSION_KEY);
+      if (rawComm) {
+        const parsed = JSON.parse(rawComm) as CommissionConfig;
+        if (parsed?.starRates) setCommissionState(parsed);
+      }
     } catch {
       /* ignore */
     }
@@ -126,10 +145,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem(KEY, JSON.stringify(companies));
       localStorage.setItem(REPS_KEY, JSON.stringify(reps));
+      localStorage.setItem(COMMISSION_KEY, JSON.stringify(commission));
     } catch {
       /* ignore */
     }
-  }, [companies, reps, hydrated]);
+  }, [companies, reps, commission, hydrated]);
 
   const addRep = useCallback(
     (rep: Rep) => setReps((rs) => (rs.some((r) => r.name === rep.name) ? rs : [...rs, rep])),
@@ -392,15 +412,42 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setCommission: CrmApi['setCommission'] = useCallback((cfg) => setCommissionState(cfg), []);
+
+  const setCustomCommission: CrmApi['setCustomCommission'] = useCallback(
+    (id, on) =>
+      patch(id, (c) => ({
+        ...c,
+        customCommission: on,
+        commission: on ? c.commission ?? { ...commission } : c.commission,
+      })),
+    [patch, commission]
+  );
+
+  const setCompanyCommission: CrmApi['setCompanyCommission'] = useCallback(
+    (id, cfg) => patch(id, (c) => ({ ...c, commission: cfg, customCommission: true })),
+    [patch]
+  );
+
+  const commissionFor: CrmApi['commissionFor'] = useCallback(
+    (id) => {
+      const c = companies.find((x) => x.id === id);
+      return c?.customCommission && c.commission ? c.commission : commission;
+    },
+    [companies, commission]
+  );
+
   const reset = useCallback(() => {
     try {
       localStorage.removeItem(KEY);
       localStorage.removeItem(REPS_KEY);
+      localStorage.removeItem(COMMISSION_KEY);
     } catch {
       /* ignore */
     }
     setCompanies(SEED_COMPANIES);
     setReps(SEED_REPS);
+    setCommissionState(DEFAULT_COMMISSION);
   }, []);
 
   return (
@@ -427,6 +474,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         addRep,
         updateRep,
         removeRep,
+        commission,
+        setCommission,
+        setCustomCommission,
+        setCompanyCommission,
+        commissionFor,
         reset,
       }}
     >

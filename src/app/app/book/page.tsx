@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
 import {
@@ -48,6 +49,7 @@ import {
   Building,
   MapPin,
   Sparkles,
+  Calendar,
 } from '@/components/icons';
 import type {
   BookingType,
@@ -854,6 +856,39 @@ export default function BookPage() {
 
       {/* Context-aware greeting when the traveler is on / about to start a trip. */}
       <ActiveTripBanner />
+
+      {(() => {
+        const mine = events
+          .filter(
+            (e) =>
+              e.attendees.some((a) => a.userId === activeUser.id) && daysUntil(e.endDate) >= 0
+          )
+          .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+        const ev = mine[0];
+        if (!ev) return null;
+        return (
+          <Link
+            href={`/app/events/${ev.id}`}
+            className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-4 transition hover:border-brand/50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
+                <Calendar className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  You&apos;re going to {ev.name}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {ev.city} · {dateRange(ev.startDate, ev.endDate)}
+                  {ev.dinner ? ' · dinner is being planned — RSVP inside' : ''}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 text-sm font-semibold text-brand-dark">View →</span>
+          </Link>
+        );
+      })()}
 
       {forceApproval && (
         <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">

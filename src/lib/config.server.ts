@@ -67,3 +67,14 @@ export const EMAIL = {
     return Boolean(this.apiKey);
   },
 };
+
+/** Stripe — card payments at checkout. Flip on with the secret + publishable
+ *  keys; without them, checkout stays in demo mode (no real charge). */
+export const STRIPE = {
+  base: 'https://api.stripe.com/v1',
+  secretKey: process.env.STRIPE_SECRET_KEY || '',
+  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+  get live() {
+    return Boolean(this.secretKey && this.publishableKey);
+  },
+};

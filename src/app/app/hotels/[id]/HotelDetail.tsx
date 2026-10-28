@@ -19,10 +19,11 @@ import { RoomSelection } from '@/components/hotels/RoomSelection';
 import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, Input, Select, cn } from '@/components/app/ui';
+import { StripeCheckout } from '@/components/app/StripeCheckout';
 import { HvLoader } from '@/components/HvLoader';
 import { sendEmail } from '@/lib/email';
 import { money, num, dateRange } from '@/lib/format';
-import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet } from '@/components/icons';
+import { Check, Shield, Gift, MapPin, Building, Sparkles, Wallet, Lock } from '@/components/icons';
 
 function Stars({ n = 0 }: { n?: number }) {
   return (
@@ -80,7 +81,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
   // Checkout: payment entry step + a processing overlay (like HeyVacay.co).
   const [payStep, setPayStep] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [cc, setCc] = useState({ num: '', exp: '', cvc: '', name: '' });
+  const [useDifferentCard, setUseDifferentCard] = useState(false);
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
     null
   );
@@ -219,19 +220,22 @@ export default function HotelDetail({ hid }: { hid: string }) {
     setTimeout(commitBooking, 1600);
   };
 
+  const savedCard = state.billing?.mode === 'card' && !!state.billing?.cardLast4;
+
   // "Request this stay" / "Confirm booking" primary action.
   const reserve = () => {
     if (needsApproval) {
       // Approvals route to an admin — no payment taken up front.
       commitBooking();
-    } else if (state.billing?.mode === 'employee') {
-      // Employee pays at checkout — show the payment step.
-      setReview(false);
-      setPayStep(true);
-    } else {
-      // Company card / Net 30 — process straight through.
+    } else if (state.billing?.mode === 'net30') {
+      // Invoiced — nothing to collect, book straight through.
       setReview(false);
       processAndBook();
+    } else {
+      // Employee card, or company card on file — show the checkout step.
+      setUseDifferentCard(false);
+      setReview(false);
+      setPayStep(true);
     }
   };
 
@@ -682,6 +686,26 @@ export default function HotelDetail({ hid }: { hid: string }) {
                     </p>
                   </div>
                 )}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {eventName && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand-dark">
+                      <Sparkles className="h-3 w-3" /> {eventName}
+                    </span>
+                  )}
+                  {eventAllow ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                      <Check className="h-3 w-3" /> Pre-approved · books instantly
+                    </span>
+                  ) : needsApproval ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                      <Shield className="h-3 w-3" /> Needs manager approval
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                      <Check className="h-3 w-3" /> Books instantly
+                    </span>
+                  )}
+                </div>
               </div>
 
               {canBookForOthers && (
@@ -787,51 +811,87 @@ export default function HotelDetail({ hid }: { hid: string }) {
           onClick={() => setPayStep(false)}
         >
           <div
-            className="max-h-[92vh] w-full max-w-md overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            className="max-h-[92vh] w-full max-w-lg overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h2 className="font-display text-lg font-bold text-slate-900">Payment</h2>
+              <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                <Lock className="h-4 w-4 text-brand-dark" /> Secure checkout
+              </h2>
               <button onClick={() => setPayStep(false)} aria-label="Close" className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">
                 ✕
               </button>
             </div>
-            <div className="space-y-4 px-5 py-4">
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm">
-                <span className="text-slate-500">Total due</span>
-                <span className="font-display text-lg font-bold text-slate-900">{money(price)}</span>
+            <div className="grid gap-0 sm:grid-cols-[1fr_1.1fr]">
+              {/* order summary */}
+              <div className="space-y-3 border-b border-slate-100 bg-slate-50 p-5 sm:border-b-0 sm:border-r">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Your booking
+                </p>
+                {images[0] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={images[0]} alt="" className="h-28 w-full rounded-xl object-cover" />
+                )}
+                <div>
+                  <p className="font-semibold text-slate-900">{name}</p>
+                  {selected?.roomTitle && <p className="text-sm text-slate-500">{selected.roomTitle}</p>}
+                  <p className="text-xs text-slate-400">
+                    {dateRange(checkin, checkout)} · {nights} night{nights === 1 ? '' : 's'}
+                  </p>
+                </div>
+                {eventName && (
+                  <p className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand-dark">
+                    <Sparkles className="h-3 w-3" /> {eventName}
+                  </p>
+                )}
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Room ({nights}n)</span>
+                    <span className="text-slate-800">{money(price)}</span>
+                  </div>
+                  {savings > 0 && (
+                    <div className="mt-1 flex justify-between text-xs">
+                      <span className="text-slate-400">Saved vs market</span>
+                      <span className="font-semibold text-emerald-600">{money(savings)}</span>
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-baseline justify-between border-t border-slate-100 pt-2">
+                    <span className="font-semibold text-slate-700">Total due</span>
+                    <span className="font-display text-xl font-bold text-slate-900">{money(price)}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400">Taxes & fees included. +{num(points)} points on this trip.</p>
               </div>
-              <Field label="Name on card">
-                <Input value={cc.name} onChange={(e) => setCc({ ...cc, name: e.target.value })} placeholder="Full name" />
-              </Field>
-              <Field label="Card number">
-                <Input
-                  value={cc.num}
-                  onChange={(e) => setCc({ ...cc, num: e.target.value })}
-                  placeholder="1234 5678 9012 3456"
-                  inputMode="numeric"
-                />
-              </Field>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Expiry">
-                  <Input value={cc.exp} onChange={(e) => setCc({ ...cc, exp: e.target.value })} placeholder="MM/YY" />
-                </Field>
-                <Field label="CVC">
-                  <Input value={cc.cvc} onChange={(e) => setCc({ ...cc, cvc: e.target.value })} placeholder="123" inputMode="numeric" />
-                </Field>
+
+              {/* payment */}
+              <div className="space-y-4 p-5">
+                {savedCard && !useDifferentCard ? (
+                  <>
+                    <p className="text-sm font-semibold text-slate-800">Pay with company card</p>
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                      <span className="grid h-9 w-12 place-items-center rounded-md bg-navy text-[10px] font-bold text-white">
+                        {state.billing?.cardBrand ?? 'CARD'}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-800">•••• •••• •••• {state.billing?.cardLast4}</p>
+                        <p className="text-xs text-slate-400">Company card on file</p>
+                      </div>
+                      <Check className="h-4 w-4 text-emerald-500" />
+                    </div>
+                    <Button className="w-full" onClick={processAndBook}>
+                      Confirm &amp; pay {money(price)}
+                    </Button>
+                    <button
+                      onClick={() => setUseDifferentCard(true)}
+                      className="w-full text-center text-xs font-medium text-brand-dark hover:underline"
+                    >
+                      Use a different card
+                    </button>
+                  </>
+                ) : (
+                  <StripeCheckout amount={price} description={name} onPaid={processAndBook} />
+                )}
               </div>
-              <Button className="w-full" onClick={processAndBook}>
-                Pay {money(price)}
-              </Button>
-              <button
-                onClick={processAndBook}
-                className="w-full rounded-lg border border-dashed border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
-              >
-                DEMO MODE — DOES NOT CREATE A REAL BOOKING
-              </button>
-              <p className="text-center text-[11px] text-slate-400">
-                Payments are processed securely. Demo mode simulates a successful payment.
-              </p>
             </div>
           </div>
         </div>

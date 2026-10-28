@@ -10,6 +10,7 @@ import {
   Card,
   EmptyState,
   PageHeader,
+  cn,
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { sendEmail } from '@/lib/email';
@@ -44,6 +45,7 @@ export default function ApprovalDetail({ id }: { id: string }) {
   const [note, setNote] = useState('');
   const [noteVisible, setNoteVisible] = useState(true);
   const [done, setDone] = useState<null | 'approved' | 'declined' | 'offered'>(null);
+  const [autoBooking, setAutoBooking] = useState(false);
   // "Approve if changed" counter-offer form.
   const [offerMode, setOfferMode] = useState(false);
   const [offer, setOffer] = useState({ note: '', newRoomType: '', newPrice: 0, newImage: '' });
@@ -110,6 +112,12 @@ export default function ApprovalDetail({ id }: { id: string }) {
     if (kind === 'approved') approveBooking(b.id, comment, noteVisible);
     else cancelBooking(b.id, comment, noteVisible);
     setDone(kind);
+    if (kind === 'approved') {
+      // Simulate the auto-booking finishing on the supplier side, then email
+      // the traveler their confirmation.
+      setAutoBooking(true);
+      setTimeout(() => setAutoBooking(false), 2400);
+    }
     if (traveler?.email) {
       sendEmail('approvalDecided', traveler.email, {
         travelerName: traveler.name,
@@ -117,6 +125,18 @@ export default function ApprovalDetail({ id }: { id: string }) {
         approved: kind === 'approved',
         note: noteVisible ? comment : undefined,
       });
+      if (kind === 'approved') {
+        sendEmail('confirmation', traveler.email, {
+          travelerName: traveler.name,
+          title: b.title,
+          roomType: b.roomType,
+          dates: dateRange(b.startDate, b.endDate),
+          total: b.price,
+          savings: b.savings,
+          points: b.pointsEarned,
+          inPolicy: (b.policyNotes?.length ?? 0) === 0,
+        });
+      }
     }
   };
 
@@ -176,14 +196,39 @@ export default function ApprovalDetail({ id }: { id: string }) {
       />
 
       {done && (
-        <Card className="mb-6 border-emerald-200 bg-emerald-50">
-          <p className="font-semibold text-emerald-700">
-            {done === 'approved'
-              ? 'Trip approved — points awarded to the traveler.'
-              : done === 'declined'
-                ? 'Trip declined.'
-                : 'Offer sent — the traveler will see it on their home page and can accept or decline.'}
-          </p>
+        <Card
+          className={cn(
+            'mb-6',
+            done === 'declined' ? 'border-slate-200 bg-slate-50' : 'border-emerald-200 bg-emerald-50'
+          )}
+        >
+          {done === 'approved' ? (
+            autoBooking ? (
+              <div className="flex items-center gap-3">
+                <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-600" />
+                <div>
+                  <p className="font-semibold text-emerald-800">Approved — auto-booking in progress…</p>
+                  <p className="text-sm text-emerald-700">
+                    We&apos;re confirming the reservation with the supplier. {traveler?.name ?? 'The traveler'} will
+                    get a confirmation email the moment it&apos;s booked.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="font-semibold text-emerald-800">
+                  Booked ✓ — {traveler?.name ?? 'the traveler'} has been emailed the confirmation.
+                </p>
+                <p className="text-sm text-emerald-700">Points have been awarded for the savings.</p>
+              </div>
+            )
+          ) : done === 'declined' ? (
+            <p className="font-semibold text-slate-700">Trip declined — the traveler has been notified.</p>
+          ) : (
+            <p className="font-semibold text-emerald-700">
+              Offer sent — the traveler sees it on their home page and can accept with one click.
+            </p>
+          )}
           <div className="mt-3">
             <Button href="/app/approvals" size="sm">
               Back to approvals
