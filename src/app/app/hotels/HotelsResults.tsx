@@ -88,7 +88,9 @@ function Signals({
 
 export default function HotelsResults() {
   const params = useSearchParams();
-  const { evaluatePolicies } = useStore();
+  const { evaluatePolicies, approvalModeFor, activeUser } = useStore();
+  const travelerId = params.get('travelerId') || activeUser.id;
+  const forceApproval = approvalModeFor(travelerId) === 'pre_approval';
 
   const checkin = params.get('checkin') || '';
   const checkout = params.get('checkout') || '';
@@ -356,6 +358,13 @@ export default function HotelsResults() {
         </div>
       </div>
 
+      {forceApproval && (
+        <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <span>Your company requires manager approval on all bookings — whichever stay you pick is sent for approval.</span>
+        </div>
+      )}
+
       {/* filters */}
       {!loading && options.length > 0 && (
         <Card pad={false} className="mb-5 p-4">
@@ -538,7 +547,9 @@ export default function HotelsResults() {
             })
             .map(({ opt, flags }) => {
             const { savings, points } = rewardsFor(opt);
-            const severity = policySeverity(flags);
+            const severity = (
+              forceApproval ? Math.max(policySeverity(flags), 2) : policySeverity(flags)
+            ) as 0 | 1 | 2 | 3;
             const searched =
               (hid != null && String(opt.hid) === hid) || pinnedHids.has(String(opt.hid));
             const amenities =

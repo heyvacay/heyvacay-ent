@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
 import { Button, Card, EmptyState, Field, Input, PageHeader } from '@/components/app/ui';
+import { HotelAllowPicker, type AllowHotel } from '@/components/app/HotelAllowPicker';
 import { shortDate, todayISO } from '@/lib/format';
 import { Calendar, MapPin, Sparkles } from '@/components/icons';
 
@@ -18,12 +19,12 @@ export default function EventsPage() {
   const canCreate = role === 'admin' || role === 'booker';
 
   const [open, setOpen] = useState(false);
+  const [allowHotelList, setAllowHotelList] = useState<AllowHotel[]>([]);
   const [form, setForm] = useState({
     name: '',
     city: '',
     startDate: todayISO(),
     endDate: todayISO(),
-    allowHotels: '',
     allowFlights: '',
   });
 
@@ -56,7 +57,8 @@ export default function EventsPage() {
       endDate: f.endDate,
       hostId: activeUser.id,
       hostName: activeUser.name,
-      allowHotels: f.allowHotels.split(',').map((s) => s.trim()).filter(Boolean),
+      allowHotels: allowHotelList.map((h) => h.name),
+      allowHotelList,
       allowFlights: f.allowFlights.split(',').map((s) => s.trim()).filter(Boolean),
       attendees: state.users
         .filter((u) => u.status === 'active')
@@ -127,9 +129,14 @@ export default function EventsPage() {
             <Field label="End date">
               <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
             </Field>
-            <Field label="Allowed hotels (comma-separated)" hint="Bookings outside this need admin approval. Blank = no limit.">
-              <Input value={form.allowHotels} onChange={(e) => setForm({ ...form, allowHotels: e.target.value })} placeholder="Austin Proper, Fairmont Austin" />
-            </Field>
+            <div className="sm:col-span-2">
+              <Field
+                label="Allowed hotels"
+                hint="Search and add real properties. In event-only booking these are the only hotels shown — and they book without approval, even if out of policy."
+              >
+                <HotelAllowPicker value={allowHotelList} onChange={setAllowHotelList} />
+              </Field>
+            </div>
             <Field label="Allowed flight routes" hint="e.g. SFO→AUS. Blank = no limit.">
               <Input value={form.allowFlights} onChange={(e) => setForm({ ...form, allowFlights: e.target.value })} placeholder="SFO→AUS, JFK→AUS" />
             </Field>

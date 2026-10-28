@@ -38,7 +38,7 @@ function Stars({ n = 0 }: { n?: number }) {
 
 export default function HotelDetail({ hid }: { hid: string }) {
   const params = useSearchParams();
-  const { state, role, activeUser, evaluatePolicies, book, spentForScope } =
+  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor } =
     useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
@@ -46,6 +46,9 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   const eventId = params.get('eventId') || undefined;
   const eventName = params.get('eventName') || undefined;
+  // Allow-listed stay for an event: pre-cleared by an admin — no policy, no approval.
+  const eventAllow = params.get('eventAllow') === '1';
+  const forceApproval = approvalModeFor(travelerId) === 'pre_approval' && !eventAllow;
 
   const checkin = params.get('checkin') || '';
   const checkout = params.get('checkout') || '';
@@ -136,11 +139,11 @@ export default function HotelDetail({ hid }: { hid: string }) {
     nights,
     location: address,
   };
-  const flags = evaluatePolicies(opt, checkin || new Date().toISOString());
+  const flags = eventAllow ? [] : evaluatePolicies(opt, checkin || new Date().toISOString());
   const { savings, points } = rewardsFor(opt);
-  const needsApproval = flags.some(
-    (f) => f.policy.action === 'approve' || f.policy.action === 'block'
-  );
+  const needsApproval =
+    !eventAllow &&
+    (forceApproval || flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block'));
 
   // Per-room policy check — each room card evaluates its own all-in price so a
   // cheap room can be in policy while a suite has a note / needs approval /
@@ -148,11 +151,19 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const assessRoom = (
     priceAllIn: number
   ): { status: 'in' | 'note' | 'approval' | 'block'; notes: string[] } => {
+    // Event allow-listed stays are pre-cleared — always in policy.
+    if (eventAllow) return { status: 'in', notes: [] };
     const roomOpt: InventoryOption = { ...opt, price: priceAllIn };
     const fl = evaluatePolicies(roomOpt, checkin || new Date().toISOString());
     const notes = fl.map((f) => f.message);
     if (fl.some((f) => f.policy.action === 'block')) return { status: 'block', notes };
     if (fl.some((f) => f.policy.action === 'approve')) return { status: 'approval', notes };
+    // Company-wide pre-approval: every room needs sign-off (policy warnings still shown).
+    if (forceApproval)
+      return {
+        status: 'approval',
+        notes: notes.length ? notes : ['Your company requires approval on all bookings.'],
+      };
     if (fl.some((f) => f.policy.action === 'warn')) return { status: 'note', notes };
     return { status: 'in', notes: [] };
   };
@@ -169,6 +180,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
       travelerNote: bookNote.trim() || undefined,
       eventId,
       eventName,
+      bypassPolicy: eventAllow,
     });
     setConfirmed({ pending: needsApproval, points });
     setReview(false);
@@ -344,6 +356,22 @@ export default function HotelDetail({ hid }: { hid: string }) {
           </span>
         )}
       </div>
+
+      {eventAllow && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+          <span>
+            Allow-listed for <span className="font-semibold">{eventName ?? 'your event'}</span> — this
+            stay books instantly, no approval needed, even if it&apos;s outside normal policy.
+          </span>
+        </div>
+      )}
+      {forceApproval && !eventAllow && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <span>Your company requires manager approval on all bookings — this stay will be sent for approval.</span>
+        </div>
+      )}
 
       {error && (
         <Card className="mt-3 border-amber-200 bg-amber-50">

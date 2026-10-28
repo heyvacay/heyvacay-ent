@@ -91,6 +91,8 @@ export interface StoreApi {
     travelerNote?: string;
     eventId?: string;
     eventName?: string;
+    /** Event allow-listed stay — skip travel policy (no approval / no block). */
+    bypassPolicy?: boolean;
   }) => Booking;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
@@ -449,9 +451,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote, eventId, eventName }) => {
+    ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
-      const flags = evaluatePolicies(opt, startDate);
+      // An event allow-listed stay is pre-cleared by an admin: skip the travel
+      // policy entirely (no approval, no block) even if it's out of policy.
+      const flags = bypassPolicy ? [] : evaluatePolicies(opt, startDate);
       // Approval mode gates on top of the travel policy: pre-approval forces
       // every trip through a manager; event-scoped trips not tied to an event
       // also route for approval (the UI normally prevents that case).
@@ -463,7 +467,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       const needsApproval =
         flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block') ||
-        mode === 'pre_approval' ||
+        (!bypassPolicy && mode === 'pre_approval') ||
         (mode === 'event_required' && !eventId);
 
       const booking: Booking = {

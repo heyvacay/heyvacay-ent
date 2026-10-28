@@ -624,6 +624,29 @@ export default function BookPage() {
     (e) => role === 'admin' || e.attendees.some((a) => a.userId === travelerId)
   );
   const selectedEvent = bookableEvents.find((e) => e.id === eventId);
+  // Company requires approval on every booking.
+  const forceApproval = approvalMode === 'pre_approval';
+  // Event-only hotel flow: lock to the event city and the allow-listed hotels.
+  const eventOnlyHotel = approvalMode === 'event_required' && !!selectedEvent;
+  const allowHotels = selectedEvent?.allowHotelList ?? [];
+
+  const bookAllowHotel = (h: { hid: string; name: string }) => {
+    if (!selectedEvent) return;
+    if (new Date(end) <= new Date(start)) {
+      setError('Check-out must be after check-in.');
+      return;
+    }
+    const q = new URLSearchParams();
+    q.set('checkin', start);
+    q.set('checkout', end);
+    q.set('adults', '1');
+    q.set('label', h.name);
+    q.set('travelerId', travelerId);
+    q.set('eventId', selectedEvent.id);
+    q.set('eventName', selectedEvent.name);
+    q.set('eventAllow', '1');
+    router.push(`/app/hotels/${h.hid}?${q.toString()}`);
+  };
 
   const [results, setResults] = useState<InventoryOption[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -680,9 +703,9 @@ export default function BookPage() {
   const sig = (opt: InventoryOption) => {
     const flags = evaluatePolicies(opt, start);
     const { savings, points } = rewardsFor(opt);
-    const pending = flags.some(
-      (f) => f.policy.action === 'approve' || f.policy.action === 'block'
-    );
+    const pending =
+      forceApproval ||
+      flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block');
     return { flags, savings, points, pending };
   };
 
@@ -807,8 +830,9 @@ export default function BookPage() {
           </div>
           {confirmed.pending && (
             <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              This trip needs manager approval under your travel policy. Points
-              land once it&apos;s approved.
+              {forceApproval
+                ? 'Your company requires manager approval on every booking, so this trip was sent for approval. Points land once it’s approved.'
+                : 'This trip needs manager approval under your travel policy. Points land once it’s approved.'}
             </p>
           )}
           <div className="mt-6 flex justify-center gap-2">
@@ -830,6 +854,21 @@ export default function BookPage() {
 
       {/* Context-aware greeting when the traveler is on / about to start a trip. */}
       <ActiveTripBanner />
+
+      {forceApproval && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <Shield className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              Your company requires approval on all bookings
+            </p>
+            <p className="text-sm text-amber-700">
+              Every trip you book is sent to a manager for approval before it&apos;s confirmed —
+              nothing books instantly.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* hero — the employee home: search first, with a HeyVacay feel */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-6 text-white ring-1 ring-white/10 sm:p-8">
@@ -966,52 +1005,122 @@ export default function BookPage() {
             </div>
           </>
         ) : type === 'hotel' ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <PlaceField<HotelSug>
-              label="Destination"
-              placeholder="City"
-              value={hotelText}
-              onChange={(v) => {
-                setHotelText(v);
-                setHotelPlace(null);
-              }}
-              fetcher={async (q) =>
-                (await placesHotels(q)).map((p) => ({
-                  ...p,
-                  key: p.type === 'region' ? `r${p.regionId}` : `h${p.hid}`,
-                }))
-              }
-              onPick={(s) => setHotelPlace(s)}
-            />
-            <Field label="Dates">
-              <HvRangeField
-                value={{ from: dStart, to: dEnd }}
-                maxRangeDays={30}
-                onChange={(r) => {
-                  if (r?.from) setStart(toISO(r.from));
-                  if (r?.to) setEnd(toISO(r.to));
-                }}
-              />
-            </Field>
-            <Field label="Guest">
-              {canBookForOthers ? (
-                <Select
-                  value={travelerId}
-                  onChange={(e) => setTravelerId(e.target.value)}
-                >
-                  {state.users
-                    .filter((u) => u.status === 'active')
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
+          eventOnlyHotel ? (
+            <div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field label="Destination (event city)">
+                  <Input value={selectedEvent!.city} disabled />
+                </Field>
+                <Field label="Dates">
+                  <HvRangeField
+                    value={{ from: dStart, to: dEnd }}
+                    maxRangeDays={30}
+                    onChange={(r) => {
+                      if (r?.from) setStart(toISO(r.from));
+                      if (r?.to) setEnd(toISO(r.to));
+                    }}
+                  />
+                </Field>
+                <Field label="Guest">
+                  {canBookForOthers ? (
+                    <Select value={travelerId} onChange={(e) => setTravelerId(e.target.value)}>
+                      {state.users
+                        .filter((u) => u.status === 'active')
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                    </Select>
+                  ) : (
+                    <Input value={activeUser.name} disabled />
+                  )}
+                </Field>
+              </div>
+              <div className="mt-4">
+                <p className="mb-2 text-sm font-semibold text-slate-700">
+                  Allowed hotels for {selectedEvent!.name}
+                </p>
+                {allowHotels.length === 0 ? (
+                  <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">
+                    No hotels have been allow-listed for this event yet.{' '}
+                    {role === 'admin'
+                      ? 'Add them on the event page.'
+                      : 'Ask your admin to add hotels to the event.'}
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {allowHotels.map((h) => (
+                      <div
+                        key={h.hid}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 p-3"
+                      >
+                        <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-slate-800">
+                          <Building className="h-4 w-4 shrink-0 text-brand-dark" />
+                          <span className="truncate">{h.name}</span>
+                        </span>
+                        <Button size="sm" onClick={() => bookAllowHotel(h)}>
+                          Select
+                        </Button>
+                      </div>
                     ))}
-                </Select>
-              ) : (
-                <Input value={activeUser.name} disabled />
-              )}
-            </Field>
-          </div>
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-slate-400">
+                  In event-only booking you can book any allow-listed hotel without approval — even
+                  if it&apos;s outside normal policy.
+                </p>
+              </div>
+            </div>
+          ) : approvalMode === 'event_required' ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">
+              Choose an event below to see its allow-listed hotels.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <PlaceField<HotelSug>
+                label="Destination"
+                placeholder="City"
+                value={hotelText}
+                onChange={(v) => {
+                  setHotelText(v);
+                  setHotelPlace(null);
+                }}
+                fetcher={async (q) =>
+                  (await placesHotels(q)).map((p) => ({
+                    ...p,
+                    key: p.type === 'region' ? `r${p.regionId}` : `h${p.hid}`,
+                  }))
+                }
+                onPick={(s) => setHotelPlace(s)}
+              />
+              <Field label="Dates">
+                <HvRangeField
+                  value={{ from: dStart, to: dEnd }}
+                  maxRangeDays={30}
+                  onChange={(r) => {
+                    if (r?.from) setStart(toISO(r.from));
+                    if (r?.to) setEnd(toISO(r.to));
+                  }}
+                />
+              </Field>
+              <Field label="Guest">
+                {canBookForOthers ? (
+                  <Select value={travelerId} onChange={(e) => setTravelerId(e.target.value)}>
+                    {state.users
+                      .filter((u) => u.status === 'active')
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </Select>
+                ) : (
+                  <Input value={activeUser.name} disabled />
+                )}
+              </Field>
+            </div>
+          )
         ) : (
           <ComingSoon product={type} />
         )}
@@ -1055,7 +1164,7 @@ export default function BookPage() {
               </div>
             )}
 
-            {(type === 'flight' || type === 'hotel') && (
+            {(type === 'flight' || (type === 'hotel' && !eventOnlyHotel)) && (
               <Button className="mt-4" onClick={runSearch} disabled={loading}>
                 {loading ? (
                   <span className="inline-flex items-center gap-2">

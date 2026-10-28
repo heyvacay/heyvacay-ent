@@ -226,7 +226,7 @@ function DetailsModal({ opt, onClose }: { opt: InventoryOption; onClose: () => v
 
 export default function FlightsResults() {
   const params = useSearchParams();
-  const { state, role, activeUser, evaluatePolicies, book, spentForScope } = useStore();
+  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor } = useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
 
   const origin = params.get('origin') || '';
@@ -262,10 +262,13 @@ export default function FlightsResults() {
     };
   }, [origin, destination, departDate, returnDate, cabin]);
 
+  const forceApproval = approvalModeFor(travelerId) === 'pre_approval';
+
   const sig = (opt: InventoryOption) => {
     const flags = evaluatePolicies(opt, departDate);
     const { points } = rewardsFor(opt);
-    const needsApproval = flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block');
+    const needsApproval =
+      forceApproval || flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block');
     return { flags, points, needsApproval };
   };
 
@@ -327,6 +330,13 @@ export default function FlightsResults() {
         </p>
       </div>
 
+      {forceApproval && (
+        <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <span>Your company requires manager approval on all bookings — any fare you pick is sent for approval.</span>
+        </div>
+      )}
+
       {error && (
         <Card className="border-amber-200 bg-amber-50">
           <p className="text-sm text-amber-700">{error}</p>
@@ -373,7 +383,7 @@ export default function FlightsResults() {
                   </div>
                 </div>
                 <div className="border-t border-slate-100 pt-3">
-                  <Signals inPolicy={flags.length === 0} needsApproval={needsApproval} points={points} />
+                  <Signals inPolicy={flags.length === 0 && !needsApproval} needsApproval={needsApproval} points={points} />
                 </div>
               </Card>
             );

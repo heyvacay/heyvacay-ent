@@ -97,10 +97,20 @@ export interface TravelEvent {
   endDate: string;
   hostId: string;
   attendees: EventAttendee[];
-  /** Allowed hotel names/ids; empty = no restriction. */
+  /** Allowed hotel names; empty = no restriction. */
   allowHotels: string[];
+  /**
+   * Smart hotel allow-list with supplier ids, so event-only booking can show
+   * exactly these properties for the event dates. An admin-added hotel is
+   * pre-cleared: it books without approval even if out of policy.
+   */
+  allowHotelList?: { hid: string; name: string }[];
   /** Allowed flight routes e.g. "SFO→AUS"; empty = no restriction. */
   allowFlights: string[];
+  /** Event-city coordinates/region, used to anchor hotel search. */
+  regionId?: number;
+  lat?: number;
+  lng?: number;
   messages: EventMessage[];
   dinner?: Dinner;
   createdAt: string;

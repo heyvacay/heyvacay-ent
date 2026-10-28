@@ -26,16 +26,18 @@ import {
 } from '@/components/app/ui';
 import { shortDate } from '@/lib/format';
 import { EventChat } from '@/components/app/EventChat';
+import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
 import { MapPin, Users, Check, Shield, Plane, Sparkles } from '@/components/icons';
 
 type Tab = 'overview' | 'chat' | 'dinner';
 
 export default function EventDetail({ id }: { id: string }) {
-  const { activeUser } = useStore();
+  const { activeUser, role } = useStore();
   const {
     eventById,
     addMessage,
     toggleReaction,
+    setHotelAllowList,
     joinEvent,
     startDinner,
     joinDinner,
@@ -237,11 +239,16 @@ export default function EventDetail({ id }: { id: string }) {
                   <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
                     <MapPin className="h-4 w-4 text-brand-dark" /> Hotels
                   </p>
-                  {e.allowHotels.length === 0 ? (
+                  {role === 'admin' ? (
+                    <HotelAllowPicker
+                      value={e.allowHotelList ?? []}
+                      onChange={(list) => setHotelAllowList(e.id, list)}
+                    />
+                  ) : (e.allowHotelList?.length ?? e.allowHotels.length) === 0 ? (
                     <p className="text-sm text-slate-400">No restriction</p>
                   ) : (
                     <ul className="space-y-1">
-                      {e.allowHotels.map((h) => (
+                      {(e.allowHotelList?.map((h) => h.name) ?? e.allowHotels).map((h) => (
                         <li key={h} className="flex items-center gap-1.5 text-sm text-slate-600">
                           <Check className="h-3.5 w-3.5 text-brand-dark" /> {h}
                         </li>

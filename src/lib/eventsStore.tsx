@@ -31,8 +31,12 @@ interface EventsApi {
     hostId: string;
     hostName: string;
     allowHotels: string[];
+    allowHotelList?: { hid: string; name: string }[];
     allowFlights: string[];
     attendees: EventAttendee[];
+    regionId?: number;
+    lat?: number;
+    lng?: number;
   }) => TravelEvent;
   addMessage: (
     eventId: string,
@@ -42,6 +46,8 @@ interface EventsApi {
     replyTo?: string
   ) => void;
   toggleReaction: (eventId: string, messageId: string, userId: string, emoji: string) => void;
+  /** Replace an event's smart hotel allow-list (admins). */
+  setHotelAllowList: (eventId: string, list: { hid: string; name: string }[]) => void;
   joinEvent: (eventId: string, userId: string, name: string) => void;
 
   startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
@@ -116,7 +122,11 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           ? data.attendees
           : [{ userId: data.hostId, name: data.hostName }],
       allowHotels: data.allowHotels,
+      allowHotelList: data.allowHotelList,
       allowFlights: data.allowFlights,
+      regionId: data.regionId,
+      lat: data.lat,
+      lng: data.lng,
       messages: [msg(data.hostId, data.hostName, `Created the "${data.name}" event thread.`, true)],
       createdAt: new Date().toISOString().slice(0, 10),
     };
@@ -147,6 +157,16 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           if (reactions[emoji].length === 0) delete reactions[emoji];
           return { ...m, reactions };
         }),
+      })),
+    [patch]
+  );
+
+  const setHotelAllowList: EventsApi['setHotelAllowList'] = useCallback(
+    (eventId, list) =>
+      patch(eventId, (e) => ({
+        ...e,
+        allowHotelList: list,
+        allowHotels: list.map((h) => h.name),
       })),
     [patch]
   );
@@ -341,6 +361,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         createEvent,
         addMessage,
         toggleReaction,
+        setHotelAllowList,
         joinEvent,
         startDinner,
         joinDinner,
