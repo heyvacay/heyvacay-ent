@@ -37,6 +37,10 @@ export interface User {
   personalLinked: boolean;
   /** Per-employee booking approval mode; omitted/'default' inherits the company. */
   approvalMode?: BookingApprovalMode | 'default';
+  /** Home city (for events: whether this person needs a hotel). */
+  homeCity?: string;
+  homeLat?: number;
+  homeLng?: number;
 }
 
 export type BudgetScope = 'company' | 'department' | 'employee';

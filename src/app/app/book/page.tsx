@@ -14,7 +14,7 @@ import {
   EmptyState,
   cn,
 } from '@/components/app/ui';
-import { money, num, todayISO, addDays, daysUntil, dateRange } from '@/lib/format';
+import { money, num, todayISO, addDays, daysUntil, dateRange, milesBetween } from '@/lib/format';
 import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
@@ -593,7 +593,7 @@ type FlightSug = FlightPlace & Suggestion;
 type HotelSug = HotelPlace & Suggestion;
 
 export default function BookPage() {
-  const { state, role, activeUser, evaluatePolicies, book, pointsBalance, approvalModeFor } =
+  const { state, role, activeUser, evaluatePolicies, book, pointsBalance, approvalModeFor, setHomeCity } =
     useStore();
   const { events } = useEvents();
   const router = useRouter();
@@ -893,38 +893,73 @@ export default function BookPage() {
       {/* Context-aware greeting when the traveler is on / about to start a trip. */}
       <ActiveTripBanner />
 
-      {(() => {
-        const mine = events
-          .filter(
-            (e) =>
-              e.attendees.some((a) => a.userId === activeUser.id) && daysUntil(e.endDate) >= 0
-          )
-          .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
-        const ev = mine[0];
-        if (!ev) return null;
-        return (
-          <Link
-            href={`/app/events/${ev.id}`}
-            className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-4 transition hover:border-brand/50"
-          >
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
-                <Calendar className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  You&apos;re going to {ev.name}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {ev.city} · {dateRange(ev.startDate, ev.endDate)}
-                  {ev.dinner ? ' · dinner is being planned — RSVP inside' : ''}
-                </p>
+      {!activeUser.homeCity && <HomeCityPrompt onSet={(c, lat, lng) => setHomeCity(activeUser.id, c, lat, lng)} />}
+
+      {events
+        .filter(
+          (e) => e.attendees.some((a) => a.userId === activeUser.id) && daysUntil(e.endDate) >= 0
+        )
+        .sort((a, b) => (a.startDate < b.startDate ? -1 : 1))
+        .slice(0, 1)
+        .map((ev) => {
+          const hasHotel = state.bookings.some(
+            (b) =>
+              b.eventId === ev.id &&
+              b.type === 'hotel' &&
+              b.status !== 'cancelled' &&
+              b.travelerId === activeUser.id
+          );
+          // Needs a hotel if home is >50mi from the event (or home unknown).
+          const dist =
+            activeUser.homeLat != null && ev.lat != null && ev.lng != null
+              ? milesBetween(activeUser.homeLat, activeUser.homeLng ?? 0, ev.lat, ev.lng)
+              : null;
+          const needsHotel = dist == null ? true : dist > 50;
+          const flag = needsHotel && !hasHotel;
+          return (
+            <Link
+              key={ev.id}
+              href={flag ? `/app/book?eventId=${ev.id}` : `/app/events/${ev.id}`}
+              className={cn(
+                'mb-6 flex items-center justify-between gap-3 rounded-2xl border p-4 transition',
+                flag
+                  ? 'border-red-300 bg-red-50 hover:border-red-400'
+                  : 'border-brand/30 bg-brand/5 hover:border-brand/50'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
+                    flag ? 'bg-red-100 text-red-600' : 'bg-brand/15 text-brand-dark'
+                  )}
+                >
+                  <Calendar className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className={cn('text-sm font-semibold', flag ? 'text-red-700' : 'text-slate-900')}>
+                    {flag ? `Book your hotel for ${ev.name}` : `You're going to ${ev.name}`}
+                  </p>
+                  <p className={cn('text-xs', flag ? 'text-red-600' : 'text-slate-500')}>
+                    {ev.city} · {dateRange(ev.startDate, ev.endDate)}
+                    {flag
+                      ? dist == null
+                        ? ' · no home city set — a hotel may be needed'
+                        : ` · ${dist} mi from home — you'll need a hotel`
+                      : hasHotel
+                        ? ' · hotel booked ✓'
+                        : ' · no hotel needed'}
+                  </p>
+                </div>
               </div>
-            </div>
-            <span className="shrink-0 text-sm font-semibold text-brand-dark">View →</span>
-          </Link>
-        );
-      })()}
+              <span
+                className={cn('shrink-0 text-sm font-semibold', flag ? 'text-red-700' : 'text-brand-dark')}
+              >
+                {flag ? 'Book now →' : 'View →'}
+              </span>
+            </Link>
+          );
+        })}
 
       {forceApproval && (
         <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -1551,6 +1586,102 @@ export default function BookPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** First-run prompt asking the traveler for their home city (used by events to
+ *  tell whether they need a hotel). Dismissible; reappears only if unset. */
+function HomeCityPrompt({
+  onSet,
+}: {
+  onSet: (city: string, lat?: number, lng?: number) => void;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState<HotelPlace[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) {
+      setItems([]);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const places = await placesHotels(term);
+        if (live) setItems(places.filter((p) => p.type === 'region').slice(0, 6));
+      } catch {
+        if (live) setItems([]);
+      }
+    }, 240);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [q]);
+
+  if (dismissed) return null;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-brand/30 bg-brand/5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
+            <MapPin className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Where&apos;s home?</p>
+            <p className="text-xs text-slate-500">
+              Set your home city so event hosts know when you&apos;ll need a hotel.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="text-xs font-medium text-slate-400 hover:text-slate-600"
+        >
+          Later
+        </button>
+      </div>
+      <div className="relative mt-3 max-w-sm">
+        <Input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search your home city…"
+          autoComplete="off"
+        />
+        {open && items.length > 0 && (
+          <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            {items.map((p, i) => (
+              <li key={`${p.regionId}-${i}`}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onSet(p.label, p.lat, p.lng);
+                    setDismissed(true);
+                  }}
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-dark" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-slate-800">{p.label}</span>
+                    {p.sub && <span className="block truncate text-xs text-slate-400">{p.sub}</span>}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

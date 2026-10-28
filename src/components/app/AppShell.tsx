@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Avatar, cn } from './ui';
 import { ThemeToggle } from './ThemeToggle';
+import { Logo } from './Logo';
 import {
   ChartBar,
   Users,
@@ -160,16 +161,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const SideContent = (
     <>
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
-          <Sparkles className="h-4 w-4 text-brand-dark" />
-        </span>
-        <div className="leading-tight">
-          <p className="font-display text-sm font-bold text-slate-900">
-            HeyVacay
-          </p>
-          <p className="text-[11px] font-semibold text-brand-dark">Enterprise</p>
-        </div>
+      <div className="px-5 py-5">
+        <Logo imgClassName="h-7" />
       </div>
 
       <div className="mx-4 mb-3 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">

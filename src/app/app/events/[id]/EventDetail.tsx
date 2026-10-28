@@ -24,7 +24,7 @@ import {
   Select,
   cn,
 } from '@/components/app/ui';
-import { shortDate } from '@/lib/format';
+import { shortDate, milesBetween } from '@/lib/format';
 import { EventChat } from '@/components/app/EventChat';
 import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
 import { sendEmail } from '@/lib/email';
@@ -313,17 +313,42 @@ export default function EventDetail({ id }: { id: string }) {
             </Card>
           </div>
           <Card>
-            <h2 className="mb-3 font-display text-lg font-bold text-slate-900">Attendees</h2>
+            <h2 className="mb-1 font-display text-lg font-bold text-slate-900">Attendees</h2>
+            <p className="mb-3 text-xs text-slate-400">
+              Hotel status is based on each person&apos;s home city (&gt;50mi needs a hotel).
+            </p>
             <div className="space-y-2">
-              {e.attendees.map((a) => (
-                <div key={a.userId} className="flex items-center gap-2 text-sm text-slate-700">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
-                    {a.name.split(' ').map((x) => x[0]).slice(0, 2).join('')}
-                  </span>
-                  {a.name}
-                  {a.userId === e.hostId && <Badge color="brand">Host</Badge>}
-                </div>
-              ))}
+              {e.attendees.map((a) => {
+                const u = state.users.find((x) => x.id === a.userId);
+                const hasHotel = state.bookings.some(
+                  (b) =>
+                    b.eventId === e.id &&
+                    b.type === 'hotel' &&
+                    b.status !== 'cancelled' &&
+                    b.travelerId === a.userId
+                );
+                const dist =
+                  u?.homeLat != null && e.lat != null && e.lng != null
+                    ? milesBetween(u.homeLat, u.homeLng ?? 0, e.lat, e.lng)
+                    : null;
+                const needsHotel = dist == null ? true : dist > 50;
+                return (
+                  <div key={a.userId} className="flex items-center gap-2 text-sm text-slate-700">
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
+                      {a.name.split(' ').map((x) => x[0]).slice(0, 2).join('')}
+                    </span>
+                    <span className="flex-1 truncate">{a.name}</span>
+                    {a.userId === e.hostId && <Badge color="brand">Host</Badge>}
+                    {hasHotel ? (
+                      <Badge color="green">Hotel booked</Badge>
+                    ) : needsHotel ? (
+                      <Badge color="amber">Needs hotel</Badge>
+                    ) : (
+                      <Badge color="slate">Local</Badge>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>

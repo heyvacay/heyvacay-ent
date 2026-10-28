@@ -7,7 +7,6 @@ import { cn } from '@/components/app/ui';
 import {
   ChartBar,
   Building,
-  Sparkles,
   TrendUp,
   Calendar,
   Receipt,
@@ -15,6 +14,7 @@ import {
   Wallet,
 } from '@/components/icons';
 import { ME } from '@/lib/crm';
+import { Logo } from '@/components/app/Logo';
 
 const NAV = [
   { href: '/sales', label: 'Dashboard', icon: ChartBar },
@@ -35,14 +35,8 @@ export default function SalesShell({ children }: { children: ReactNode }) {
 
   const Side = (
     <>
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/20 ring-1 ring-brand/30">
-          <Sparkles className="h-4 w-4 text-brand" />
-        </span>
-        <div className="leading-tight">
-          <p className="font-display text-sm font-bold text-white">HeyVacay</p>
-          <p className="text-[11px] font-semibold text-brand">Sales · Nova</p>
-        </div>
+      <div className="px-5 py-5">
+        <Logo tone="light" label="Sales · Nova" imgClassName="h-7" />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-3">

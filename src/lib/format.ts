@@ -91,3 +91,20 @@ export function daysUntil(iso: string): number {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
+
+/** Great-circle distance in miles between two lat/lng points. */
+export function milesBetween(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 3958.8; // Earth radius, miles
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.min(1, Math.sqrt(a))));
+}

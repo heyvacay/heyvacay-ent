@@ -153,6 +153,16 @@ html.dark {
   color-scheme: dark;
 }
 
+/* The wordmark SVG is dark ink + cyan mark; invert it in dark mode so the ink
+ * reads on the dark sidebar (the cyan goes light, still on-brand). */
+.dark img.hv-logo {
+  filter: brightness(0) invert(1);
+}
+/* Always-white wordmark, for permanently-dark surfaces (Nova sidebar). */
+img.hv-logo-light {
+  filter: brightness(0) invert(1);
+}
+
 /* surfaces — raised (card/white) sits above recessed tracks */
 .dark .bg-white,
 .dark .bg-white\/90,

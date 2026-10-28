@@ -59,10 +59,16 @@ function brandHeader(d: Doc, kicker: string, title: string) {
   pdf.setFillColor(...BRAND);
   pdf.rect(0, 96, PAGE_W, 4, 'F');
 
-  pdf.setTextColor(...BRAND);
+  // Wordmark lockup: "heyvacay" (white) + cyan dot + a small blue ENTERPRISE.
+  pdf.setTextColor(255, 255, 255);
   pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(9);
-  pdf.text('HEYVACAY ENTERPRISE', MARGIN, 40);
+  pdf.setFontSize(18);
+  pdf.text('heyvacay', MARGIN, 42);
+  const wmW = pdf.getTextWidth('heyvacay');
+  pdf.setTextColor(...BRAND);
+  pdf.text('.', MARGIN + wmW + 1, 42);
+  pdf.setFontSize(8);
+  pdf.text('ENTERPRISE', MARGIN + wmW + 10, 41);
 
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(9);

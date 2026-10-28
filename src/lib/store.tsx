@@ -67,6 +67,8 @@ export interface StoreApi {
     role: Role;
   }) => void;
   updateUser: (id: string, patch: Partial<Pick<User, 'name' | 'title' | 'department' | 'role' | 'status' | 'approvalMode'>>) => void;
+  /** Set a user's home city (used to decide if they need a hotel for an event). */
+  setHomeCity: (userId: string, city: string, lat?: number, lng?: number) => void;
   /** Effective booking approval mode for a traveler (employee override ∨ company default). */
   approvalModeFor: (userId: string) => BookingApprovalMode;
   /** Set the company-wide default approval mode. */
@@ -392,6 +394,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       users: s.users.map((u) => (u.id === id ? { ...u, ...patch } : u)),
+    }));
+  }, []);
+
+  const setHomeCity: StoreApi['setHomeCity'] = useCallback((userId, city, lat, lng) => {
+    setState((s) => ({
+      ...s,
+      users: s.users.map((u) =>
+        u.id === userId ? { ...u, homeCity: city, homeLat: lat, homeLng: lng } : u
+      ),
     }));
   }, []);
 
@@ -856,6 +867,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     evaluatePolicies,
     inviteUser,
     updateUser,
+    setHomeCity,
     approvalModeFor,
     setCompanyApprovalMode,
     setUserApprovalMode,
