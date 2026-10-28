@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Sparkles } from '@/components/icons';
+import { Logo } from '@/components/app/Logo';
 
 export const metadata: Metadata = {
   title: 'Nova — HeyVacay Internal',
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 const NAV = [
-  { href: '/nova', label: 'Booking lookup' },
+  { href: '/nova', label: 'Bookings' },
   { href: '/sales', label: 'Sales (Nova CRM)' },
 ];
 
@@ -21,14 +21,8 @@ export default function NovaLayout({
   return (
     <div className="min-h-screen bg-navy-deep text-mist">
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-line bg-navy px-5 py-6 lg:flex">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
-            <Sparkles className="h-4 w-4 text-brand" />
-          </span>
-          <div className="leading-tight">
-            <p className="font-display text-sm font-bold text-white">Nova</p>
-            <p className="text-[11px] font-semibold text-brand">HeyVacay internal</p>
-          </div>
+        <div className="flex items-center">
+          <Logo tone="light" label="Nova · Internal" imgClassName="h-7" />
         </div>
 
         <nav className="mt-9 flex-1 space-y-1">
