@@ -20,6 +20,7 @@ import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, Input, Select, cn } from '@/components/app/ui';
 import { StripeCheckout } from '@/components/app/StripeCheckout';
+import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 import { HvLoader } from '@/components/HvLoader';
 import { sendEmail } from '@/lib/email';
 import { money, num, dateRange } from '@/lib/format';
@@ -267,8 +268,9 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   if (confirmed) {
     return (
-      <Card className="mx-auto max-w-xl">
-        <div className="text-center">
+      <Card className="relative mx-auto max-w-xl overflow-hidden">
+        {!confirmed.pending && <ConfettiAnimation durationMs={5000} />}
+        <div className="relative text-center">
           <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
             <Check className="h-7 w-7" />
           </span>

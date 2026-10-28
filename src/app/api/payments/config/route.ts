@@ -10,8 +10,12 @@ export const dynamic = 'force-dynamic';
  * the bundle) so flipping the secret on in ECS enables live checkout instantly.
  */
 export async function GET() {
+  // A publishable key is enough to mount Stripe Elements — the secret can live
+  // in our backend (same account/keys as heyvacay.co), which the intent route
+  // proxies to. So "live" tracks the publishable key, not the local secret.
+  const publishableKey = STRIPE.publishableKey;
   return NextResponse.json({
-    live: STRIPE.live,
-    publishableKey: STRIPE.live ? STRIPE.publishableKey : '',
+    live: Boolean(publishableKey),
+    publishableKey,
   });
 }

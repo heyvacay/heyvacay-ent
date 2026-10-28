@@ -19,6 +19,7 @@ import {
 import { money, num, dateRange } from '@/lib/format';
 import { Plane, Check, Shield, Gift, Wallet } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
+import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 
 /* ---------------- helpers ---------------- */
 
@@ -298,8 +299,9 @@ export default function FlightsResults() {
 
   if (confirmed) {
     return (
-      <Card className="mx-auto max-w-xl text-center">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+      <Card className="relative mx-auto max-w-xl overflow-hidden text-center">
+        {!confirmed.pending && <ConfettiAnimation durationMs={5000} />}
+        <span className="relative mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
           <Check className="h-7 w-7" />
         </span>
         <h2 className="mt-4 font-display text-2xl font-bold text-slate-900">
