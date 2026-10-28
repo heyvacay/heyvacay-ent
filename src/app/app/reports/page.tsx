@@ -2,21 +2,32 @@
 
 import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { Button, Card, PageHeader, StatCard, cn } from '@/components/app/ui';
+import { Button, Card, PageHeader, StatCard, Select, cn } from '@/components/app/ui';
 import { money, money2, num, pct, shortDate, dateRange } from '@/lib/format';
 import { savingsReportPdf } from '@/lib/pdf';
+import {
+  parseQuery,
+  runReport,
+  describeQuery,
+  DIMENSION_LABEL,
+  MEASURE_LABEL,
+  type Dimension,
+  type Measure,
+  type ReportQuery,
+} from '@/lib/reporting';
 
 // Deeper brand cyan for data marks — validated for >=3:1 contrast on white,
 // unlike the light brand token (#23e3ef) used for accents.
 const INK = '#0e7490';
 const TRACK = '#f1f5f9';
 
-type Level = 'company' | 'department' | 'employee' | 'transactions';
+type Level = 'company' | 'department' | 'employee' | 'transactions' | 'explore';
 const LEVELS: { value: Level; label: string }[] = [
   { value: 'company', label: 'Company' },
   { value: 'department', label: 'Department' },
   { value: 'employee', label: 'Employee' },
   { value: 'transactions', label: 'Transactions' },
+  { value: 'explore', label: 'Explore ✦' },
 ];
 
 /* ---------------- CSV export ---------------- */
@@ -594,6 +605,202 @@ export default function ReportsPage() {
           )}
         </Card>
       )}
+
+      {level === 'explore' && <ReportExplorer />}
+    </div>
+  );
+}
+
+const DIMENSIONS: Dimension[] = [
+  'country',
+  'city',
+  'airline',
+  'hotel',
+  'department',
+  'owner',
+  'type',
+  'year',
+  'month',
+];
+const MEASURES: Measure[] = ['amount', 'count', 'savings'];
+const EXAMPLES = [
+  'amount for lufthansa in 2018 by top 10 countries by report owner',
+  'top 5 airlines by savings',
+  'transaction count by department by year',
+  'amount in Germany by hotel',
+];
+
+function ReportExplorer() {
+  const [text, setText] = useState(EXAMPLES[0]);
+  const [q, setQ] = useState<ReportQuery>(() => parseQuery(EXAMPLES[0]));
+
+  const run = (phrase: string) => {
+    setText(phrase);
+    setQ(parseQuery(phrase));
+  };
+
+  const rows = useMemo(() => runReport(q), [q]);
+  const fmt = (n: number) => (q.measure === 'count' ? num(n) : money(n));
+  const max = Math.max(1, ...rows.map((r) => r.value));
+
+  const patch = (p: Partial<ReportQuery>) => setQ((prev) => ({ ...prev, ...p }));
+
+  const exportCsv = () => {
+    const header = [DIMENSION_LABEL[q.groupBy], q.splitBy ? DIMENSION_LABEL[q.splitBy] : null, MEASURE_LABEL[q.measure]]
+      .filter(Boolean)
+      .join(',');
+    const body = rows
+      .map((r) => [r.key, q.splitBy ? r.split ?? '' : null, r.value].filter((x) => x !== null).join(','))
+      .join('\n');
+    const blob = new Blob([`${header}\n${body}`], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'heyvacay-report.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* NL query */}
+      <Card className="border-brand/20 bg-gradient-to-br from-navy via-surface to-navy-deep text-white">
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand">Ask for any report</p>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && run(text)}
+            placeholder="e.g. amount for lufthansa in 2018 by top 10 countries by report owner"
+            className="flex-1 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white placeholder:text-mist/50 outline-none focus:border-brand"
+          />
+          <Button onClick={() => run(text)}>Run report</Button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex}
+              onClick={() => run(ex)}
+              className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-mist/80 hover:bg-white/20"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-sm text-mist/80">
+          Reading as: <span className="font-semibold text-white">{describeQuery(q)}</span>
+        </p>
+      </Card>
+
+      {/* structured builder */}
+      <Card>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Measure
+            </span>
+            <Select value={q.measure} onChange={(e) => patch({ measure: e.target.value as Measure })}>
+              {MEASURES.map((m) => (
+                <option key={m} value={m}>
+                  {MEASURE_LABEL[m]}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Group by
+            </span>
+            <Select value={q.groupBy} onChange={(e) => patch({ groupBy: e.target.value as Dimension })}>
+              {DIMENSIONS.map((d) => (
+                <option key={d} value={d}>
+                  {DIMENSION_LABEL[d]}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Then by
+            </span>
+            <Select
+              value={q.splitBy ?? ''}
+              onChange={(e) => patch({ splitBy: (e.target.value || undefined) as Dimension | undefined })}
+            >
+              <option value="">None</option>
+              {DIMENSIONS.filter((d) => d !== q.groupBy).map((d) => (
+                <option key={d} value={d}>
+                  {DIMENSION_LABEL[d]}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Top N
+            </span>
+            <Select value={String(q.limit ?? 0)} onChange={(e) => patch({ limit: Number(e.target.value) })}>
+              {[5, 10, 20, 50, 0].map((n) => (
+                <option key={n} value={n}>
+                  {n === 0 ? 'All' : `Top ${n}`}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+        {q.filters.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Filters</span>
+            {q.filters.map((f, i) => (
+              <span
+                key={`${f.field}-${i}`}
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600"
+              >
+                {DIMENSION_LABEL[f.field]}: {f.value}
+                <button
+                  onClick={() => patch({ filters: q.filters.filter((_, j) => j !== i) })}
+                  className="text-slate-400 hover:text-slate-700"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* results */}
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-lg font-bold text-slate-900">{describeQuery(q)}</h2>
+          <Button size="sm" variant="outline" onClick={exportCsv}>
+            ↓ CSV
+          </Button>
+        </div>
+        {rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-400">No data for this query.</p>
+        ) : (
+          <div className="space-y-2.5">
+            {rows.map((r) => (
+              <div key={`${r.key}-${r.split ?? ''}`}>
+                <div className="mb-1 flex items-baseline justify-between text-sm">
+                  <span className="font-medium text-slate-700">
+                    {r.key}
+                    {r.split && <span className="text-slate-400"> · {r.split}</span>}
+                  </span>
+                  <span className="font-semibold text-slate-800">{fmt(r.value)}</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-brand-dark"
+                    style={{ width: `${Math.max(2, (r.value / max) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
