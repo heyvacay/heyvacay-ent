@@ -396,6 +396,41 @@ export default function CompanyDetail({ id }: { id: string }) {
                 Open their workspace
               </Button>
             </div>
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <p className="text-sm font-semibold text-slate-700">Domain self-join</p>
+              <label className="mb-1 mt-2 block text-xs font-medium text-slate-500">
+                Email domain
+              </label>
+              <Input
+                value={c.domain ?? ''}
+                onChange={(e) =>
+                  updateCompany(c.id, {
+                    domain: e.target.value.replace(/^https?:\/\//, '').replace(/\/.*$/, ''),
+                  })
+                }
+                placeholder="acme.com"
+              />
+              <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={!!c.domainJoin}
+                  onChange={(e) => updateCompany(c.id, { domainJoin: e.target.checked })}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                />
+                <span className="text-xs text-slate-500">
+                  Auto-join verified{' '}
+                  <span className="font-mono text-slate-700">@{c.domain || 'company.com'}</span>{' '}
+                  emails with the lowest (traveler) role.
+                </span>
+              </label>
+              {c.domainJoin && (
+                <p className="mt-2 rounded-lg bg-brand/10 px-2.5 py-1.5 text-[11px] text-brand-dark">
+                  Self-join is on — new {c.domain ? `@${c.domain}` : 'domain'} users land in
+                  this workspace automatically once their email is verified.
+                </p>
+              )}
+            </div>
           </Card>
 
           <Card>

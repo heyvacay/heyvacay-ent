@@ -350,6 +350,9 @@ export interface SalesCompany {
   customCommission?: boolean;
   /** Per-company star-tier rates (used only when customCommission is on). */
   commissionStars?: Record<string, number>;
+  /** When true, anyone who verifies a work email on this company's domain is
+   *  auto-joined to the workspace with the lowest (traveler) role. */
+  domainJoin?: boolean;
 }
 
 function steps(done: string[]): OnboardingStep[] {

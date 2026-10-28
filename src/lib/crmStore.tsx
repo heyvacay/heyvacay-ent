@@ -53,6 +53,8 @@ interface CrmApi {
     hq: string;
     annualSpend: number;
     accountManager?: string;
+    contacts?: Contact[];
+    domainJoin?: boolean;
   }) => SalesCompany;
   updateCompany: (id: string, patch: Partial<SalesCompany>) => void;
   setStatus: (id: string, status: AccountStatus) => void;
@@ -236,8 +238,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       health: 60,
       nextStep: 'Qualify budget + authority',
       createdAt: todayISO(),
+      domainJoin: data.domainJoin,
       onboarding: ONBOARDING_TEMPLATE.map((s) => ({ ...s, done: false })),
-      contacts: [],
+      contacts: data.contacts ?? [],
       deals: [],
       contracts: [],
       tasks: [],

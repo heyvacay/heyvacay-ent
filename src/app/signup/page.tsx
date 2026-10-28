@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
+import { Logo } from '@/components/app/Logo';
 import { Button, Field, Input, cn } from '@/components/app/ui';
 import { money, num, todayISO } from '@/lib/format';
 import type { OnboardingProfile } from '@/lib/types';
@@ -213,13 +214,10 @@ export default function SignupPage() {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-50 px-5 py-12">
         <div className="w-full max-w-lg text-center">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
-            <Sparkles className="h-6 w-6 text-brand-dark" />
-          </span>
-          <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-brand-dark">
-            HeyVacay Enterprise
-          </p>
-          <h1 className="mt-2 font-display text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+          <div className="flex justify-center">
+            <Logo imgClassName="h-8" />
+          </div>
+          <h1 className="mt-6 font-display text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
             Set up your travel program in under a minute
           </h1>
           <p className="mx-auto mt-3 max-w-md text-slate-500">
@@ -260,17 +258,7 @@ export default function SignupPage() {
       {/* rail */}
       <aside className="hidden flex-col border-r border-slate-200 bg-white px-6 py-7 lg:flex">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
-            <Sparkles className="h-4 w-4 text-brand-dark" />
-          </span>
-          <span className="leading-tight">
-            <span className="block font-display text-sm font-bold text-slate-900">
-              HeyVacay
-            </span>
-            <span className="block text-[11px] font-semibold text-brand-dark">
-              Enterprise
-            </span>
-          </span>
+          <Logo imgClassName="h-7" />
         </Link>
 
         <nav className="mt-9 flex-1 space-y-1">
