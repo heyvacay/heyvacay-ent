@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import {
   Badge,
@@ -13,10 +14,19 @@ import {
   Select,
   StatCard,
 } from '@/components/app/ui';
-import { money2, shortDate, todayISO } from '@/lib/format';
+import { money, money2, shortDate, todayISO } from '@/lib/format';
 import { ACCOUNTING_IDS } from '@/lib/seed';
-import { Check, Globe } from '@/components/icons';
+import { Check, Globe, Receipt, Wallet, Calendar, Sparkles } from '@/components/icons';
 import type { ExpenseCategory, ExpenseStatus } from '@/lib/types';
+
+/** Plausible merchants the simulated receipt scanner "reads". */
+const SCAN_SAMPLES: { merchant: string; category: ExpenseCategory; amount: number }[] = [
+  { merchant: 'Blue Bottle Coffee', category: 'Meals', amount: 18.4 },
+  { merchant: 'Uber', category: 'Ground transport', amount: 32.75 },
+  { merchant: 'Marriott', category: 'Lodging', amount: 289.0 },
+  { merchant: 'Delta Air Lines', category: 'Airfare', amount: 412.2 },
+  { merchant: 'Office Depot', category: 'Supplies', amount: 56.9 },
+];
 
 const CATEGORIES: ExpenseCategory[] = [
   'Meals',
@@ -51,6 +61,9 @@ export default function ExpensesPage() {
   );
   const showPosting = isAdmin && !!accounting;
   const [open, setOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [tool, setTool] = useState<null | 'cards' | 'perdiem'>(null);
+  const [cards, setCards] = useState<{ id: string; last4: string; limit: number; label: string }[]>([]);
   // Expense decision modal (approve/reject with an optional comment).
   const [decide, setDecide] = useState<{ id: string; kind: 'approved' | 'rejected' } | null>(
     null
@@ -77,6 +90,30 @@ export default function ExpensesPage() {
   const postable = visible.filter(
     (e) => (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
   );
+
+  // Simulated receipt OCR: "reads" a receipt and fills the form.
+  const scanReceipt = () => {
+    setOpen(true);
+    setScanning(true);
+    setTimeout(() => {
+      const s = SCAN_SAMPLES[Math.floor(Math.random() * SCAN_SAMPLES.length)];
+      setForm({
+        merchant: s.merchant,
+        category: s.category,
+        amount: String(s.amount),
+        date: todayISO(),
+        hasReceipt: true,
+        note: '',
+      });
+      setScanning(false);
+    }, 1500);
+  };
+
+  const issueCard = (label: string, limit: number) =>
+    setCards((cs) => [
+      { id: `vc_${Date.now()}`, last4: String(1000 + Math.floor(Math.random() * 8999)), limit, label },
+      ...cs,
+    ]);
 
   const submit = () => {
     if (!form.merchant.trim() || !form.amount) return;
@@ -122,6 +159,58 @@ export default function ExpensesPage() {
         <StatCard accent label="Approved" value={money2(approvedTotal)} />
       </div>
 
+      {/* Smart expense tools — the features we promise on the marketing site. */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <button
+          onClick={scanReceipt}
+          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
+            <Receipt className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-800">Scan a receipt</span>
+            <span className="block text-xs text-slate-400">Snap it — we read the details.</span>
+          </span>
+        </button>
+        <button
+          onClick={() => setTool('cards')}
+          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
+            <Wallet className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-800">Virtual cards</span>
+            <span className="block text-xs text-slate-400">Issue a single-use card.</span>
+          </span>
+        </button>
+        <button
+          onClick={() => setTool('perdiem')}
+          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-800">Per diems</span>
+            <span className="block text-xs text-slate-400">Daily allowance by city.</span>
+          </span>
+        </button>
+        <Link
+          href="/app/integrations"
+          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
+            <Calendar className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-800">Calendar sync</span>
+            <span className="block text-xs text-slate-400">Trips on your calendar.</span>
+          </span>
+        </Link>
+      </div>
+
       {showPosting && accounting && (
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-brand/30 bg-brand/8 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
@@ -150,9 +239,18 @@ export default function ExpensesPage() {
 
       {open && (
         <Card className="my-6">
-          <h2 className="mb-4 font-display text-lg font-bold text-slate-900">
-            New expense
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-display text-lg font-bold text-slate-900">New expense</h2>
+            <Button size="sm" variant="outline" onClick={scanReceipt} disabled={scanning}>
+              <Receipt className="h-4 w-4" /> Scan receipt
+            </Button>
+          </div>
+          {scanning && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-sm font-medium text-brand-dark">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand/40 border-t-brand" />
+              Reading your receipt — extracting merchant, amount and category…
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Merchant">
               <Input
@@ -371,6 +469,11 @@ export default function ExpensesPage() {
         )}
       </div>
 
+      {tool === 'cards' && (
+        <VirtualCardsModal cards={cards} onIssue={issueCard} onClose={() => setTool(null)} />
+      )}
+      {tool === 'perdiem' && <PerDiemModal onClose={() => setTool(null)} />}
+
       {/* approve / reject with a comment */}
       {decide && (
         <div
@@ -421,5 +524,127 @@ export default function ExpensesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function VirtualCardsModal({
+  cards,
+  onIssue,
+  onClose,
+}: {
+  cards: { id: string; last4: string; limit: number; label: string }[];
+  onIssue: (label: string, limit: number) => void;
+  onClose: () => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [limit, setLimit] = useState('500');
+  return (
+    <Overlay onClose={onClose}>
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <h2 className="font-display text-lg font-bold text-slate-900">Virtual cards</h2>
+        <button onClick={onClose} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">✕</button>
+      </div>
+      <div className="space-y-4 px-5 py-4">
+        <p className="text-sm text-slate-500">
+          Issue a single-use virtual card with its own limit — perfect for a specific trip or
+          vendor. Charges reconcile straight into expenses.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="For (label)">
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Austin offsite" />
+          </Field>
+          <Field label="Limit (USD)">
+            <Input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} />
+          </Field>
+        </div>
+        <Button
+          className="w-full"
+          onClick={() => {
+            onIssue(label.trim() || 'Virtual card', Number(limit) || 0);
+            setLabel('');
+          }}
+        >
+          Issue virtual card
+        </Button>
+        {cards.length > 0 && (
+          <div className="space-y-2">
+            {cards.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-xl bg-gradient-to-br from-navy to-surface p-4 text-white"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-brand">
+                    HeyVacay virtual card
+                  </span>
+                  <span className="text-xs text-mist/70">Limit {money(c.limit)}</span>
+                </div>
+                <p className="mt-3 font-mono text-lg tracking-widest">4242 •••• •••• {c.last4}</p>
+                <p className="mt-1 text-xs text-mist/70">{c.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Overlay>
+  );
+}
+
+function PerDiemModal({ onClose }: { onClose: () => void }) {
+  const [days, setDays] = useState('3');
+  const [tier, setTier] = useState<'standard' | 'high'>('standard');
+  const meals = tier === 'high' ? 95 : 65;
+  const lodging = tier === 'high' ? 300 : 180;
+  const incidentals = 15;
+  const perDay = meals + lodging + incidentals;
+  const total = perDay * (Number(days) || 0);
+  return (
+    <Overlay onClose={onClose}>
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <h2 className="font-display text-lg font-bold text-slate-900">Per diem</h2>
+        <button onClick={onClose} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">✕</button>
+      </div>
+      <div className="space-y-4 px-5 py-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nights">
+            <Input type="number" value={days} onChange={(e) => setDays(e.target.value)} />
+          </Field>
+          <Field label="City tier">
+            <Select value={tier} onChange={(e) => setTier(e.target.value as 'standard' | 'high')}>
+              <option value="standard">Standard</option>
+              <option value="high">High-cost</option>
+            </Select>
+          </Field>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3 text-sm">
+          <div className="flex justify-between"><span className="text-slate-500">Meals / day</span><span>{money(meals)}</span></div>
+          <div className="mt-1 flex justify-between"><span className="text-slate-500">Lodging / day</span><span>{money(lodging)}</span></div>
+          <div className="mt-1 flex justify-between"><span className="text-slate-500">Incidentals / day</span><span>{money(incidentals)}</span></div>
+          <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 font-semibold text-slate-800">
+            <span>Allowance</span>
+            <span className="font-display text-lg">{money(total)}</span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">
+          Allowances follow your policy tiers; anything over is flagged for approval automatically.
+        </p>
+      </div>
+    </Overlay>
   );
 }
