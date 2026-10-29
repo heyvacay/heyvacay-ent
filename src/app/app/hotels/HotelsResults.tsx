@@ -288,6 +288,7 @@ export default function HotelsResults() {
     const overAction = params.get('overAction');
     if (maxTier) q.set('maxTier', maxTier);
     if (overAction) q.set('overAction', overAction);
+    if (params.get('forceApproval') === '1') q.set('forceApproval', '1');
     return `/app/hotels/${opt.hid}?${q.toString()}`;
   };
 

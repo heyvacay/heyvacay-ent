@@ -711,6 +711,11 @@ export default function BookPage() {
     }
   };
 
+  // Did the traveler move off the event's own city or dates? Overriding either
+  // on an event-scoped booking sends it to a manager for approval.
+  const eventOverridden = (ev: TravelEvent) =>
+    start !== ev.startDate || end !== ev.endDate;
+
   const bookAllowHotel = (h: { hid: string; name: string }) => {
     if (!selectedEvent) return;
     if (new Date(end) <= new Date(start)) {
@@ -725,7 +730,12 @@ export default function BookPage() {
     q.set('travelerId', travelerId);
     q.set('eventId', selectedEvent.id);
     q.set('eventName', selectedEvent.name);
-    q.set('eventAllow', '1');
+    if (eventOverridden(selectedEvent)) {
+      // Dates changed from the event's — no longer auto-cleared; needs approval.
+      q.set('forceApproval', '1');
+    } else {
+      q.set('eventAllow', '1');
+    }
     applyTier(q, selectedEvent);
     router.push(`/app/hotels/${h.hid}?${q.toString()}`);
   };
@@ -751,6 +761,7 @@ export default function BookPage() {
       q.set('lat', String(selectedEvent.lat));
       q.set('lng', String(selectedEvent.lng));
     }
+    if (eventOverridden(selectedEvent)) q.set('forceApproval', '1');
     applyTier(q, selectedEvent);
     router.push(`/app/hotels?${q.toString()}`);
   };

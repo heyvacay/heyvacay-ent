@@ -52,7 +52,11 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const eventName = params.get('eventName') || undefined;
   // Allow-listed stay for an event: pre-cleared by an admin — no policy, no approval.
   const eventAllow = params.get('eventAllow') === '1';
-  const forceApproval = approvalModeFor(travelerId) === 'pre_approval' && !eventAllow;
+  // Approval is forced by company pre-approval, or when an event booking was
+  // overridden off its city/dates (forceApproval=1 in the query).
+  const forceApproval =
+    params.get('forceApproval') === '1' ||
+    (approvalModeFor(travelerId) === 'pre_approval' && !eventAllow);
 
   const checkin = params.get('checkin') || '';
   const checkout = params.get('checkout') || '';
