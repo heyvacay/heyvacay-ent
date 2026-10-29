@@ -30,6 +30,8 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  /** An admin with full, company-wide control (vs. a team-manager admin). */
+  superAdmin?: boolean;
   department: string;
   title: string;
   status: 'active' | 'invited' | 'deactivated';
@@ -83,6 +85,29 @@ export interface Policy {
   tiers?: FlightCabinTier[];
   /** Optional city scope — the rule applies only to stays in this city. */
   city?: string;
+}
+
+/**
+ * A requested change to travel policy. Non-super admins' policy edits are
+ * recorded as one of these and applied only once a super admin approves.
+ */
+export type PolicyChange =
+  | { kind: 'add'; policy: Omit<Policy, 'id'> }
+  | { kind: 'toggle'; id: string }
+  | { kind: 'update'; id: string; patch: Partial<Omit<Policy, 'id'>> }
+  | { kind: 'remove'; id: string }
+  | { kind: 'companyMode'; mode: BookingApprovalMode }
+  | { kind: 'userMode'; userId: string; mode: BookingApprovalMode | 'default' }
+  | { kind: 'deptMode'; dept: string; mode: BookingApprovalMode | 'default' };
+
+export interface PolicyChangeRequest {
+  id: string;
+  by: string; // user id who requested it
+  byName: string;
+  summary: string;
+  change: PolicyChange;
+  createdAt: string;
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 export type BookingType = 'hotel' | 'flight';
@@ -346,6 +371,8 @@ export interface AppState {
   /** Per-department approval-mode overrides (department name → mode). Applied
    *  between the per-employee override and the company default. */
   departmentApprovalModes?: Record<string, BookingApprovalMode>;
+  /** Pending/decided policy-change requests awaiting super-admin approval. */
+  policyChangeRequests?: PolicyChangeRequest[];
   /** who is signed in for the demo */
   activeUserId: string;
 }

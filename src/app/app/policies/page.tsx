@@ -226,18 +226,42 @@ function FlightPreview({ tiers }: { tiers: FlightCabinTier[] }) {
 /* ---------------- page ---------------- */
 
 export default function PoliciesPage() {
-  const {
-    state,
-    togglePolicy,
-    updatePolicy,
-    addPolicy,
-    removePolicy,
-    setCompanyApprovalMode,
-    setUserApprovalMode,
-    setDepartmentApprovalMode,
-  } = useStore();
+  const { state, isSuperAdmin, changePolicy, resolvePolicyChange } = useStore();
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
   const companyMode = state.company.approvalMode ?? 'open';
+
+  // Policy edits route through the approval loop: super admins apply directly,
+  // team admins file a request a super admin approves. These wrappers keep the
+  // UI unchanged while enforcing that.
+  const [requestedNote, setRequestedNote] = useState<string | null>(null);
+  const run = (result: 'applied' | 'requested', summary: string) => {
+    if (result === 'requested') {
+      setRequestedNote(summary);
+      window.clearTimeout((run as unknown as { t?: number }).t);
+      (run as unknown as { t?: number }).t = window.setTimeout(() => setRequestedNote(null), 6000);
+    }
+  };
+  const pName = (id: string) => state.policies.find((p) => p.id === id)?.name ?? 'policy';
+  const togglePolicy = (id: string) => {
+    const on = state.policies.find((p) => p.id === id)?.enabled;
+    run(changePolicy({ kind: 'toggle', id }, `${on ? 'Disable' : 'Enable'} “${pName(id)}”`), `“${pName(id)}”`);
+  };
+  const updatePolicy = (id: string, patch: Partial<Omit<Policy, 'id'>>) =>
+    run(changePolicy({ kind: 'update', id, patch }, `Update “${pName(id)}”`), `“${pName(id)}”`);
+  const addPolicy = (p: Omit<Policy, 'id'>) =>
+    run(changePolicy({ kind: 'add', policy: p }, `Add policy “${p.name}”`), `“${p.name}”`);
+  const removePolicy = (id: string) =>
+    run(changePolicy({ kind: 'remove', id }, `Remove “${pName(id)}”`), `“${pName(id)}”`);
+  const setCompanyApprovalMode = (mode: BookingApprovalMode) =>
+    run(changePolicy({ kind: 'companyMode', mode }, `Company approval mode → ${mode}`), 'company approval mode');
+  const setUserApprovalMode = (userId: string, mode: BookingApprovalMode | 'default') => {
+    const n = state.users.find((u) => u.id === userId)?.name ?? 'employee';
+    run(changePolicy({ kind: 'userMode', userId, mode }, `${n} approval → ${mode}`), `${n}’s approval`);
+  };
+  const setDepartmentApprovalMode = (dept: string, mode: BookingApprovalMode | 'default') =>
+    run(changePolicy({ kind: 'deptMode', dept, mode }, `${dept} dept approval → ${mode}`), `${dept} approval`);
+
+  const pendingPolicyReqs = (state.policyChangeRequests ?? []).filter((r) => r.status === 'pending');
 
   // Smart overrides: searchable employee list (scales to thousands) + the
   // distinct departments for department-level overrides.
@@ -306,6 +330,52 @@ export default function PoliciesPage() {
         title="Travel policy"
         subtitle="Plain-English rules that run the moment someone books — edit any number right in the sentence."
       />
+
+      {!isSuperAdmin && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+          <span>
+            As a team admin, your policy changes are sent to a super admin for approval before they
+            take effect.
+          </span>
+        </div>
+      )}
+      {requestedNote && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand/10 p-3 text-sm font-medium text-brand-dark">
+          <Check className="h-4 w-4" /> Change to {requestedNote} sent for approval.
+        </div>
+      )}
+
+      {/* Super-admin: pending policy-change approvals */}
+      {isSuperAdmin && pendingPolicyReqs.length > 0 && (
+        <Card className="mb-6 border-amber-200 bg-amber-50/60">
+          <h2 className="mb-1 font-display text-lg font-bold text-slate-900">
+            Policy changes awaiting your approval
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">Requested by team admins.</p>
+          <div className="space-y-2">
+            {pendingPolicyReqs.map((r) => (
+              <div
+                key={r.id}
+                className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800">{r.summary}</p>
+                  <p className="text-xs text-slate-400">Requested by {r.byName}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button size="sm" onClick={() => resolvePolicyChange(r.id, true)}>
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => resolvePolicyChange(r.id, false)}>
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="space-y-6">
         {/* Approval workflow */}

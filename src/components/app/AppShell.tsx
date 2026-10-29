@@ -106,7 +106,7 @@ const EMPLOYEE_NAV: NavSection[] = [
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { state, activeUser, role, setActiveUser, setRole, reset } = useStore();
+  const { state, activeUser, role, isSuperAdmin, setActiveUser, setRole, reset } = useStore();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -293,7 +293,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </button>
 
           <div className="hidden text-sm text-slate-400 sm:block">
-            {role === 'admin' ? 'Admin console' : 'Employee portal'}
+            {role === 'admin'
+              ? isSuperAdmin
+                ? 'Super admin console'
+                : 'Team admin console'
+              : 'Employee portal'}
           </div>
 
           <div className="ml-auto flex items-center gap-3">
@@ -309,7 +313,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   .filter((u) => u.status !== 'deactivated')
                   .map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.name} · {u.role}
+                      {u.name} · {u.superAdmin ? 'super admin' : u.role}
                     </option>
                   ))}
               </select>

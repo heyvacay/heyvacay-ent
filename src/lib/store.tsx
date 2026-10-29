@@ -21,11 +21,13 @@ import type {
   InventoryOption,
   OnboardingProfile,
   Policy,
+  PolicyChange,
+  PolicyChangeRequest,
   Role,
   User,
 } from './types';
 import { SEED } from './seed';
-import { uid } from './format';
+import { uid, todayISO } from './format';
 import { rewardsFor } from './rewards';
 
 const STORAGE_KEY = 'hv_ent_demo_v2';
@@ -49,6 +51,8 @@ export interface StoreApi {
   activeUser: User;
   role: Role; // effective role (respects "view as")
   setRole: (r: Role) => void;
+  /** True when the effective user is a company-wide (super) admin. */
+  isSuperAdmin: boolean;
   setActiveUser: (id: string) => void;
 
   userById: (id: string) => User | undefined;
@@ -84,6 +88,10 @@ export interface StoreApi {
   togglePolicy: (id: string) => void;
   updatePolicy: (id: string, patch: Partial<Omit<Policy, 'id'>>) => void;
   removePolicy: (id: string) => void;
+  /** Apply a policy change if super admin, else file it for approval. Returns
+   *  'applied' or 'requested'. */
+  changePolicy: (change: PolicyChange, summary: string) => 'applied' | 'requested';
+  resolvePolicyChange: (id: string, approve: boolean) => void;
   book: (args: {
     opt: InventoryOption;
     travelerId: string;
@@ -232,6 +240,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const activeUser =
     state.users.find((u) => u.id === state.activeUserId) ?? state.users[0];
+  // A super admin is an admin flagged with company-wide control. A plain admin
+  // is a team manager scoped to their department.
+  const isSuperAdmin = role === 'admin' && !!activeUser?.superAdmin;
 
   const userById = useCallback(
     (id: string) => state.users.find((u) => u.id === id),
@@ -478,6 +489,81 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       policies: s.policies.filter((p) => p.id !== id),
     }));
   }, []);
+
+  // Apply a policy change directly to state (used by super admins and on
+  // approval of a requested change).
+  const applyPolicyChange = useCallback((s: AppState, c: PolicyChange): AppState => {
+    switch (c.kind) {
+      case 'add':
+        return { ...s, policies: [...s.policies, { ...c.policy, id: uid('p') }] };
+      case 'toggle':
+        return {
+          ...s,
+          policies: s.policies.map((p) => (p.id === c.id ? { ...p, enabled: !p.enabled } : p)),
+        };
+      case 'update':
+        return {
+          ...s,
+          policies: s.policies.map((p) => (p.id === c.id ? { ...p, ...c.patch } : p)),
+        };
+      case 'remove':
+        return { ...s, policies: s.policies.filter((p) => p.id !== c.id) };
+      case 'companyMode':
+        return { ...s, company: { ...s.company, approvalMode: c.mode } };
+      case 'userMode':
+        return {
+          ...s,
+          users: s.users.map((u) => (u.id === c.userId ? { ...u, approvalMode: c.mode } : u)),
+        };
+      case 'deptMode': {
+        const next = { ...(s.departmentApprovalModes ?? {}) };
+        if (c.mode === 'default') delete next[c.dept];
+        else next[c.dept] = c.mode;
+        return { ...s, departmentApprovalModes: next };
+      }
+      default:
+        return s;
+    }
+  }, []);
+
+  const changePolicy: StoreApi['changePolicy'] = useCallback(
+    (change, summary) => {
+      if (isSuperAdmin) {
+        setState((s) => applyPolicyChange(s, change));
+        return 'applied';
+      }
+      const req: PolicyChangeRequest = {
+        id: uid('pcr'),
+        by: activeUser.id,
+        byName: activeUser.name,
+        summary,
+        change,
+        createdAt: todayISO(),
+        status: 'pending',
+      };
+      setState((s) => ({
+        ...s,
+        policyChangeRequests: [req, ...(s.policyChangeRequests ?? [])],
+      }));
+      return 'requested';
+    },
+    [isSuperAdmin, applyPolicyChange, activeUser.id, activeUser.name]
+  );
+
+  const resolvePolicyChange: StoreApi['resolvePolicyChange'] = useCallback(
+    (id, approve) => {
+      setState((s) => {
+        const req = (s.policyChangeRequests ?? []).find((r) => r.id === id);
+        if (!req || req.status !== 'pending') return s;
+        const requests = (s.policyChangeRequests ?? []).map((r) =>
+          r.id === id ? { ...r, status: approve ? ('approved' as const) : ('rejected' as const) } : r
+        );
+        const base = { ...s, policyChangeRequests: requests };
+        return approve ? applyPolicyChange(base, req.change) : base;
+      });
+    },
+    [applyPolicyChange]
+  );
 
   const book: StoreApi['book'] = useCallback(
     ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy }) => {
@@ -872,6 +958,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     activeUser,
     role,
     setRole,
+    isSuperAdmin,
     setActiveUser,
     userById,
     spentForScope,
@@ -894,6 +981,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     togglePolicy,
     updatePolicy,
     removePolicy,
+    changePolicy,
+    resolvePolicyChange,
     book,
     cancelBooking,
     approveBooking,
