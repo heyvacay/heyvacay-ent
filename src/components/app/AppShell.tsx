@@ -83,6 +83,7 @@ const ADMIN_NAV: NavSection[] = [
   {
     title: 'Configuration',
     items: [
+      { href: '/app/setup', label: 'Setup', icon: Sparkles },
       { href: '/app/people', label: 'People', icon: Users },
       { href: '/app/policies', label: 'Policies', icon: Shield },
       { href: '/app/integrations', label: 'Integrations', icon: Globe },
@@ -139,6 +140,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // employee while on one of these pages), show an access notice instead of the
   // admin controls — the sidebar stays so you can navigate away.
   const ADMIN_ONLY = [
+    '/app/setup',
     '/app/dashboard',
     '/app/bookings',
     '/app/approvals',
