@@ -76,6 +76,7 @@ export default function CompanyDetail({ id }: { id: string }) {
     toggleTask,
     setContractStatus,
     addNote,
+    addContact,
     viewerRole,
     provisionAccount,
     globalStarRate,
@@ -85,6 +86,14 @@ export default function CompanyDetail({ id }: { id: string }) {
   } = useCrm();
   const router = useRouter();
   const [provisionPrompt, setProvisionPrompt] = useState(false);
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    title: '',
+    email: '',
+    phone: '',
+    champion: false,
+  });
   const c = companyById(id);
   // Live stats from the customer workspace when this account is provisioned
   // in this browser (ids match). Null otherwise.
@@ -300,7 +309,68 @@ export default function CompanyDetail({ id }: { id: string }) {
 
               {/* contacts */}
               <Card>
-                <h2 className="mb-3 font-display text-lg font-bold text-slate-900">Contacts</h2>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="font-display text-lg font-bold text-slate-900">Contacts</h2>
+                  <Button size="sm" variant="outline" onClick={() => setShowContactForm((v) => !v)}>
+                    {showContactForm ? 'Close' : '+ Add contact'}
+                  </Button>
+                </div>
+                {showContactForm && (
+                  <div className="mb-3 rounded-xl border border-dashed border-slate-300 p-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Input
+                        value={contactForm.name}
+                        onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                        placeholder="Name"
+                      />
+                      <Input
+                        value={contactForm.title}
+                        onChange={(e) => setContactForm({ ...contactForm, title: e.target.value })}
+                        placeholder="Title"
+                      />
+                      <Input
+                        type="email"
+                        value={contactForm.email}
+                        onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                        placeholder="Email"
+                      />
+                      <Input
+                        value={contactForm.phone}
+                        onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                        placeholder="Phone (optional)"
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={contactForm.champion}
+                          onChange={(e) => setContactForm({ ...contactForm, champion: e.target.checked })}
+                          className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                        />
+                        Champion (primary contact)
+                      </label>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (!contactForm.name.trim() || !contactForm.email.trim()) return;
+                          addContact(c.id, {
+                            name: contactForm.name.trim(),
+                            title: contactForm.title.trim(),
+                            email: contactForm.email.trim(),
+                            phone: contactForm.phone.trim() || undefined,
+                            champion: contactForm.champion,
+                          });
+                          setContactForm({ name: '', title: '', email: '', phone: '', champion: false });
+                          setShowContactForm(false);
+                        }}
+                        disabled={!contactForm.name.trim() || !contactForm.email.trim()}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {c.contacts.length === 0 ? (
                   <p className="text-sm text-slate-400">No contacts yet.</p>
                 ) : (
