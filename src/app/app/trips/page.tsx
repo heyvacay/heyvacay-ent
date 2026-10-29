@@ -9,9 +9,9 @@ import {
   EmptyState,
   PageHeader,
 } from '@/components/app/ui';
-import { money, num, dateRange, daysUntil } from '@/lib/format';
+import { money, num, dateRange, daysUntil, todayISO } from '@/lib/format';
 import { BookingChat } from '@/components/app/BookingChat';
-import { Plane, Receipt } from '@/components/icons';
+import { Plane, Receipt, Sparkles, MapPin } from '@/components/icons';
 import type { Booking } from '@/lib/types';
 
 function TripCard({
@@ -166,12 +166,22 @@ export default function TripsPage() {
     .filter((b) => b.travelerId === activeUser.id)
     .sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
 
+  const today = todayISO();
+  // Trips happening right now — the interface shifts to on-trip actions.
+  const activeNow = mine.filter(
+    (b) =>
+      b.status === 'confirmed' &&
+      ((b.type === 'hotel' && b.startDate <= today && b.endDate >= today) ||
+        (b.type === 'flight' && b.startDate === today))
+  );
   const upcoming = mine.filter(
-    (b) => b.status !== 'cancelled' && daysUntil(b.endDate) >= 0
+    (b) => b.status !== 'cancelled' && daysUntil(b.endDate) >= 0 && !activeNow.includes(b)
   );
   const past = mine.filter(
     (b) => b.status === 'cancelled' || daysUntil(b.endDate) < 0
   );
+  const expensesForTrip = (id: string) =>
+    state.expenses.filter((e) => e.tripId === id);
 
   return (
     <div>
@@ -188,6 +198,59 @@ export default function TripsPage() {
         />
       ) : (
         <div className="space-y-8">
+          {activeNow.length > 0 && (
+            <section>
+              <h2 className="mb-3 font-display text-lg font-bold text-slate-900">
+                On your trip now
+              </h2>
+              <div className="space-y-3">
+                {activeNow.map((b) => {
+                  const spent = expensesForTrip(b.id);
+                  const total = spent.reduce((s, e) => s + e.amount, 0);
+                  return (
+                    <div
+                      key={b.id}
+                      className="rounded-2xl border border-brand/40 bg-brand/5 p-4 sm:p-5"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
+                            {b.type === 'flight' ? (
+                              <Plane className="h-5 w-5" />
+                            ) : (
+                              <MapPin className="h-5 w-5" />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900">{b.title}</p>
+                            <p className="text-xs text-slate-500">
+                              {b.destination || ''} · {dateRange(b.startDate, b.endDate)}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {spent.length} expense{spent.length === 1 ? '' : 's'} logged
+                              {total > 0 ? ` · ${money(total)}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button href={`/app/expenses?scan=1&trip=${b.id}`}>
+                            <Sparkles className="h-4 w-4" /> Scan receipt
+                          </Button>
+                          <Button variant="outline" href={`/app/expenses?new=1&trip=${b.id}`}>
+                            <Receipt className="h-4 w-4" /> Add expense
+                          </Button>
+                          <Button variant="ghost" onClick={() => setDetails(b)}>
+                            Manage
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           <section>
             <h2 className="mb-3 font-display text-lg font-bold text-slate-900">
               Upcoming

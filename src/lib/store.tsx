@@ -127,6 +127,7 @@ export interface StoreApi {
     date: string;
     hasReceipt: boolean;
     note?: string;
+    tripId?: string;
   }) => void;
   setExpenseStatus: (id: string, status: ExpenseStatus, note?: string) => void;
   redeemPoints: (userId: string, amount: number, reason: string) => void;

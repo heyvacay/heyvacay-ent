@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import {
   Badge,
@@ -76,7 +77,31 @@ export default function ExpensesPage() {
     date: todayISO(),
     hasReceipt: true,
     note: '',
+    tripId: '' as string,
   });
+
+  // My trips, newest first — to tie an expense to the trip it belongs to.
+  const myTrips = state.bookings
+    .filter((b) => b.travelerId === activeUser.id && b.status !== 'cancelled')
+    .sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+
+  // Deep links from the active-trip quick actions: ?new=1 opens the form,
+  // ?scan=1 runs the receipt scanner, and ?trip=<bookingId> ties it to a trip.
+  const params = useSearchParams();
+  const handledParams = useRef(false);
+  useEffect(() => {
+    if (handledParams.current) return;
+    const trip = params.get('trip') || '';
+    const wantScan = params.get('scan') === '1';
+    const wantNew = params.get('new') === '1';
+    if (trip || wantScan || wantNew) {
+      handledParams.current = true;
+      if (trip) setForm((f) => ({ ...f, tripId: trip }));
+      if (wantScan) scanReceipt(trip);
+      else if (wantNew) setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   const visible = isAdmin
     ? state.expenses
@@ -91,8 +116,9 @@ export default function ExpensesPage() {
     (e) => (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
   );
 
-  // Simulated receipt OCR: "reads" a receipt and fills the form.
-  const scanReceipt = () => {
+  // Simulated receipt OCR: "reads" a receipt and fills the form. An optional
+  // tripId ties the expense to the trip it was incurred on.
+  const scanReceipt = (tripId = '') => {
     setOpen(true);
     setScanning(true);
     setTimeout(() => {
@@ -104,6 +130,7 @@ export default function ExpensesPage() {
         date: todayISO(),
         hasReceipt: true,
         note: '',
+        tripId,
       });
       setScanning(false);
     }, 1500);
@@ -125,6 +152,7 @@ export default function ExpensesPage() {
       date: form.date,
       hasReceipt: form.hasReceipt,
       note: form.note || undefined,
+      tripId: form.tripId || undefined,
     });
     setForm({
       merchant: '',
@@ -133,6 +161,7 @@ export default function ExpensesPage() {
       date: todayISO(),
       hasReceipt: true,
       note: '',
+      tripId: '',
     });
     setOpen(false);
   };
@@ -162,7 +191,7 @@ export default function ExpensesPage() {
       {/* Smart expense tools — the features we promise on the marketing site. */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <button
-          onClick={scanReceipt}
+          onClick={() => scanReceipt()}
           className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
         >
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
@@ -241,7 +270,7 @@ export default function ExpensesPage() {
         <Card className="my-6">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="font-display text-lg font-bold text-slate-900">New expense</h2>
-            <Button size="sm" variant="outline" onClick={scanReceipt} disabled={scanning}>
+            <Button size="sm" variant="outline" onClick={() => scanReceipt()} disabled={scanning}>
               <Receipt className="h-4 w-4" /> Scan receipt
             </Button>
           </div>
@@ -295,6 +324,19 @@ export default function ExpensesPage() {
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
                 placeholder="Client dinner — Acme"
               />
+            </Field>
+            <Field label="Trip (optional)">
+              <Select
+                value={form.tripId}
+                onChange={(e) => setForm({ ...form, tripId: e.target.value })}
+              >
+                <option value="">Not tied to a trip</option>
+                {myTrips.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} · {shortDate(t.startDate)}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <label className="flex items-center gap-2.5 pt-7 text-sm text-slate-600">
               <input

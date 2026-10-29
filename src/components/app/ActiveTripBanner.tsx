@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import type { Booking } from '@/lib/types';
 import { parseLocal } from '@/lib/format';
-import { Plane, MapPin } from '@/components/icons';
+import { Plane, MapPin, Receipt, Sparkles } from '@/components/icons';
 
 interface Weather {
   tempF: number;
@@ -154,9 +154,15 @@ export function ActiveTripBanner() {
     }
   }
 
+  // On-trip = the stay/flight covers today. In that window we surface the
+  // "what you need right now" actions: log an expense, scan a receipt, manage.
+  const onTrip =
+    (trip.type === 'hotel' && trip.startDate <= todayStr && trip.endDate >= todayStr) ||
+    (trip.type === 'flight' && trip.startDate === todayStr);
+
   return (
     <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-navy-deep to-navy p-5 text-white sm:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
             {trip.type === 'flight' ? <Plane className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
@@ -166,12 +172,30 @@ export function ActiveTripBanner() {
             <p className="mt-1 text-sm text-slate-300">{sub}</p>
           </div>
         </div>
-        <Link
-          href="/app/trips"
-          className="shrink-0 rounded-lg bg-white/15 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-white/25"
-        >
-          View trip
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {onTrip && (
+            <>
+              <Link
+                href={`/app/expenses?scan=1&trip=${trip.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy-deep hover:brightness-95"
+              >
+                <Sparkles className="h-4 w-4" /> Scan receipt
+              </Link>
+              <Link
+                href={`/app/expenses?new=1&trip=${trip.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3.5 py-2 text-sm font-semibold text-white hover:bg-white/25"
+              >
+                <Receipt className="h-4 w-4" /> Add expense
+              </Link>
+            </>
+          )}
+          <Link
+            href="/app/trips"
+            className="inline-flex items-center rounded-lg bg-white/15 px-3.5 py-2 text-sm font-semibold text-white hover:bg-white/25"
+          >
+            {onTrip ? 'Manage trip' : 'View trip'}
+          </Link>
+        </div>
       </div>
     </div>
   );
