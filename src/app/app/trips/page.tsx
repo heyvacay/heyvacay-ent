@@ -8,6 +8,8 @@ import {
   Card,
   EmptyState,
   PageHeader,
+  Select,
+  cn,
 } from '@/components/app/ui';
 import { money, num, dateRange, daysUntil, todayISO } from '@/lib/format';
 import { BookingChat } from '@/components/app/BookingChat';
@@ -18,10 +20,12 @@ function TripCard({
   b,
   onCancel,
   onDetails,
+  travelerName,
 }: {
   b: Booking;
   onCancel: (id: string) => void;
   onDetails: (b: Booking) => void;
+  travelerName?: string;
 }) {
   const savings = b.savings;
   const days = daysUntil(b.startDate);
@@ -36,6 +40,9 @@ function TripCard({
         )}
       </span>
       <div className="min-w-0 flex-1">
+        {travelerName && (
+          <p className="text-xs font-semibold text-brand-dark">{travelerName}</p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-semibold text-slate-800">{b.title}</p>
           {b.status === 'pending_approval' && (
@@ -159,11 +166,31 @@ function Row({ k, v, tone }: { k: string; v: string; tone?: 'emerald' | 'brand' 
 }
 
 export default function TripsPage() {
-  const { state, activeUser, cancelBooking } = useStore();
+  const { state, role, activeUser, isSuperAdmin, userById, cancelBooking } = useStore();
   const [details, setDetails] = useState<Booking | null>(null);
+  const isAdmin = role === 'admin';
+  const [scope, setScope] = useState<'mine' | 'team'>('mine');
+  const [person, setPerson] = useState<'all' | string>('all');
+  const [dept, setDept] = useState<'all' | string>('all');
 
+  // A team admin manages their department; a super admin manages everyone.
+  const teamUsers = state.users.filter(
+    (u) => u.status === 'active' && (isSuperAdmin || u.department === activeUser.department)
+  );
+  const teamDepartments = Array.from(new Set(teamUsers.map((u) => u.department).filter(Boolean))).sort();
+  const nameOf = (id: string) => userById(id)?.name ?? '—';
+
+  const viewingTeam = isAdmin && scope === 'team';
   const mine = state.bookings
-    .filter((b) => b.travelerId === activeUser.id)
+    .filter((b) => {
+      if (!viewingTeam) return b.travelerId === activeUser.id;
+      // Team view: trips of the people I manage, with person/sub-team filters.
+      const u = userById(b.travelerId);
+      if (!u || !teamUsers.some((t) => t.id === u.id)) return false;
+      if (dept !== 'all' && u.department !== dept) return false;
+      if (person !== 'all' && u.id !== person) return false;
+      return true;
+    })
     .sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
 
   const today = todayISO();
@@ -186,19 +213,72 @@ export default function TripsPage() {
   return (
     <div>
       <PageHeader
-        title="My trips"
-        subtitle="Everything you've booked, past and upcoming."
+        title="Trips"
+        subtitle={
+          viewingTeam
+            ? `Bookings across ${isSuperAdmin ? 'the company' : 'your team'}.`
+            : "Everything you've booked, past and upcoming."
+        }
         actions={<Button href="/app/book">Book travel</Button>}
       />
 
+      {/* admin: my vs team, with person / sub-team filters */}
+      {isAdmin && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="inline-flex gap-1 rounded-lg bg-slate-100 p-1">
+            {(
+              [
+                ['mine', 'My trips'],
+                ['team', isSuperAdmin ? "Company trips" : "My team's trips"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setScope(k)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
+                  scope === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {viewingTeam && (
+            <div className="flex flex-wrap gap-2">
+              {isSuperAdmin && (
+                <Select value={dept} onChange={(e) => setDept(e.target.value)} className="sm:w-44">
+                  <option value="all">All sub-teams</option>
+                  {teamDepartments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </Select>
+              )}
+              <Select value={person} onChange={(e) => setPerson(e.target.value)} className="sm:w-48">
+                <option value="all">Everyone</option>
+                {teamUsers
+                  .filter((u) => dept === 'all' || u.department === dept)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
       {mine.length === 0 ? (
         <EmptyState
-          title="No trips yet"
-          sub="Your booked flights and hotels will appear here."
+          title="No trips found"
+          sub={viewingTeam ? 'No trips match this filter.' : 'Your booked flights and hotels will appear here.'}
         />
       ) : (
         <div className="space-y-8">
-          {activeNow.length > 0 && (
+          {!viewingTeam && activeNow.length > 0 && (
             <section>
               <h2 className="mb-3 font-display text-lg font-bold text-slate-900">
                 On your trip now
@@ -260,7 +340,7 @@ export default function TripsPage() {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} />
+                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={viewingTeam ? nameOf(b.travelerId) : undefined} />
                 ))}
               </div>
             )}
@@ -273,7 +353,7 @@ export default function TripsPage() {
               </h2>
               <div className="space-y-3">
                 {past.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} />
+                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={viewingTeam ? nameOf(b.travelerId) : undefined} />
                 ))}
               </div>
             </section>

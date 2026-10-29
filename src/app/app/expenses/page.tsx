@@ -42,12 +42,15 @@ export default function ExpensesPage() {
     role,
     activeUser,
     userById,
+    isSuperAdmin,
     submitExpense,
     setExpenseStatus,
     syncExpense,
     syncAllApproved,
   } = useStore();
   const isAdmin = role === 'admin';
+  const [expDept, setExpDept] = useState<'all' | string>('all');
+  const [expPerson, setExpPerson] = useState<'all' | string>('all');
   const accounting = state.integrations.find(
     (i) => ACCOUNTING_IDS.includes(i.id) && i.status === 'connected'
   );
@@ -96,9 +99,23 @@ export default function ExpensesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
-  const visible = isAdmin
-    ? state.expenses
-    : state.expenses.filter((e) => e.userId === activeUser.id);
+  // Admins can scope to their team and filter by sub-team / person.
+  const teamUsers = state.users.filter(
+    (u) => u.status === 'active' && (isSuperAdmin || u.department === activeUser.department)
+  );
+  const teamDepartments = Array.from(
+    new Set(teamUsers.map((u) => u.department).filter(Boolean))
+  ).sort();
+  const userDept = (id: string) => state.users.find((u) => u.id === id)?.department;
+
+  const visible = !isAdmin
+    ? state.expenses.filter((e) => e.userId === activeUser.id)
+    : state.expenses.filter((e) => {
+        if (!isSuperAdmin && !teamUsers.some((u) => u.id === e.userId)) return false;
+        if (expDept !== 'all' && userDept(e.userId) !== expDept) return false;
+        if (expPerson !== 'all' && e.userId !== expPerson) return false;
+        return true;
+      });
 
   const submitted = visible.filter((e) => e.status === 'submitted');
   const pendingTotal = submitted.reduce((s, e) => s + e.amount, 0);
@@ -378,6 +395,46 @@ export default function ExpensesPage() {
             </Button>
           </div>
         </Card>
+      )}
+
+      {isAdmin && (
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Filter
+          </span>
+          {isSuperAdmin && (
+            <Select value={expDept} onChange={(e) => setExpDept(e.target.value)} className="sm:w-44">
+              <option value="all">All sub-teams</option>
+              {teamDepartments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
+          )}
+          <Select value={expPerson} onChange={(e) => setExpPerson(e.target.value)} className="sm:w-48">
+            <option value="all">Everyone</option>
+            {teamUsers
+              .filter((u) => expDept === 'all' || u.department === expDept)
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+          </Select>
+          {(expDept !== 'all' || expPerson !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setExpDept('all');
+                setExpPerson('all');
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="mt-6">
