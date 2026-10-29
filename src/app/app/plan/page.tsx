@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
 import {
   placesFlights,
@@ -14,7 +14,9 @@ import { HvRangeField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
 import { Button, Card, Field, Input, PageHeader, Badge, cn } from '@/components/app/ui';
 import { money, num, addDays, todayISO, dateRange, uid } from '@/lib/format';
-import { Plane, Building, Check, Shield, ArrowRight, Sparkles } from '@/components/icons';
+import { Plane, Building, Shield, ArrowRight, Sparkles } from '@/components/icons';
+import { rewardsFor } from '@/lib/rewards';
+import { FlightRow, HotelCard, type Sig } from '@/components/app/results';
 import type { InventoryOption, PlannedItem, TripPlan } from '@/lib/types';
 
 const toISO = (d: Date) => fmtDate(d, 'yyyy-MM-dd');
@@ -47,12 +49,14 @@ export default function PlanTripPage() {
     return { inPolicy: !blocking, flags: fl.map((f) => f.message) };
   };
 
-  const search = async () => {
-    if (!origin || !dest) {
-      setError('Pick where you’re flying from and to.');
-      return;
-    }
-    if (new Date(end) <= new Date(start)) {
+  // The enterprise overlay the shared result cards render: policy + rewards.
+  const sigFor = (opt: InventoryOption): Sig => ({
+    flags: evaluatePolicies(opt, start),
+    ...rewardsFor({ type: opt.type as 'flight' | 'hotel', marketPrice: opt.marketPrice, price: opt.price }),
+  });
+
+  const runSearch = async (o: FlightPlace, d: HotelPlace, s: string, e: string) => {
+    if (new Date(e) <= new Date(s)) {
       setError('Return / check-out must be after departure / check-in.');
       return;
     }
@@ -64,24 +68,24 @@ export default function PlanTripPage() {
     setPickHotel(null);
     try {
       // Resolve the destination airport from its city for the flight leg.
-      const destAirports = await placesFlights(dest.label.split(',')[0]);
+      const destAirports = await placesFlights(d.label.split(',')[0]);
       const destCode = destAirports[0]?.code ?? '';
       const [fl, hp] = await Promise.all([
         destCode
           ? searchFlights({
-              origin: origin.code,
+              origin: o.code,
               destination: destCode,
-              departDate: start,
-              returnDate: end,
+              departDate: s,
+              returnDate: e,
               adults: 1,
             })
           : Promise.resolve([]),
         startHotels({
-          regionId: dest.regionId,
-          lat: dest.lat,
-          lng: dest.lng,
-          checkin: start,
-          checkout: end,
+          regionId: d.regionId,
+          lat: d.lat,
+          lng: d.lng,
+          checkin: s,
+          checkout: e,
           adults: 1,
           pageSize: 6,
         }),
@@ -94,6 +98,63 @@ export default function PlanTripPage() {
       setLoading(false);
     }
   };
+
+  const search = () => {
+    if (!origin || !dest) {
+      setError('Pick where you’re flying from and to.');
+      return;
+    }
+    runSearch(origin, dest, start, end);
+  };
+
+  // Pre-fill + auto-search when we arrive from a single booking ("add a hotel /
+  // add a flight") — the confirmation screen passes dest/origin/dates in the URL.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current) return;
+    prefilled.current = true;
+    let params: URLSearchParams;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+    const pDest = params.get('dest');
+    const pOrigin = params.get('origin');
+    const pStart = params.get('start');
+    const pEnd = params.get('end');
+    if (!pDest && !pOrigin) return;
+    if (pStart) setStart(pStart);
+    if (pEnd) setEnd(pEnd);
+    (async () => {
+      try {
+        let o: FlightPlace | null = origin;
+        let d: HotelPlace | null = dest;
+        if (pOrigin) {
+          const matches = await placesFlights(pOrigin);
+          if (matches[0]) {
+            o = matches[0];
+            setOrigin(matches[0]);
+            setOriginText(matches[0].label);
+          }
+        }
+        if (pDest) {
+          const regions = (await placesHotels(pDest)).filter((p) => p.type === 'region');
+          if (regions[0]) {
+            d = regions[0];
+            setDest(regions[0]);
+            setDestText(regions[0].label);
+          } else {
+            setDestText(pDest);
+          }
+        }
+        if (o && d) runSearch(o, d, pStart || start, pEnd || end);
+      } catch {
+        /* leave the composer for the user to complete */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const plannedFlight: PlannedItem | null = pickFlight
     ? { opt: pickFlight, startDate: start, endDate: end, ...assess(pickFlight) }
@@ -109,19 +170,20 @@ export default function PlanTripPage() {
     : null;
 
   const total = (plannedFlight?.opt.price ?? 0) + (plannedHotel?.opt.price ?? 0);
-  const bothPicked = !!plannedFlight && !!plannedHotel;
-  const allInPolicy = bothPicked && plannedFlight!.inPolicy && plannedHotel!.inPolicy;
+  const anyPicked = !!plannedFlight || !!plannedHotel;
+  const allInPolicy =
+    anyPicked && (plannedFlight?.inPolicy ?? true) && (plannedHotel?.inPolicy ?? true);
 
   const submit = () => {
-    if (!bothPicked || !dest) return;
+    if (!anyPicked || !dest) return;
     const plan: TripPlan = {
       id: uid('plan'),
       travelerId: activeUser.id,
       destination: dest.label.split(',')[0],
       startDate: start,
       endDate: end,
-      flight: plannedFlight!,
-      hotel: plannedHotel!,
+      flight: plannedFlight ?? undefined,
+      hotel: plannedHotel ?? undefined,
       status: 'pending_approval',
       createdAt: todayISO(),
     };
@@ -142,7 +204,7 @@ export default function PlanTripPage() {
     <div className="pb-10">
       <PageHeader
         title="Plan a trip"
-        subtitle="Need both a flight and a hotel? Pick each, see what's in policy, and submit the whole trip for approval at once."
+        subtitle="Search flights and hotels together, pick each from the same cards you book with, and submit the whole trip for approval at once."
       />
 
       {/* composer */}
@@ -193,43 +255,90 @@ export default function PlanTripPage() {
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </Card>
 
-      {/* results */}
-      {(flights || hotels) && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <OptionList
-            icon={<Plane className="h-4 w-4" />}
-            title="Pick your flight"
-            options={flights}
-            picked={pickFlight}
-            onPick={setPickFlight}
-            assess={assess}
-          />
-          <OptionList
-            icon={<Building className="h-4 w-4" />}
-            title="Pick your hotel"
-            options={hotels}
-            picked={pickHotel}
-            onPick={setPickHotel}
-            assess={assess}
-          />
-        </div>
+      {/* results — same cards as the single-booking flow */}
+      {loading && (
+        <p className="mt-6 text-center text-sm text-slate-400">Searching live flights &amp; hotels…</p>
       )}
 
-      {/* review */}
-      {bothPicked && (
-        <Card className="mt-6 border-brand/30 bg-brand/5">
+      {!loading && flights && (
+        <section className="mt-8">
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+            <Plane className="h-5 w-5 text-brand-dark" /> Pick your flight
+            {pickFlight && <Badge color="green">Selected</Badge>}
+          </h2>
+          {flights.length === 0 ? (
+            <Card>
+              <p className="py-4 text-center text-sm text-slate-400">
+                No flights found for these dates — adjust and search again.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {flights.map((opt) => (
+                <FlightRow
+                  key={opt.id}
+                  opt={opt}
+                  sig={sigFor(opt)}
+                  actionLabel="Add to trip"
+                  selected={pickFlight?.id === opt.id}
+                  onAction={() => setPickFlight((p) => (p?.id === opt.id ? null : opt))}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!loading && hotels && (
+        <section className="mt-8">
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+            <Building className="h-5 w-5 text-brand-dark" /> Pick your hotel
+            {pickHotel && <Badge color="green">Selected</Badge>}
+          </h2>
+          {hotels.length === 0 ? (
+            <Card>
+              <p className="py-4 text-center text-sm text-slate-400">
+                No stays found for these dates — adjust and search again.
+              </p>
+            </Card>
+          ) : (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {hotels.map((opt) => (
+                <HotelCard
+                  key={opt.id}
+                  opt={opt}
+                  sig={sigFor(opt)}
+                  actionLabel="Add to trip"
+                  selected={pickHotel?.id === opt.id}
+                  onAction={() => setPickHotel((p) => (p?.id === opt.id ? null : opt))}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* review — a sticky summary rail once anything is picked */}
+      {anyPicked && (
+        <Card className="mt-8 border-brand/30 bg-brand/5">
           <h2 className="mb-1 font-display text-lg font-bold text-slate-900">Review your trip</h2>
           <p className="mb-3 text-xs text-slate-500">
             {dest?.label} · {dateRange(start, end)}
           </p>
           <div className="space-y-2">
-            <ReviewLeg label="Flight" item={plannedFlight!} />
-            <ReviewLeg label="Hotel" item={plannedHotel!} />
+            {plannedFlight && <ReviewLeg label="Flight" item={plannedFlight} />}
+            {plannedHotel && <ReviewLeg label="Hotel" item={plannedHotel} />}
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-brand/20 pt-3">
             <span className="text-sm font-semibold text-slate-700">Trip total</span>
             <span className="font-display text-xl font-bold text-slate-900">{money(total)}</span>
           </div>
+          {!(plannedFlight && plannedHotel) && (
+            <p className="mt-2 text-xs text-slate-500">
+              Add the {plannedFlight ? 'hotel' : 'flight'} above to submit both legs together, or
+              submit just this one.
+            </p>
+          )}
           <div
             className={cn(
               'mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-sm',
@@ -239,10 +348,10 @@ export default function PlanTripPage() {
             <Shield className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               {allInPolicy
-                ? 'Both legs are in policy. Submit and your manager just confirms.'
+                ? 'Everything here is in policy. Submit and your manager just confirms.'
                 : 'Some of this trip is out of policy — submit it and your manager will review.'}{' '}
-              Once approved, we process payment and book both automatically — you won’t need to come
-              back, and you’ll get an email with both confirmation numbers.
+              Once approved, we process payment and book it automatically — you won’t need to come
+              back, and you’ll get an email with the confirmation numbers.
             </span>
           </div>
           <Button className="mt-4" onClick={submit}>
@@ -367,68 +476,6 @@ function Typeahead({
         )}
       </div>
     </Field>
-  );
-}
-
-function OptionList({
-  icon,
-  title,
-  options,
-  picked,
-  onPick,
-  assess,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  options: InventoryOption[] | null;
-  picked: InventoryOption | null;
-  onPick: (o: InventoryOption) => void;
-  assess: (o: InventoryOption) => { inPolicy: boolean; flags: string[] };
-}) {
-  return (
-    <Card>
-      <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-        {icon} {title}
-      </p>
-      {options == null ? (
-        <p className="py-6 text-center text-sm text-slate-400">Searching…</p>
-      ) : options.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">No options found.</p>
-      ) : (
-        <div className="space-y-2">
-          {options.map((o) => {
-            const a = assess(o);
-            const sel = picked?.id === o.id;
-            return (
-              <button
-                key={o.id}
-                onClick={() => onPick(o)}
-                className={cn(
-                  'flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors',
-                  sel ? 'border-brand bg-brand/8 ring-1 ring-brand/40' : 'border-slate-200 hover:border-slate-300'
-                )}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-800">{o.title}</p>
-                  <p className="truncate text-xs text-slate-400">{o.detail}</p>
-                  <div className="mt-1">
-                    {a.inPolicy ? (
-                      <Badge color="green">In policy</Badge>
-                    ) : (
-                      <Badge color="amber">Out of policy</Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="font-display text-base font-bold text-slate-900">{money(o.price)}</p>
-                  {sel && <Check className="ml-auto mt-1 h-4 w-4 text-brand-dark" />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </Card>
   );
 }
 

@@ -22,6 +22,17 @@ import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker'
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
 import { OfferBanner } from '@/components/app/OfferBanner';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
+import {
+  fmtTime,
+  durLabel,
+  stopsLabel,
+  Stars,
+  Signals,
+  HotelImage,
+  AirlineBadge,
+  FlightRow,
+  HotelCard,
+} from '@/components/app/results';
 import { format as fmtDate, parseISO } from 'date-fns';
 import {
   placesFlights,
@@ -53,6 +64,7 @@ import {
   MapPin,
   Sparkles,
   Calendar,
+  ArrowRight,
 } from '@/components/icons';
 import type {
   BookingType,
@@ -83,22 +95,6 @@ const PERKS = [
 
 /* ---------------- helpers ---------------- */
 
-function fmtTime(iso?: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-function durLabel(mins?: number): string {
-  if (mins == null) return '';
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-}
-function stopsLabel(stops?: number): string {
-  if (!stops || stops <= 0) return 'Direct';
-  return stops === 1 ? '1 stop' : `${stops} stops`;
-}
-
 function Spinner({ className }: { className?: string }) {
   return (
     <span
@@ -107,102 +103,6 @@ function Spinner({ className }: { className?: string }) {
         className ?? 'h-4 w-4'
       )}
     />
-  );
-}
-
-function Stars({ n = 0 }: { n?: number }) {
-  return (
-    <span className="text-sm leading-none">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <span key={i} className={i < n ? 'text-amber-400' : 'text-slate-200'}>
-          ★
-        </span>
-      ))}
-    </span>
-  );
-}
-
-/** The enterprise overlay every result carries: policy + savings + points. */
-function Signals({
-  flags,
-  savings,
-  points,
-}: {
-  flags: PolicyFlag[];
-  savings: number;
-  points: number;
-}) {
-  const needsApproval = flags.some(
-    (f) => f.policy.action === 'approve' || f.policy.action === 'block'
-  );
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-      {flags.length === 0 ? (
-        <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
-          <Check className="h-3.5 w-3.5" /> In policy
-        </span>
-      ) : needsApproval ? (
-        <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-          <Shield className="h-3.5 w-3.5" /> Needs approval
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-          <Shield className="h-3.5 w-3.5" /> Policy note
-        </span>
-      )}
-      {savings > 0 && (
-        <span className="font-semibold text-emerald-600">
-          Saves company {money(savings)}
-        </span>
-      )}
-      <span className="inline-flex items-center gap-1 font-semibold text-brand-dark">
-        <Gift className="h-3.5 w-3.5" /> +{num(points)} pts
-      </span>
-    </div>
-  );
-}
-
-/** Hotel photo with a branded fallback tile if the image can't load. */
-function HotelImage({ src, alt }: { src?: string; alt: string }) {
-  const [ok, setOk] = useState(true);
-  return (
-    <div className="relative h-44 w-full bg-gradient-to-br from-slate-200 to-brand/25">
-      <span className="absolute inset-0 grid place-items-center text-slate-400">
-        <Building className="h-8 w-8" />
-      </span>
-      {ok && src && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt={alt}
-          onError={() => setOk(false)}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      )}
-    </div>
-  );
-}
-
-function AirlineBadge({ iata, logo }: { iata?: string; logo?: string }) {
-  const [failed, setFailed] = useState(false);
-  if (logo && !failed) {
-    return (
-      // Airline logos come from Duffel's CDN; plain img avoids remote-domain config.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={logo}
-        alt={iata ?? 'Airline'}
-        width={36}
-        height={36}
-        onError={() => setFailed(true)}
-        className="h-9 w-9 shrink-0 rounded-full object-contain"
-      />
-    );
-  }
-  return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-xs font-bold text-brand-dark">
-      {iata ?? <Plane className="h-4 w-4" />}
-    </span>
   );
 }
 
@@ -961,6 +861,45 @@ export default function BookPage() {
             </Button>
           </div>
         </Card>
+
+        {/* Only booked half the trip? Offer to complete it as a planned trip. */}
+        {!eventId && (confirmed.opt.type === 'flight' || confirmed.opt.type === 'hotel') && (() => {
+          const bookedFlight = confirmed.opt.type === 'flight';
+          const need = bookedFlight ? 'hotel' : 'flight';
+          // Carry what we know into the plan composer so it can pre-search.
+          const destCity = bookedFlight ? dest?.label ?? '' : hotelPlace?.label ?? '';
+          const originCode = origin?.code ?? '';
+          const qs = new URLSearchParams();
+          if (destCity) qs.set('dest', destCity);
+          if (bookedFlight && originCode) qs.set('origin', originCode);
+          qs.set('start', start);
+          qs.set('end', end);
+          const planHref = `/app/plan?${qs.toString()}`;
+          return (
+            <Card className="mx-auto mt-5 max-w-xl border-brand/30 bg-brand/5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
+                    {bookedFlight ? <Building className="h-5 w-5" /> : <Plane className="h-5 w-5" />}
+                  </span>
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      Make it a full trip — add a {need}?
+                    </p>
+                    <p className="mt-0.5 text-sm text-slate-500">
+                      {bookedFlight
+                        ? 'You booked your flight. Add a hotel and submit the whole trip together.'
+                        : 'You booked your stay. Add a flight and submit the whole trip together.'}
+                    </p>
+                  </div>
+                </div>
+                <Button href={planHref} className="shrink-0">
+                  Add a {need} <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          );
+        })()}
       </div>
     );
   }
@@ -1583,82 +1522,13 @@ export default function BookPage() {
           {results.map((opt) => {
             const { flags, savings, points } = sig(opt);
             return (
-              <Card key={opt.id} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <div className="flex items-center gap-3 sm:w-44">
-                    <AirlineBadge iata={opt.airlineIata} logo={opt.airlineLogo} />
-                    <span className="text-sm font-medium text-slate-800">
-                      {opt.airline}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-1 items-center gap-4">
-                    <div className="text-right">
-                      <div className="text-lg font-semibold text-slate-900">
-                        {fmtTime(opt.departAt)}
-                      </div>
-                      <div className="text-xs text-slate-400">{opt.originIata}</div>
-                    </div>
-                    <div className="flex flex-1 flex-col items-center">
-                      <div className="text-xs text-slate-400">
-                        {durLabel(opt.durationMins)}
-                      </div>
-                      <div className="my-1 flex w-full items-center gap-1">
-                        <span className="h-1.5 w-1.5 rounded-full border border-slate-400" />
-                        <span className="h-px flex-1 bg-slate-200" />
-                        <span
-                          className={cn(
-                            'rounded-full border px-2 py-0.5 text-[10px]',
-                            !opt.stops
-                              ? 'border-brand text-brand-dark'
-                              : 'border-slate-300 text-slate-400'
-                          )}
-                        >
-                          {stopsLabel(opt.stops)}
-                        </span>
-                        <span className="h-px flex-1 bg-slate-200" />
-                        <Plane className="h-3 w-3 rotate-90 text-slate-400" />
-                      </div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-lg font-semibold text-slate-900">
-                        {fmtTime(opt.arriveAt)}
-                      </div>
-                      <div className="text-xs text-slate-400">{opt.destIata}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-1 sm:w-44">
-                    <div className="flex items-center gap-2">
-                      {savings > 0 && (
-                        <span className="text-sm text-slate-400 line-through">
-                          {money(opt.marketPrice)}
-                        </span>
-                      )}
-                      <span className="text-xl font-bold text-slate-900">
-                        {money(opt.price)}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="mt-1 w-full"
-                      onClick={() => confirm(opt)}
-                    >
-                      Select
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => setDetailOpt(opt)}
-                      className="text-xs font-medium text-brand-dark hover:underline"
-                    >
-                      View details
-                    </button>
-                  </div>
-                </div>
-                <div className="border-t border-slate-100 pt-3">
-                  <Signals flags={flags} savings={savings} points={points} />
-                </div>
-              </Card>
+              <FlightRow
+                key={opt.id}
+                opt={opt}
+                sig={{ flags, savings, points }}
+                onAction={() => confirm(opt)}
+                onDetails={() => setDetailOpt(opt)}
+              />
             );
           })}
         </div>
@@ -1673,58 +1543,14 @@ export default function BookPage() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((opt) => {
               const { flags, savings, points } = sig(opt);
-              const perNight = Math.round(opt.price / (opt.nights || 1));
               return (
-                <Card key={opt.id} pad={false} className="flex flex-col overflow-hidden">
-                  <HotelImage src={opt.imageUrl} alt={opt.title} />
-                  <div className="flex flex-1 flex-col gap-2 p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <Stars n={opt.star} />
-                      {opt.rating != null && opt.rating > 0 && (
-                        <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-xs font-bold text-brand-dark">
-                          {opt.rating.toFixed(1)}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="line-clamp-1 font-semibold text-slate-900">
-                      {opt.title}
-                    </h3>
-                    <p className="line-clamp-1 text-sm text-slate-400">
-                      {opt.location ? `${opt.location} · ` : ''}
-                      {opt.detail}
-                    </p>
-                    <Signals flags={flags} savings={savings} points={points} />
-                    <div className="mt-auto flex items-end justify-between pt-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          {savings > 0 && (
-                            <span className="text-sm text-slate-400 line-through">
-                              {money(opt.marketPrice)}
-                            </span>
-                          )}
-                          <span className="text-xl font-bold text-slate-900">
-                            {money(opt.price)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400">
-                          {money(perNight)}/night · incl. taxes
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <Button size="sm" onClick={() => confirm(opt)}>
-                          Reserve
-                        </Button>
-                        <button
-                          type="button"
-                          onClick={() => setDetailOpt(opt)}
-                          className="text-xs font-medium text-brand-dark hover:underline"
-                        >
-                          View details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
+                <HotelCard
+                  key={opt.id}
+                  opt={opt}
+                  sig={{ flags, savings, points }}
+                  onAction={() => confirm(opt)}
+                  onDetails={() => setDetailOpt(opt)}
+                />
               );
             })}
           </div>
