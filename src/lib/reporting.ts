@@ -108,15 +108,29 @@ function mulberry32(seed: number) {
   };
 }
 
-let CACHE: Txn[] | null = null;
+const CACHE = new Map<string, Txn[]>();
 
-/** The synthetic transaction ledger (cached). */
-export function transactions(): Txn[] {
-  if (CACHE) return CACHE;
+export interface OrgContext {
+  owners?: string[];
+  departments?: string[];
+}
+
+/**
+ * The transaction ledger (cached per org context). When the company's real
+ * owners/departments are provided, the Report Owner and Department dimensions
+ * reflect the actual org — so filtering by a real person or team works — while
+ * the airline/country/year breadth keeps reports meaningful.
+ */
+export function transactions(ctx?: OrgContext): Txn[] {
+  const owners = ctx?.owners?.length ? ctx.owners : OWNERS;
+  const departments = ctx?.departments?.length ? ctx.departments : DEPARTMENTS;
+  const key = `${owners.join('|')}__${departments.join('|')}`;
+  const cached = CACHE.get(key);
+  if (cached) return cached;
   const rnd = mulberry32(42);
   const pick = <T>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];
   const rows: Txn[] = [];
-  for (let i = 0; i < 480; i++) {
+  for (let i = 0; i < 600; i++) {
     const place = pick(PLACES);
     const year = String(2018 + Math.floor(rnd() * 9)); // 2018–2026
     const m = Math.floor(rnd() * 12);
@@ -132,13 +146,13 @@ export function transactions(): Txn[] {
       hotel: type === 'hotel' ? pick(HOTELS) : '—',
       city: place.city,
       country: place.country,
-      department: pick(DEPARTMENTS),
-      owner: pick(OWNERS),
+      department: pick(departments),
+      owner: pick(owners),
       amount,
       savings: Math.round(amount * (0.05 + rnd() * 0.25)),
     });
   }
-  CACHE = rows;
+  CACHE.set(key, rows);
   return rows;
 }
 
@@ -150,9 +164,10 @@ export interface ReportRow {
   value: number;
 }
 
-/** Run a query: filter → group → aggregate → sort → top-N. */
-export function runReport(q: ReportQuery): ReportRow[] {
-  const rows = transactions().filter((t) =>
+/** Run a query: filter → group → aggregate → sort → top-N. Pass the org's data
+ *  (from transactions(ctx)) so reports reflect the real company. */
+export function runReport(q: ReportQuery, data?: Txn[]): ReportRow[] {
+  const rows = (data ?? transactions()).filter((t) =>
     q.filters.every((f) => dimValue(t, f.field).toLowerCase() === f.value.toLowerCase())
   );
   const agg = new Map<string, number>();
@@ -190,8 +205,9 @@ const DIM_WORDS: [RegExp, Dimension][] = [
   [/\b(months?)\b/i, 'month'],
 ];
 
-/** Parse a phrase into a ReportQuery (best-effort; always returns something). */
-export function parseQuery(text: string): ReportQuery {
+/** Parse a phrase into a ReportQuery (best-effort; always returns something).
+ *  Pass the org's owners/departments so a real name or team filters correctly. */
+export function parseQuery(text: string, ctx?: OrgContext): ReportQuery {
   const t = ` ${text.toLowerCase()} `;
   const measure = MEASURE_WORDS.find(([re]) => re.test(t))?.[1] ?? 'amount';
 
@@ -215,9 +231,17 @@ export function parseQuery(text: string): ReportQuery {
   // Country filter.
   for (const p of PLACES) if (new RegExp(`\\b${p.country.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i').test(text))
     if (!filters.some((f) => f.field === 'country')) filters.push({ field: 'country', value: p.country });
-  // Department filter.
-  for (const d of DEPARTMENTS) if (new RegExp(`\\b${d}\\b`, 'i').test(text))
-    filters.push({ field: 'department', value: d });
+  // Department filter (real org departments when provided).
+  for (const d of ctx?.departments?.length ? ctx.departments : DEPARTMENTS)
+    if (new RegExp(`\\b${d.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i').test(text))
+      filters.push({ field: 'department', value: d });
+  // Report-owner filter — match a real person's name (or first name).
+  for (const o of ctx?.owners ?? [])
+    if (
+      new RegExp(`\\b${o.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i').test(text) ||
+      new RegExp(`\\b${o.split(' ')[0].replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i').test(text)
+    )
+      if (!filters.some((f) => f.field === 'owner')) filters.push({ field: 'owner', value: o });
 
   // top N.
   const top = text.match(/\btop\s+(\d+)\b/i);

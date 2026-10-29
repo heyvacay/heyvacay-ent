@@ -9,6 +9,7 @@ import {
   parseQuery,
   runReport,
   describeQuery,
+  transactions,
   DIMENSION_LABEL,
   MEASURE_LABEL,
   type Dimension,
@@ -626,20 +627,33 @@ const MEASURES: Measure[] = ['amount', 'count', 'savings'];
 const EXAMPLES = [
   'amount for lufthansa in 2018 by top 10 countries by report owner',
   'top 5 airlines by savings',
-  'transaction count by department by year',
+  'spend by department by year',
+  'savings for Engineering by top 10 report owners',
   'amount in Germany by hotel',
+  'transaction count by city by month',
 ];
 
 function ReportExplorer() {
+  const { state } = useStore();
+  // Tie reports to the real org so a real person / team filters correctly.
+  const org = useMemo(() => {
+    const active = state.users.filter((u) => u.status === 'active');
+    return {
+      owners: Array.from(new Set(active.map((u) => u.name))),
+      departments: Array.from(new Set(active.map((u) => u.department).filter(Boolean))),
+    };
+  }, [state.users]);
+  const data = useMemo(() => transactions(org), [org]);
+
   const [text, setText] = useState(EXAMPLES[0]);
-  const [q, setQ] = useState<ReportQuery>(() => parseQuery(EXAMPLES[0]));
+  const [q, setQ] = useState<ReportQuery>(() => parseQuery(EXAMPLES[0], org));
 
   const run = (phrase: string) => {
     setText(phrase);
-    setQ(parseQuery(phrase));
+    setQ(parseQuery(phrase, org));
   };
 
-  const rows = useMemo(() => runReport(q), [q]);
+  const rows = useMemo(() => runReport(q, data), [q, data]);
   const fmt = (n: number) => (q.measure === 'count' ? num(n) : money(n));
   const max = Math.max(1, ...rows.map((r) => r.value));
 
