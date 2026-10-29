@@ -183,13 +183,7 @@
     <div class="where"><b>Where:</b> AWS Secrets Manager → then heyvacay-iac → then redeploy.</div>
     <ol class="steps">
       <li><b>Get the exact keys heyvacay.co uses.</b> In the Stripe Dashboard (<a>dashboard.stripe.com</a>) → <b>Developers → API keys</b>, copy the <b>same</b> live <b>Secret key</b> (<code>sk_live_…</code>) and <b>Publishable key</b> (<code>pk_live_…</code>) that heyvacay.co runs on. (Same Stripe account = same processor, same payout, same reporting.)</li>
-      <li><b>Store them as secrets.</b> AWS Console → <b>Secrets Manager</b> (us-west-2) → <b>Store a new secret</b> → <b>Other type of secret</b> → add key/value pairs:
-        <ul>
-          <li><code>STRIPE_SECRET_KEY</code> = your <code>sk_live_…</code></li>
-          <li><code>STRIPE_PUBLISHABLE_KEY</code> = your <code>pk_live_…</code></li>
-        </ul>
-        Name it e.g. <code>stage/heyvacay-ent/stripe</code> and save. Copy the resulting secret ARN.
-      </li>
+      <li><b>Set the publishable key (required).</b> Add the build-time env var <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> = your <code>pk_live_…</code> — the <b>same</b> value heyvacay.co uses. This is the one that makes checkout go live: with it present, the app mounts Stripe card entry and the <b>backend</b> (same account/keys/tags as heyvacay.co) creates the charge — exactly how RateHawk inventory works. A publishable key is not secret, so it can be a plain env var. The <code>STRIPE_SECRET_KEY</code> is <b>optional</b> (only a direct-to-Stripe fallback); if you want it, add it in Secrets Manager (us-west-2 → Store a new secret → Other type of secret, name it e.g. <code>stage/heyvacay-ent/stripe</code>) and copy the ARN.</li>
       <li><b>Reference them on the container.</b> In <b>heyvacay-iac</b> → <code>ent.tf</code>, add to the task definition's <code>secrets</code> block (one entry per key), pointing <code>valueFrom</code> at the secret ARN + JSON key. Run <code>terraform apply</code>.</li>
       <li><b>Confirm the payment-tracking endpoint.</b> The app POSTs to <code>&#123;ENT_API_BASE_URL&#125;/bookings/payment/init-stripe</code> with metadata tags <code>source: heyvacay-enterprise</code>, <code>product: corporate-travel</code>. Make sure <code>ENT_API_BASE_URL</code> points at the same backend heyvacay.co uses so charges land in the same ledger. (Defaults to <code>https://api.stage.heyvacay.co</code>.)</li>
       <li><b>Redeploy &amp; test</b> (step 1). Do a $1 test booking; confirm it appears in the Stripe Dashboard → <b>Payments</b> with the metadata tags, then refund it.</li>
@@ -294,8 +288,8 @@
   <div class="card soft">
     <table class="kv">
       <tr><td>ENT_API_BASE_URL</td><td>Shared HeyVacay backend (flights, hotels, Stripe init). Point at the same backend as heyvacay.co.</td></tr>
-      <tr><td>STRIPE_SECRET_KEY</td><td><code>sk_live_…</code> — same Stripe account as heyvacay.co.</td></tr>
-      <tr><td>STRIPE_PUBLISHABLE_KEY</td><td><code>pk_live_…</code></td></tr>
+      <tr><td>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</td><td><code>pk_live_…</code> — same key as heyvacay.co. Required for live checkout; the backend makes the charge.</td></tr>
+      <tr><td>STRIPE_SECRET_KEY <span style="color:#94a3b8">(optional)</span></td><td><code>sk_live_…</code> — only for the direct-to-Stripe fallback.</td></tr>
       <tr><td>OPENTABLE_API_KEY <span style="color:#94a3b8">or</span> OPENTABLE_CLIENT_ID + OPENTABLE_CLIENT_SECRET</td><td>Dining. Optional <code>OPENTABLE_API_BASE</code>.</td></tr>
       <tr><td>EMAIL_API_KEY / EMAIL_FROM</td><td>Transactional email + sender.</td></tr>
       <tr><td>WEATHER_API_KEY</td><td>OpenWeather (active-trip view).</td></tr>
