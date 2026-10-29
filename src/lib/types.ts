@@ -112,6 +112,35 @@ export interface PolicyChangeRequest {
   status: 'pending' | 'approved' | 'rejected';
 }
 
+/** One leg (flight or hotel) selected into a combined trip plan. */
+export interface PlannedItem {
+  opt: InventoryOption;
+  startDate: string;
+  endDate: string;
+  roomType?: string;
+  images?: string[];
+  inPolicy: boolean;
+  flags: string[];
+  /** Confirmation number, set when the plan is booked. */
+  confirmation?: string;
+}
+
+export type TripPlanStatus = 'planning' | 'pending_approval' | 'booked' | 'declined';
+
+/** A combined flight + hotel trip planned and approved/booked together. */
+export interface TripPlan {
+  id: string;
+  travelerId: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  flight?: PlannedItem;
+  hotel?: PlannedItem;
+  status: TripPlanStatus;
+  createdAt: string;
+  reviewNote?: string;
+}
+
 export type BookingType = 'hotel' | 'flight';
 export type BookingStatus = 'confirmed' | 'pending_approval' | 'cancelled';
 
@@ -379,6 +408,8 @@ export interface AppState {
   departmentApprovalModes?: Record<string, BookingApprovalMode>;
   /** Pending/decided policy-change requests awaiting super-admin approval. */
   policyChangeRequests?: PolicyChangeRequest[];
+  /** Combined flight+hotel trip plans (booked together on approval). */
+  tripPlans?: TripPlan[];
   /** who is signed in for the demo */
   activeUserId: string;
 }

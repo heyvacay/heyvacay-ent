@@ -23,6 +23,7 @@ import {
   TrendUp,
   Bell,
   MapPin,
+  Route,
   Lock,
 } from '@/components/icons';
 
@@ -60,6 +61,7 @@ const ADMIN_NAV: NavSection[] = [
     items: [
       { href: '/app/dashboard', label: 'Dashboard', icon: ChartBar },
       { href: '/app/book', label: 'Book travel', icon: MapPin },
+      { href: '/app/plan', label: 'Plan a trip', icon: Route },
     ],
   },
   {
@@ -96,6 +98,7 @@ const EMPLOYEE_NAV: NavSection[] = [
     title: null,
     items: [
       { href: '/app/book', label: 'Home', icon: MapPin },
+      { href: '/app/plan', label: 'Plan a trip', icon: Route },
       { href: '/app/trips', label: 'My trips', icon: Calendar },
       { href: '/app/events', label: 'Events', icon: Users },
       { href: '/app/restaurants', label: 'Dining', icon: MapPin },

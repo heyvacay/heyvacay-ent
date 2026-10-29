@@ -21,14 +21,17 @@ import type {
   InventoryOption,
   OnboardingProfile,
   Policy,
+  PlannedItem,
   PolicyChange,
   PolicyChangeRequest,
   Role,
+  TripPlan,
   User,
 } from './types';
 import { SEED } from './seed';
 import { uid, todayISO } from './format';
 import { rewardsFor } from './rewards';
+import { sendEmail } from './email';
 
 const STORAGE_KEY = 'hv_ent_demo_v2';
 
@@ -114,6 +117,13 @@ export interface StoreApi {
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Tie an already-booked trip to an event (no rebooking needed). */
   attachBookingToEvent: (bookingId: string, eventId: string, eventName: string) => void;
+
+  /** Combined flight+hotel trip plans. */
+  savePlan: (plan: TripPlan) => void;
+  submitPlan: (id: string) => void;
+  /** Approve (books both legs + emails the traveler) or decline a plan. */
+  resolvePlan: (id: string, approve: boolean, note?: string) => void;
+  removePlan: (id: string) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Manager "approve if changed": sends a counter-offer to the traveler. */
   proposeChange: (
@@ -755,6 +765,106 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const savePlan: StoreApi['savePlan'] = useCallback((plan) => {
+    setState((s) => {
+      const existing = (s.tripPlans ?? []).some((p) => p.id === plan.id);
+      return {
+        ...s,
+        tripPlans: existing
+          ? (s.tripPlans ?? []).map((p) => (p.id === plan.id ? plan : p))
+          : [plan, ...(s.tripPlans ?? [])],
+      };
+    });
+  }, []);
+
+  const submitPlan: StoreApi['submitPlan'] = useCallback((id) => {
+    setState((s) => ({
+      ...s,
+      tripPlans: (s.tripPlans ?? []).map((p) =>
+        p.id === id ? { ...p, status: 'pending_approval' as const } : p
+      ),
+    }));
+  }, []);
+
+  const removePlan: StoreApi['removePlan'] = useCallback((id) => {
+    setState((s) => ({ ...s, tripPlans: (s.tripPlans ?? []).filter((p) => p.id !== id) }));
+  }, []);
+
+  const resolvePlan: StoreApi['resolvePlan'] = useCallback(
+    (id, approve, note) => {
+      setState((s) => {
+        const plan = (s.tripPlans ?? []).find((p) => p.id === id);
+        if (!plan || plan.status !== 'pending_approval') return s;
+        if (!approve) {
+          return {
+            ...s,
+            tripPlans: (s.tripPlans ?? []).map((p) =>
+              p.id === id ? { ...p, status: 'declined' as const, reviewNote: note } : p
+            ),
+          };
+        }
+        // Approve → book both legs now, with confirmation numbers.
+        const newBookings: Booking[] = [];
+        const legs: PlannedItem[] = [plan.flight, plan.hotel].filter(Boolean) as PlannedItem[];
+        const confos: Record<'flight' | 'hotel', string> = { flight: '', hotel: '' };
+        for (const leg of legs) {
+          const confirmation = `HV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+          const { savings, points } = rewardsFor(leg.opt);
+          const bk: Booking = {
+            id: uid('bk'),
+            type: leg.opt.type,
+            title: leg.opt.title,
+            detail: leg.opt.detail,
+            travelerId: plan.travelerId,
+            bookedById: plan.travelerId,
+            department: s.users.find((u) => u.id === plan.travelerId)?.department ?? '',
+            startDate: leg.startDate,
+            endDate: leg.endDate,
+            marketPrice: leg.opt.marketPrice,
+            price: leg.opt.price,
+            savings,
+            pointsEarned: points,
+            status: 'confirmed',
+            createdAt: todayISO(),
+            destination: plan.destination,
+            roomType: leg.roomType,
+            images: leg.images,
+          };
+          newBookings.push(bk);
+          confos[leg.opt.type] = confirmation;
+        }
+        const updatedPlan: TripPlan = {
+          ...plan,
+          status: 'booked',
+          reviewNote: note,
+          flight: plan.flight ? { ...plan.flight, confirmation: confos.flight } : undefined,
+          hotel: plan.hotel ? { ...plan.hotel, confirmation: confos.hotel } : undefined,
+        };
+        // Email the traveler the combined confirmation (no-op without a key).
+        const trav = s.users.find((u) => u.id === plan.travelerId);
+        if (trav?.email) {
+          const total = legs.reduce((sum, l) => sum + l.opt.price, 0);
+          sendEmail('confirmation', trav.email, {
+            travelerName: trav.name,
+            title: `Trip to ${plan.destination} approved`,
+            dates: `${plan.startDate} – ${plan.endDate}`,
+            total,
+            savings: legs.reduce((sum, l) => sum + rewardsFor(l.opt).savings, 0),
+            points: legs.reduce((sum, l) => sum + rewardsFor(l.opt).points, 0),
+            inPolicy: legs.every((l) => l.inPolicy),
+            note: `Your manager approved your trip. Flight confirmation: ${confos.flight || '—'} · Hotel confirmation: ${confos.hotel || '—'}.`,
+          });
+        }
+        return {
+          ...s,
+          bookings: [...newBookings, ...s.bookings],
+          tripPlans: (s.tripPlans ?? []).map((p) => (p.id === id ? updatedPlan : p)),
+        };
+      });
+    },
+    []
+  );
+
   const proposeChange: StoreApi['proposeChange'] = useCallback((id, data) => {
     setState((s) => ({
       ...s,
@@ -1058,6 +1168,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     book,
     cancelBooking,
     attachBookingToEvent,
+    savePlan,
+    submitPlan,
+    resolvePlan,
+    removePlan,
     approveBooking,
     proposeChange,
     respondOffer,
