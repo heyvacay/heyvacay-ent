@@ -9,11 +9,13 @@ import type { BillingMode } from '@/lib/types';
 const METHODS = ['Credit card', 'Debit card', 'Apple Pay'];
 
 export default function BillingPage() {
-  const { state, setBillingMode, linkCard, requestNet30 } = useStore();
+  const { state, activeUser, setBillingMode, linkCard, requestNet30, setPersonalCard } = useStore();
   const billing = state.billing ?? { mode: 'employee' as BillingMode };
   const [card, setCard] = useState({ brand: 'Visa', last4: '' });
+  const [pcard, setPcard] = useState({ brand: 'Visa', last4: '' });
 
   const linkedCard = billing.cardLast4;
+  const personalCard = activeUser.personalCard;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -94,6 +96,45 @@ export default function BillingPage() {
             <p className="mt-2 text-xs text-slate-400">Demo only — stored locally, never charged.</p>
           </div>
         )}
+      </Card>
+
+      {/* personal card */}
+      <Card>
+        <h2 className="mb-1 font-display text-lg font-bold text-slate-900">Your personal card</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Save a personal card to pay for a trip yourself and get reimbursed — it pre-fills at
+          checkout and the charge is added to your expenses automatically.
+        </p>
+        {personalCard ? (
+          <p className="text-sm text-slate-600">
+            {personalCard.brand} •••• {personalCard.last4} on file.{' '}
+            <button
+              onClick={() => setPersonalCard(activeUser.id, '', '')}
+              className="text-xs font-medium text-slate-400 hover:text-red-600"
+            >
+              Remove
+            </button>
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <Input value={pcard.brand} onChange={(e) => setPcard({ ...pcard, brand: e.target.value })} placeholder="Visa" />
+            <Input
+              value={pcard.last4}
+              onChange={(e) => setPcard({ ...pcard, last4: e.target.value.replace(/\D/g, '') })}
+              placeholder="Card number"
+              inputMode="numeric"
+            />
+            <Button
+              onClick={() =>
+                pcard.last4.length >= 4 &&
+                setPersonalCard(activeUser.id, pcard.brand || 'CARD', pcard.last4.slice(-4))
+              }
+            >
+              Save card
+            </Button>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-slate-400">Demo only — stored locally, never charged.</p>
       </Card>
 
       {/* net 30 */}

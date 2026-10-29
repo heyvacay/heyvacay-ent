@@ -42,7 +42,7 @@ function Stars({ n = 0 }: { n?: number }) {
 
 export default function HotelDetail({ hid }: { hid: string }) {
   const params = useSearchParams();
-  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor } =
+  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor, submitExpense } =
     useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
@@ -87,6 +87,9 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [bookNote, setBookNote] = useState('');
   // Checkout: payment entry step + a processing overlay (like HeyVacay.co).
   const [payStep, setPayStep] = useState(false);
+  // Company card (default) vs the traveler's personal card. Paying personally
+  // raises a reimbursable expense after the booking.
+  const [payMethod, setPayMethod] = useState<'company' | 'personal'>('company');
   const [processing, setProcessing] = useState(false);
   const [useDifferentCard, setUseDifferentCard] = useState(false);
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
@@ -212,6 +215,22 @@ export default function HotelDetail({ hid }: { hid: string }) {
     setProcessing(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
+    // Paid on a personal card → raise a reimbursable expense so it's tracked
+    // and the employee gets paid back. (Approvals pay later, not now.)
+    if (payMethod === 'personal' && !needsApproval) {
+      submitExpense({
+        userId: activeUser.id,
+        merchant: name,
+        category: 'Lodging',
+        amount: price,
+        date: checkin || new Date().toISOString().slice(0, 10),
+        hasReceipt: true,
+        note: `Hotel paid on personal card — ${dateRange(checkin, checkout)}`,
+        reimbursable: true,
+        paidWith: 'personal',
+      });
+    }
+
     // Notify by email (no-ops without a provider key; real send when set).
     const trav = state.users.find((u) => u.id === travelerId);
     const manager = state.users.find((u) => u.role === 'admin');
@@ -244,6 +263,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
   };
 
   const savedCard = state.billing?.mode === 'card' && !!state.billing?.cardLast4;
+  const personalCard = activeUser.personalCard;
 
   // "Request this stay" / "Confirm booking" primary action.
   const reserve = () => {
@@ -858,12 +878,12 @@ export default function HotelDetail({ hid }: { hid: string }) {
           onClick={() => setPayStep(false)}
         >
           <div
-            className="max-h-[92vh] w-full max-w-lg overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            className="max-h-[94vh] w-full max-w-3xl overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-                <Lock className="h-4 w-4 text-brand-dark" /> Secure checkout
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+              <h2 className="flex items-center gap-2 font-display text-xl font-bold text-slate-900">
+                <Lock className="h-5 w-5 text-brand-dark" /> Secure checkout
               </h2>
               <button onClick={() => setPayStep(false)} aria-label="Close" className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">
                 ✕
@@ -911,20 +931,79 @@ export default function HotelDetail({ hid }: { hid: string }) {
               </div>
 
               {/* payment */}
-              <div className="space-y-4 p-5">
-                {savedCard && !useDifferentCard ? (
+              <div className="space-y-4 p-6">
+                {/* method selector */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      ['company', 'Company card'],
+                      ['personal', 'Personal card'],
+                    ] as const
+                  ).map(([m, label]) => (
+                    <button
+                      key={m}
+                      onClick={() => {
+                        setPayMethod(m);
+                        setUseDifferentCard(false);
+                      }}
+                      className={cn(
+                        'rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors',
+                        payMethod === m
+                          ? 'border-brand bg-brand/8 text-slate-900 ring-1 ring-brand/40'
+                          : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {payMethod === 'company' ? (
+                  savedCard && !useDifferentCard ? (
+                    <>
+                      <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                        <span className="grid h-9 w-12 place-items-center rounded-md bg-navy text-[10px] font-bold text-white">
+                          {state.billing?.cardBrand ?? 'CARD'}
+                        </span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-800">•••• •••• •••• {state.billing?.cardLast4}</p>
+                          <p className="text-xs text-slate-400">Company card on file — pre-filled</p>
+                        </div>
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      </div>
+                      <Button className="w-full" onClick={processAndBook}>
+                        Confirm &amp; pay {money(price)}
+                      </Button>
+                      <button
+                        onClick={() => setUseDifferentCard(true)}
+                        className="w-full text-center text-xs font-medium text-brand-dark hover:underline"
+                      >
+                        Use a different company card
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-500">
+                        No company card on file yet — enter one to charge the company directly.
+                      </p>
+                      <StripeCheckout amount={price} description={name} onPaid={processAndBook} />
+                    </>
+                  )
+                ) : personalCard && !useDifferentCard ? (
                   <>
-                    <p className="text-sm font-semibold text-slate-800">Pay with company card</p>
                     <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
-                      <span className="grid h-9 w-12 place-items-center rounded-md bg-navy text-[10px] font-bold text-white">
-                        {state.billing?.cardBrand ?? 'CARD'}
+                      <span className="grid h-9 w-12 place-items-center rounded-md bg-slate-700 text-[10px] font-bold text-white">
+                        {personalCard.brand}
                       </span>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-800">•••• •••• •••• {state.billing?.cardLast4}</p>
-                        <p className="text-xs text-slate-400">Company card on file</p>
+                        <p className="text-sm font-medium text-slate-800">•••• •••• •••• {personalCard.last4}</p>
+                        <p className="text-xs text-slate-400">Your personal card — pre-filled</p>
                       </div>
                       <Check className="h-4 w-4 text-emerald-500" />
                     </div>
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      You&apos;ll be reimbursed — we add this to your expenses automatically.
+                    </p>
                     <Button className="w-full" onClick={processAndBook}>
                       Confirm &amp; pay {money(price)}
                     </Button>
@@ -936,7 +1015,13 @@ export default function HotelDetail({ hid }: { hid: string }) {
                     </button>
                   </>
                 ) : (
-                  <StripeCheckout amount={price} description={name} onPaid={processAndBook} />
+                  <>
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      Paying personally — you&apos;ll be reimbursed. We add this to your expenses
+                      automatically when the charge goes through.
+                    </p>
+                    <StripeCheckout amount={price} description={name} onPaid={processAndBook} />
+                  </>
                 )}
               </div>
             </div>

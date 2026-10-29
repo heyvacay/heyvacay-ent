@@ -136,7 +136,10 @@ export interface StoreApi {
     hasReceipt: boolean;
     note?: string;
     tripId?: string;
+    reimbursable?: boolean;
+    paidWith?: 'company' | 'personal';
   }) => void;
+  setPersonalCard: (userId: string, brand: string, last4: string) => void;
   setExpenseStatus: (id: string, status: ExpenseStatus, note?: string) => void;
   redeemPoints: (userId: string, amount: number, reason: string) => void;
   completeOnboarding: (profile: OnboardingProfile) => void;
@@ -814,6 +817,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setPersonalCard: StoreApi['setPersonalCard'] = useCallback(
+    (userId, brand, last4) =>
+      setState((s) => ({
+        ...s,
+        users: s.users.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                personalLinked: last4 ? true : u.personalLinked,
+                personalCard: last4 ? { brand, last4 } : undefined,
+              }
+            : u
+        ),
+      })),
+    []
+  );
+
   const setExpenseStatus: StoreApi['setExpenseStatus'] = useCallback(
     (id, status, note) => {
       setState((s) => ({
@@ -990,6 +1010,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     respondOffer,
     sendChat,
     submitExpense,
+    setPersonalCard,
     setExpenseStatus,
     redeemPoints,
     completeOnboarding,

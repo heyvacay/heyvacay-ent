@@ -29,6 +29,7 @@ const users = [
     status: 'active' as const,
     loyalty: [],
     personalLinked: true,
+    personalCard: { brand: 'VISA', last4: '4242' },
   },
   {
     id: 'u_dana',

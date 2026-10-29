@@ -43,6 +43,8 @@ export interface User {
   homeCity?: string;
   homeLat?: number;
   homeLng?: number;
+  /** A saved personal card, so personal-card checkout pre-populates. */
+  personalCard?: { brand: string; last4: string };
 }
 
 export type BudgetScope = 'company' | 'department' | 'employee';
@@ -211,6 +213,10 @@ export interface Expense {
   glCode?: string;
   /** true once pushed to the connected accounting integration. */
   synced?: boolean;
+  /** Owed back to the employee (paid on a personal card). */
+  reimbursable?: boolean;
+  /** How the underlying charge was paid. */
+  paidWith?: 'company' | 'personal';
 }
 
 export type PointsBucket = 'self' | 'booker';
