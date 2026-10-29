@@ -176,21 +176,23 @@
   </div>
 
   <!-- B: STRIPE -->
-  <h2><span class="num">2</span>Payments — Stripe (same processor as heyvacay.co) <span class="tag action">Action needed</span></h2>
+  <h2><span class="num">2</span>Payments — Stripe (same processor as heyvacay.co) <span class="tag action">Reference &amp; redeploy</span></h2>
   <p class="sub">The checkout already initializes payment through the shared HeyVacay backend and the same tracking tags.
-     You only need to make sure the keys are present.</p>
+     The Stripe keys are <b>already in AWS Secrets Manager</b> — all that's left is to reference them on the Enterprise
+     container and redeploy.</p>
   <div class="card">
-    <div class="where"><b>Where:</b> AWS Secrets Manager → then heyvacay-iac → then redeploy.</div>
+    <div class="where"><b>Where:</b> heyvacay-iac → then redeploy. (Keys already in Secrets Manager — nothing to create.)</div>
     <ol class="steps">
-      <li><b>Get the exact keys heyvacay.co uses.</b> In the Stripe Dashboard (<a>dashboard.stripe.com</a>) → <b>Developers → API keys</b>, copy the <b>same</b> live <b>Secret key</b> (<code>sk_live_…</code>) and <b>Publishable key</b> (<code>pk_live_…</code>) that heyvacay.co runs on. (Same Stripe account = same processor, same payout, same reporting.)</li>
-      <li><b>Set the publishable key (required).</b> Add the build-time env var <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> = your <code>pk_live_…</code> — the <b>same</b> value heyvacay.co uses. This is the one that makes checkout go live: with it present, the app mounts Stripe card entry and the <b>backend</b> (same account/keys/tags as heyvacay.co) creates the charge — exactly how RateHawk inventory works. A publishable key is not secret, so it can be a plain env var. The <code>STRIPE_SECRET_KEY</code> is <b>optional</b> (only a direct-to-Stripe fallback); if you want it, add it in Secrets Manager (us-west-2 → Store a new secret → Other type of secret, name it e.g. <code>stage/heyvacay-ent/stripe</code>) and copy the ARN.</li>
-      <li><b>Reference them on the container.</b> In <b>heyvacay-iac</b> → <code>ent.tf</code>, add to the task definition's <code>secrets</code> block (one entry per key), pointing <code>valueFrom</code> at the secret ARN + JSON key. Run <code>terraform apply</code>.</li>
+      <li><b>Keys are already stored.</b> The same live <b>Secret key</b> (<code>sk_live_…</code>) and <b>Publishable key</b> (<code>pk_live_…</code>) that heyvacay.co runs on are already in AWS Secrets Manager. Same Stripe account = same processor, same payout, same reporting — nothing to copy from the Stripe Dashboard. Just note the secret's ARN + JSON keys so you can reference them below.</li>
+      <li><b>Set the publishable key (required).</b> Point the build-time env var <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> at the stored <code>pk_live_…</code> — the <b>same</b> value heyvacay.co uses. This is the one that makes checkout go live: with it present, the app mounts Stripe card entry and the <b>backend</b> (same account/keys/tags as heyvacay.co) creates the charge — exactly how RateHawk inventory works. A publishable key is not secret, so it can be injected as a plain env var at build time. <code>STRIPE_SECRET_KEY</code> is <b>optional</b> (only a direct-to-Stripe fallback) and is already available in Secrets Manager if you want to wire it.</li>
+      <li><b>Reference them on the container.</b> In <b>heyvacay-iac</b> → <code>ent.tf</code>, add to the task definition's <code>secrets</code> block (one entry per key), pointing <code>valueFrom</code> at the existing secret ARN + JSON key. Run <code>terraform apply</code>.</li>
       <li><b>Confirm the payment-tracking endpoint.</b> The app POSTs to <code>&#123;ENT_API_BASE_URL&#125;/bookings/payment/init-stripe</code> with metadata tags <code>source: heyvacay-enterprise</code>, <code>product: corporate-travel</code>. Make sure <code>ENT_API_BASE_URL</code> points at the same backend heyvacay.co uses so charges land in the same ledger. (Defaults to <code>https://api.stage.heyvacay.co</code>.)</li>
       <li><b>Redeploy &amp; test</b> (step 1). Do a $1 test booking; confirm it appears in the Stripe Dashboard → <b>Payments</b> with the metadata tags, then refund it.</li>
     </ol>
   </div>
   <div class="note">Already done for you: the full Stripe Elements checkout, saved-card option, the booking + <b>booking-confirmed</b>
-    screens matched to heyvacay.co (including the confetti), and the metadata tags. Without keys, checkout stays in clearly-labelled DEMO MODE — no real charge.</div>
+    screens matched to heyvacay.co (including the confetti), and the metadata tags — plus the keys are already in Secrets Manager.
+    Until they're referenced on the container, checkout stays in clearly-labelled DEMO MODE — no real charge.</div>
 
   <!-- C: OPENTABLE -->
   <h2 class="section-break"><span class="num">3</span>Dining — OpenTable API <span class="tag action">Action needed</span></h2>
