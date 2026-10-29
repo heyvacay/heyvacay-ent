@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store';
 import { Avatar, cn } from './ui';
 import { ThemeToggle } from './ThemeToggle';
 import { Logo } from './Logo';
+import { DinnerRsvpPrompt } from './DinnerRsvpPrompt';
 import {
   ChartBar,
   Users,
@@ -384,7 +385,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
           ) : (
-            children
+            <>
+              <DinnerRsvpPrompt />
+              {children}
+            </>
           )}
         </main>
       </div>
