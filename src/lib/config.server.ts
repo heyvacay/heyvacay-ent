@@ -68,6 +68,15 @@ export const EMAIL = {
   },
 };
 
+/** Receipt OCR — reads a photographed / uploaded receipt into expense fields. */
+export const RECEIPT_OCR = {
+  base: process.env.RECEIPT_OCR_API_BASE?.replace(/\/+$/, '') || '',
+  apiKey: process.env.RECEIPT_OCR_API_KEY || '',
+  get live() {
+    return Boolean(this.apiKey && this.base);
+  },
+};
+
 /**
  * Stripe — card payments at checkout. Integrated the same way as RateHawk:
  * the booking total's PaymentIntent is created by the shared HeyVacay backend

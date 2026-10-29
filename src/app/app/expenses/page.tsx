@@ -19,14 +19,6 @@ import { ACCOUNTING_IDS } from '@/lib/seed';
 import { Check, Globe, Receipt, Shield } from '@/components/icons';
 import type { ExpenseCategory, ExpenseStatus } from '@/lib/types';
 
-/** Plausible merchants the simulated receipt scanner "reads". */
-const SCAN_SAMPLES: { merchant: string; category: ExpenseCategory; amount: number }[] = [
-  { merchant: 'Blue Bottle Coffee', category: 'Meals', amount: 18.4 },
-  { merchant: 'Uber', category: 'Ground transport', amount: 32.75 },
-  { merchant: 'Marriott', category: 'Lodging', amount: 289.0 },
-  { merchant: 'Delta Air Lines', category: 'Airfare', amount: 412.2 },
-  { merchant: 'Office Depot', category: 'Supplies', amount: 56.9 },
-];
 
 const CATEGORIES: ExpenseCategory[] = [
   'Meals',
@@ -62,6 +54,9 @@ export default function ExpensesPage() {
   const showPosting = isAdmin && !!accounting;
   const [open, setOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const scanTripRef = useRef('');
   const [tool, setTool] = useState<null | 'perdiem'>(null);
   // Expense decision modal (approve/reject with an optional comment).
   const [decide, setDecide] = useState<{ id: string; kind: 'approved' | 'rejected' } | null>(
@@ -114,24 +109,48 @@ export default function ExpensesPage() {
     (e) => (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
   );
 
-  // Simulated receipt OCR: "reads" a receipt and fills the form. An optional
-  // tripId ties the expense to the trip it was incurred on.
+  // Open the camera / file picker to scan a receipt. tripId (optional) ties the
+  // resulting expense to a trip.
   const scanReceipt = (tripId = '') => {
+    scanTripRef.current = tripId;
+    fileRef.current?.click();
+  };
+
+  // A receipt was photographed or uploaded: read it, send it for OCR, and
+  // autopopulate the form with what came back.
+  const onReceiptFile = async (file: File | undefined) => {
+    if (!file) return;
+    const tripId = scanTripRef.current;
     setOpen(true);
     setScanning(true);
-    setTimeout(() => {
-      const s = SCAN_SAMPLES[Math.floor(Math.random() * SCAN_SAMPLES.length)];
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      setReceiptPreview(dataUrl);
+      const res = await fetch('/api/expenses/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl, filename: file.name }),
+      }).then((r) => r.json());
       setForm({
-        merchant: s.merchant,
-        category: s.category,
-        amount: String(s.amount),
-        date: todayISO(),
+        merchant: res.merchant ?? '',
+        category: (res.category as ExpenseCategory) ?? 'Other',
+        amount: res.amount != null ? String(res.amount) : '',
+        date: res.date ?? todayISO(),
         hasReceipt: true,
         note: '',
         tripId,
       });
+    } catch {
+      // Keep the form open so the user can enter details manually.
+    } finally {
       setScanning(false);
-    }, 1500);
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
 
@@ -156,11 +175,21 @@ export default function ExpensesPage() {
       note: '',
       tripId: '',
     });
+    setReceiptPreview(null);
     setOpen(false);
   };
 
   return (
     <div>
+      {/* Hidden camera / file input for receipt scanning. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => onReceiptFile(e.target.files?.[0])}
+      />
       <PageHeader
         title="Expenses"
         subtitle={
@@ -247,6 +276,29 @@ export default function ExpensesPage() {
             <div className="mb-4 flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-sm font-medium text-brand-dark">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand/40 border-t-brand" />
               Reading your receipt — extracting merchant, amount and category…
+            </div>
+          )}
+          {receiptPreview && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={receiptPreview}
+                alt="Receipt"
+                className="h-20 w-20 shrink-0 rounded-lg object-cover ring-1 ring-slate-200"
+              />
+              <div className="text-xs text-slate-500">
+                <p className="font-semibold text-slate-700">Receipt attached</p>
+                <p className="mt-0.5">We read the details below — check them before submitting.</p>
+                <button
+                  onClick={() => {
+                    setReceiptPreview(null);
+                    setForm((f) => ({ ...f, hasReceipt: false }));
+                  }}
+                  className="mt-1 font-medium text-brand-dark hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
