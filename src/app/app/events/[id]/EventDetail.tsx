@@ -6,13 +6,17 @@ import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
 import {
   FOOD_GENRES,
+  ROOM_TIERS,
   dinnerExpired,
   tally,
   winner,
   type DinnerCandidate,
   type EventAttendee,
+  type RoomTier,
+  type OverTierAction,
   type RsvpStatus,
 } from '@/lib/events';
+import { estimateEventSpend } from '@/lib/eventPlanning';
 import { getAvailability, bookRestaurant, searchRestaurants } from '@/lib/restaurants';
 import {
   Badge,
@@ -24,7 +28,7 @@ import {
   Select,
   cn,
 } from '@/components/app/ui';
-import { shortDate, milesBetween } from '@/lib/format';
+import { shortDate, milesBetween, money } from '@/lib/format';
 import { EventChat } from '@/components/app/EventChat';
 import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
 import { sendEmail } from '@/lib/email';
@@ -41,6 +45,9 @@ export default function EventDetail({ id }: { id: string }) {
     toggleReaction,
     setHotelAllowList,
     setWhitelistOnly,
+    setRoomTierPolicy,
+    setEventBudget,
+    resolveExtraStay,
     joinEvent,
     startDinner,
     joinDinner,
@@ -312,6 +319,50 @@ export default function EventDetail({ id }: { id: string }) {
               </div>
             </Card>
           </div>
+          <RoomPolicyCard
+            e={e}
+            isAdmin={role === 'admin'}
+            users={state.users}
+            setRoomTierPolicy={setRoomTierPolicy}
+            setEventBudget={setEventBudget}
+          />
+
+          {/* extra-stay approvals (admin/host) */}
+          {(role === 'admin' || isHost) &&
+            (e.extraStayRequests?.some((r) => r.status === 'pending') ?? false) && (
+              <Card>
+                <h2 className="mb-1 font-display text-lg font-bold text-slate-900">
+                  Additional-stay requests
+                </h2>
+                <p className="mb-3 text-xs text-slate-400">
+                  These travelers already booked a hotel for this event and are asking to book another
+                  stay.
+                </p>
+                <div className="space-y-2">
+                  {e.extraStayRequests
+                    ?.filter((r) => r.status === 'pending')
+                    .map((r) => (
+                      <div
+                        key={r.userId}
+                        className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3"
+                      >
+                        <span className="flex-1 text-sm font-medium text-amber-800">{r.name}</span>
+                        <Button size="sm" onClick={() => resolveExtraStay(e.id, r.userId, true)}>
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resolveExtraStay(e.id, r.userId, false)}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              </Card>
+            )}
+
           <Card>
             <h2 className="mb-1 font-display text-lg font-bold text-slate-900">Attendees</h2>
             <p className="mb-3 text-xs text-slate-400">
@@ -732,5 +783,156 @@ function DinnerPanel({
         </Card>
       )}
     </div>
+  );
+}
+
+/* ---------------- room-tier policy & budget ---------------- */
+
+function RoomPolicyCard({
+  e,
+  isAdmin,
+  users,
+  setRoomTierPolicy,
+  setEventBudget,
+}: {
+  e: ReturnType<typeof useEvents>['events'][number];
+  isAdmin: boolean;
+  users: ReturnType<typeof useStore>['state']['users'];
+  setRoomTierPolicy: ReturnType<typeof useEvents>['setRoomTierPolicy'];
+  setEventBudget: ReturnType<typeof useEvents>['setEventBudget'];
+}) {
+  const policy = e.roomTierPolicy;
+  // Headcount needing a hotel (home >50mi, or unknown).
+  const hotelHeadcount = e.attendees.filter((a) => {
+    const u = users.find((x) => x.id === a.userId);
+    if (!u || u.homeLat == null || u.homeLng == null || e.lat == null || e.lng == null) return true;
+    return milesBetween(u.homeLat, u.homeLng, e.lat, e.lng) > 50;
+  }).length;
+  const nights = Math.max(
+    1,
+    Math.round((new Date(e.endDate).getTime() - new Date(e.startDate).getTime()) / 86400000)
+  );
+  const base: RoomTier = policy?.base ?? 'Standard';
+  const est = estimateEventSpend({ hotelHeadcount, flightHeadcount: hotelHeadcount, nights, tier: base });
+  const overLabel: Record<OverTierAction, string> = {
+    block: 'Blocked',
+    manager: 'Needs manager approval',
+    host: 'Needs event-host approval',
+  };
+
+  const update = (patch: Partial<NonNullable<typeof policy>>) =>
+    setRoomTierPolicy(e.id, {
+      base: policy?.base ?? 'Standard',
+      byPosition: policy?.byPosition ?? [],
+      overAction: policy?.overAction ?? 'manager',
+      ...patch,
+    });
+
+  return (
+    <Card>
+      <h2 className="mb-1 font-display text-lg font-bold text-slate-900">Room policy &amp; budget</h2>
+      <p className="mb-3 text-xs text-slate-400">
+        The room tiers this event allows, and the live cost estimate for the people staying.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 p-3">
+          <p className="text-xs font-medium text-slate-400">Base room tier</p>
+          {isAdmin ? (
+            <Select
+              className="mt-1"
+              value={base}
+              onChange={(ev) => update({ base: ev.target.value as RoomTier })}
+            >
+              {ROOM_TIERS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <p className="mt-0.5 text-sm font-semibold text-slate-800">{base} or lower</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-slate-200 p-3">
+          <p className="text-xs font-medium text-slate-400">If someone books higher</p>
+          {isAdmin ? (
+            <Select
+              className="mt-1"
+              value={policy?.overAction ?? 'manager'}
+              onChange={(ev) => update({ overAction: ev.target.value as OverTierAction })}
+            >
+              <option value="block">Block it</option>
+              <option value="manager">Require manager approval</option>
+              <option value="host">Require event-host approval</option>
+            </Select>
+          ) : (
+            <p className="mt-0.5 text-sm font-semibold text-slate-800">
+              {overLabel[policy?.overAction ?? 'manager']}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {policy?.byPosition && policy.byPosition.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-slate-400">Higher tiers by position</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {policy.byPosition.map((r, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
+              >
+                {r.position} → up to {r.maxTier}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 p-3">
+        <div className="flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+            <Sparkles className="h-4 w-4 text-brand-dark" /> Estimated spend
+          </p>
+          <p className="font-display text-lg font-bold text-brand-dark">{money(est.total)}</p>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          {hotelHeadcount} staying · {nights} night{nights === 1 ? '' : 's'} · hotels {money(est.hotel)} ·
+          flights {money(est.flights)}.
+          {e.budget != null &&
+            (est.total > e.budget
+              ? ` About ${money(est.total - e.budget)} over the ${money(e.budget)} budget.`
+              : ` Within the ${money(e.budget)} budget.`)}
+          {e.smartPlanning ? ' Smart planning is on.' : ''}
+        </p>
+        {isAdmin && (
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="number"
+              defaultValue={e.budget ?? ''}
+              placeholder="Set budget (USD)"
+              onBlur={(ev) =>
+                setEventBudget(
+                  e.id,
+                  ev.target.value ? Number(ev.target.value) : undefined,
+                  !!e.smartPlanning
+                )
+              }
+              className="w-40 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand"
+            />
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={!!e.smartPlanning}
+                onChange={(ev) => setEventBudget(e.id, e.budget, ev.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+              />
+              Smart planning
+            </label>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

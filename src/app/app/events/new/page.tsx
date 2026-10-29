@@ -10,9 +10,21 @@ import { HotelAllowPicker, type AllowHotel } from '@/components/app/HotelAllowPi
 import { placesHotels, type HotelPlace } from '@/lib/search';
 import { HvRangeField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
-import { addDays, todayISO, shortDate, dateRange } from '@/lib/format';
+import { addDays, todayISO, shortDate, dateRange, milesBetween, money } from '@/lib/format';
 import { sendEmail } from '@/lib/email';
-import { Calendar, MapPin, Users, Plane, Check } from '@/components/icons';
+import { Calendar, MapPin, Users, Plane, Check, Sparkles, Wallet } from '@/components/icons';
+import {
+  ROOM_TIERS,
+  roomTierRank,
+  type OverTierAction,
+  type RoomTier,
+  type RoomTierPolicy,
+} from '@/lib/events';
+import {
+  estimateEventSpend,
+  budgetGuidance,
+  smartPick,
+} from '@/lib/eventPlanning';
 
 const STEPS = [
   { key: 'basics', title: 'The basics', sub: 'Name, city and dates' },
@@ -41,6 +53,13 @@ export default function NewEventPage() {
   const [whitelistOnly, setWhitelistOnly] = useState(false);
   const [routeText, setRouteText] = useState('');
   const [routes, setRoutes] = useState<string[]>([]);
+  // Room-tier allow-list + budget.
+  const [roomTierBase, setRoomTierBase] = useState<RoomTier>('Standard');
+  const [overAction, setOverAction] = useState<OverTierAction>('manager');
+  const [positionRules, setPositionRules] = useState<{ position: string; maxTier: RoomTier }[]>([]);
+  const [budgetOn, setBudgetOn] = useState(false);
+  const [budgetAmt, setBudgetAmt] = useState(50000);
+  const [smartPlanning, setSmartPlanning] = useState(false);
 
   if (role !== 'admin' && role !== 'booker') {
     return (
@@ -58,6 +77,33 @@ export default function NewEventPage() {
   const dStart = start ? parseISO(start) : undefined;
   const dEnd = end ? parseISO(end) : undefined;
   const basicsValid = name.trim().length > 0 && city.trim().length > 0 && !!start && !!end;
+
+  // ---- live cost estimate for the allow-list + headcount ----
+  const selectedAttendees = activeUsers.filter((u) => attendeeIds.includes(u.id));
+  const nights = Math.max(
+    1,
+    dStart && dEnd ? Math.round((dEnd.getTime() - dStart.getTime()) / 86400000) : 1
+  );
+  const evLat = cityPlace?.lat;
+  const evLng = cityPlace?.lng;
+  // Someone needs a hotel if their home is >50mi away (or unknown).
+  const hotelHeadcount = selectedAttendees.filter((u) => {
+    if (evLat == null || evLng == null || u.homeLat == null || u.homeLng == null) return true;
+    return milesBetween(u.homeLat, u.homeLng, evLat, evLng) > 50;
+  }).length;
+  const flightHeadcount = hotelHeadcount; // flying in ≈ needing a hotel
+  const estInput = { hotelHeadcount, flightHeadcount, nights, tier: roomTierBase };
+  const estimate = estimateEventSpend(estInput);
+  const guidance = budgetOn ? budgetGuidance(estimate, estInput, budgetAmt) : null;
+  const smart = budgetOn && smartPlanning ? smartPick(estInput, budgetAmt) : null;
+  // Distinct job titles among attendees, for per-position allowances.
+  const positions = Array.from(
+    new Set(selectedAttendees.map((u) => u.title).filter(Boolean))
+  ) as string[];
+  const addPositionRule = () => {
+    const next = positions.find((p) => !positionRules.some((r) => r.position === p));
+    if (next) setPositionRules([...positionRules, { position: next, maxTier: roomTierBase }]);
+  };
 
   const toggleAttendee = (id: string) =>
     setAttendeeIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
@@ -90,6 +136,13 @@ export default function NewEventPage() {
       regionId: cityPlace?.regionId,
       lat: cityPlace?.lat,
       lng: cityPlace?.lng,
+      roomTierPolicy: {
+        base: smart ? smart.tier : roomTierBase,
+        byPosition: positionRules,
+        overAction,
+      },
+      budget: budgetOn ? budgetAmt : undefined,
+      smartPlanning: budgetOn && smartPlanning,
     });
     // Let everyone who was added know (no-ops without an email provider key).
     activeUsers
@@ -309,6 +362,185 @@ export default function NewEventPage() {
                   </span>
                 </span>
               </label>
+
+              {/* room-tier allow-list */}
+              <div className="rounded-xl border border-slate-200 p-4">
+                <p className="text-sm font-semibold text-slate-800">Room-type allow-list</p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Everyone may book this tier <span className="font-medium">or lower</span>. Give
+                  senior roles a higher ceiling; anything above a person&apos;s tier is handled by
+                  the rule below.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Field label="Base room tier (everyone)">
+                    <select
+                      value={roomTierBase}
+                      onChange={(e) => setRoomTierBase(e.target.value as RoomTier)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand"
+                    >
+                      {ROOM_TIERS.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="If someone books higher">
+                    <select
+                      value={overAction}
+                      onChange={(e) => setOverAction(e.target.value as OverTierAction)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand"
+                    >
+                      <option value="block">Block it</option>
+                      <option value="manager">Require manager approval</option>
+                      <option value="host">Require event-host approval</option>
+                    </select>
+                  </Field>
+                </div>
+
+                {/* per-position allowances */}
+                {positionRules.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {positionRules.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <select
+                          value={r.position}
+                          onChange={(e) =>
+                            setPositionRules((rs) =>
+                              rs.map((x, idx) => (idx === i ? { ...x, position: e.target.value } : x))
+                            )
+                          }
+                          className="flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-brand"
+                        >
+                          {positions.map((p) => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-xs text-slate-400">up to</span>
+                        <select
+                          value={r.maxTier}
+                          onChange={(e) =>
+                            setPositionRules((rs) =>
+                              rs.map((x, idx) =>
+                                idx === i ? { ...x, maxTier: e.target.value as RoomTier } : x
+                              )
+                            )
+                          }
+                          className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-brand"
+                        >
+                          {ROOM_TIERS.filter((t) => roomTierRank(t) >= roomTierRank(roomTierBase)).map(
+                            (t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            )
+                          )}
+                        </select>
+                        <button
+                          onClick={() => setPositionRules((rs) => rs.filter((_, idx) => idx !== i))}
+                          className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+                          aria-label="Remove"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {positions.length > positionRules.length && (
+                  <button
+                    onClick={addPositionRule}
+                    className="mt-2 text-sm font-semibold text-brand-dark hover:underline"
+                  >
+                    + Allow a position a higher tier
+                  </button>
+                )}
+              </div>
+
+              {/* live spend estimate + budget */}
+              <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                  <Sparkles className="h-4 w-4 text-brand-dark" /> Estimated event spend
+                </p>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <Est label="Hotels" value={money(estimate.hotel)} />
+                  <Est label="Flights" value={money(estimate.flights)} />
+                  <Est label="Total" value={money(estimate.total)} highlight />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {hotelHeadcount} traveler{hotelHeadcount === 1 ? '' : 's'} needing a hotel ·{' '}
+                  {nights} night{nights === 1 ? '' : 's'} · {roomTierBase} ·{' '}
+                  {money(estimate.nightly)}/night. Reflects live market rates for the city once the
+                  rates API is connected.
+                </p>
+
+                <label className="mt-3 flex cursor-pointer items-center gap-2 border-t border-brand/20 pt-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={budgetOn}
+                    onChange={(e) => setBudgetOn(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                  />
+                  <Wallet className="h-4 w-4 text-brand-dark" /> We have a budget for this event
+                </label>
+                {budgetOn && (
+                  <div className="mt-3 space-y-3">
+                    <Field label="Event budget (total, USD)">
+                      <Input
+                        type="number"
+                        value={budgetAmt}
+                        onChange={(e) => setBudgetAmt(Number(e.target.value) || 0)}
+                      />
+                    </Field>
+                    {guidance && guidance.over ? (
+                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+                        <p className="font-semibold text-amber-800">
+                          About {money(guidance.delta)} over budget.
+                        </p>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-700">
+                          {guidance.suggestions.map((s, i) => (
+                            <li key={i}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      guidance && (
+                        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                          Within budget — about {money(-guidance.delta)} to spare.
+                        </p>
+                      )
+                    )}
+                    <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={smartPlanning}
+                        onChange={(e) => setSmartPlanning(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                      />
+                      <span>
+                        <span className="font-semibold">Smart planning</span> — let HeyVacay pick the
+                        best room tier that fits the budget.
+                      </span>
+                    </label>
+                    {smart && (
+                      <p
+                        className={cn(
+                          'rounded-lg px-3 py-2 text-sm',
+                          smart.stillOver
+                            ? 'bg-amber-50 text-amber-800'
+                            : 'bg-brand/10 text-brand-dark'
+                        )}
+                      >
+                        {smart.stillOver
+                          ? `Even ${smart.tier} rooms (${money(smart.est.total)}) exceed the budget — raise the budget or trim the guest list / nights.`
+                          : `Smart planning recommends ${smart.tier} rooms (~${money(smart.nightly)}/night) → ${money(smart.est.total)} total. The event will target hotels around this nightly rate.`}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -483,6 +715,22 @@ function CityPicker({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function Est({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg border p-2',
+        highlight ? 'border-brand/40 bg-white' : 'border-slate-200 bg-white/70'
+      )}
+    >
+      <p className="text-[11px] font-medium text-slate-400">{label}</p>
+      <p className={cn('mt-0.5 font-display text-base font-bold', highlight ? 'text-brand-dark' : 'text-slate-800')}>
+        {value}
+      </p>
     </div>
   );
 }

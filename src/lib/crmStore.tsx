@@ -39,6 +39,7 @@ import { sendEmail } from './email';
 const KEY = 'hv_crm_demo_v2';
 const REPS_KEY = 'hv_crm_reps_v1';
 const COMMISSION_KEY = 'hv_crm_commission_v1';
+const ME_KEY = 'hv_crm_me_v1';
 
 interface CrmApi {
   companies: SalesCompany[];
@@ -109,9 +110,13 @@ interface CrmApi {
     reason?: string;
   }) => void;
 
-  /** Who's viewing Nova — gates commission management (C-Suite only globally). */
+  /** The signed-in Nova rep, and a setter to switch identity. */
+  currentRep: string;
+  setCurrentRep: (name: string) => void;
+  /** The signed-in rep's role — gates commission management (C-Suite only globally). */
   viewerRole: RepRole;
-  setViewerRole: (r: RepRole) => void;
+  /** Provision a lead into a real account (creates the workspace). */
+  provisionAccount: (id: string) => void;
   /** Effective global star-rate for a rating. */
   globalStarRate: (starRating: number) => number;
   /** Turn a company's own commission on/off (seeds from global on enable). */
@@ -153,7 +158,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<SalesCompany[]>(SEED_COMPANIES);
   const [reps, setReps] = useState<Rep[]>(SEED_REPS);
   const [commission, setCommissionState] = useState<CommissionState>(DEFAULT_COMMISSION);
-  const [viewerRole, setViewerRole] = useState<RepRole>('C-Suite');
+  // Who is signed in to Nova. The viewer's role is DERIVED from this rep, so
+  // C-Suite access is known from the identity, never guessed.
+  const [currentRep, setCurrentRepState] = useState<string>(ME);
   const [commissionApprovals, setCommissionApprovals] = useState<CommissionApproval[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -174,6 +181,8 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(rawComm) as CommissionState;
         if (parsed?.starRules) setCommissionState(parsed);
       }
+      const rawMe = localStorage.getItem(ME_KEY);
+      if (rawMe) setCurrentRepState(rawMe);
     } catch {
       /* ignore */
     }
@@ -186,10 +195,16 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(KEY, JSON.stringify(companies));
       localStorage.setItem(REPS_KEY, JSON.stringify(reps));
       localStorage.setItem(COMMISSION_KEY, JSON.stringify(commission));
+      localStorage.setItem(ME_KEY, currentRep);
     } catch {
       /* ignore */
     }
-  }, [companies, reps, commission, hydrated]);
+  }, [companies, reps, commission, currentRep, hydrated]);
+
+  const setCurrentRep = useCallback((name: string) => setCurrentRepState(name), []);
+  // The signed-in rep's role drives all gating (commission management, etc.).
+  const viewerRole: RepRole =
+    reps.find((r) => r.name === currentRep)?.role ?? 'Account Executive';
 
   const addRep = useCallback(
     (rep: Rep) => setReps((rs) => (rs.some((r) => r.name === rep.name) ? rs : [...rs, rep])),
@@ -270,6 +285,25 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         )
       ),
     [patch]
+  );
+
+  const provisionAccount: CrmApi['provisionAccount'] = useCallback(
+    (id) =>
+      patch(id, (c) =>
+        // Only a lead needs provisioning; anything further along already has an
+        // account. Moving to "onboarding" creates the workspace the rep enters.
+        c.status === 'lead'
+          ? log(
+              {
+                ...c,
+                status: 'onboarding',
+                accountManager: c.accountManager ?? currentRep,
+              },
+              `Account created by ${currentRep}`
+            )
+          : c
+      ),
+    [patch, currentRep]
   );
 
   const toggleStep: CrmApi['toggleStep'] = useCallback(
@@ -622,7 +656,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           fromPercent: company?.commissionStars?.[String(starRating)] ?? globalPct,
           toPercent: pct,
           globalPercent: globalPct,
-          requestedBy: ME,
+          requestedBy: currentRep,
           requestedAt: new Date().toISOString(),
           status: 'pending',
         };
@@ -632,7 +666,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           .forEach((r) =>
             sendEmail('approvalPending', r.email as string, {
               manager: r.name,
-              travelerName: ME,
+              travelerName: currentRep,
               title: `Commission change — ${company?.name ?? id} ${starRating}★`,
               dates: `${pct}% (global ${globalPct}%)`,
               total: 0,
@@ -648,7 +682,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       }));
       return 'applied';
     },
-    [companies, commission, viewerRole, reps, patch]
+    [companies, commission, viewerRole, reps, patch, currentRep]
   );
 
   const resolveCommissionApproval: CrmApi['resolveCommissionApproval'] = useCallback(
@@ -721,8 +755,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         removeStarRule,
         upsertOverride,
         removeOverride,
+        currentRep,
+        setCurrentRep,
         viewerRole,
-        setViewerRole,
+        provisionAccount,
         globalStarRate,
         setCompanyCustomCommission,
         setCompanyStarRate,

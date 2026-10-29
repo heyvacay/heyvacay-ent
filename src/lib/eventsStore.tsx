@@ -13,6 +13,7 @@ import {
   type DinnerCandidate,
   type DinnerReservation,
   type EventAttendee,
+  type RoomTierPolicy,
   type RsvpStatus,
   type TravelEvent,
 } from './events';
@@ -38,6 +39,9 @@ interface EventsApi {
     regionId?: number;
     lat?: number;
     lng?: number;
+    roomTierPolicy?: RoomTierPolicy;
+    budget?: number;
+    smartPlanning?: boolean;
   }) => TravelEvent;
   addMessage: (
     eventId: string,
@@ -51,6 +55,14 @@ interface EventsApi {
   setHotelAllowList: (eventId: string, list: { hid: string; name: string }[]) => void;
   /** Toggle whether this event restricts booking to only its allow-listed hotels. */
   setWhitelistOnly: (eventId: string, on: boolean) => void;
+  /** Set the room-tier allow-list policy (admins / host). */
+  setRoomTierPolicy: (eventId: string, policy: RoomTierPolicy | undefined) => void;
+  /** Set / clear the event hotel budget and smart-planning flag. */
+  setEventBudget: (eventId: string, budget: number | undefined, smart: boolean) => void;
+  /** A traveler asks a manager to book an additional stay for this event. */
+  requestExtraStay: (eventId: string, userId: string, name: string, note?: string) => void;
+  /** A manager grants / declines an extra-stay request. */
+  resolveExtraStay: (eventId: string, userId: string, grant: boolean) => void;
   joinEvent: (eventId: string, userId: string, name: string) => void;
 
   startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
@@ -131,6 +143,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       regionId: data.regionId,
       lat: data.lat,
       lng: data.lng,
+      roomTierPolicy: data.roomTierPolicy,
+      budget: data.budget,
+      smartPlanning: data.smartPlanning,
       messages: [msg(data.hostId, data.hostName, `Created the "${data.name}" event thread.`, true)],
       createdAt: new Date().toISOString().slice(0, 10),
     };
@@ -177,6 +192,58 @@ export function EventsProvider({ children }: { children: ReactNode }) {
 
   const setWhitelistOnly: EventsApi['setWhitelistOnly'] = useCallback(
     (eventId, on) => patch(eventId, (e) => ({ ...e, whitelistOnly: on })),
+    [patch]
+  );
+
+  const setRoomTierPolicy: EventsApi['setRoomTierPolicy'] = useCallback(
+    (eventId, policy) => patch(eventId, (e) => ({ ...e, roomTierPolicy: policy })),
+    [patch]
+  );
+
+  const setEventBudget: EventsApi['setEventBudget'] = useCallback(
+    (eventId, budget, smart) =>
+      patch(eventId, (e) => ({ ...e, budget, smartPlanning: smart })),
+    [patch]
+  );
+
+  const requestExtraStay: EventsApi['requestExtraStay'] = useCallback(
+    (eventId, userId, name, note) =>
+      patch(eventId, (e) => {
+        const others = (e.extraStayRequests ?? []).filter((r) => r.userId !== userId);
+        return {
+          ...e,
+          extraStayRequests: [
+            ...others,
+            { userId, name, note, requestedAt: new Date().toISOString(), status: 'pending' },
+          ],
+          messages: [
+            ...e.messages,
+            msg(userId, name, `${name} requested approval to book an additional stay for this event.`, true),
+          ],
+        };
+      }),
+    [patch]
+  );
+
+  const resolveExtraStay: EventsApi['resolveExtraStay'] = useCallback(
+    (eventId, userId, grant) =>
+      patch(eventId, (e) => ({
+        ...e,
+        extraStayRequests: (e.extraStayRequests ?? []).map((r) =>
+          r.userId === userId ? { ...r, status: grant ? 'granted' : 'declined' } : r
+        ),
+        messages: [
+          ...e.messages,
+          msg(
+            e.hostId,
+            'Manager',
+            grant
+              ? `Approved an additional stay for ${e.extraStayRequests?.find((r) => r.userId === userId)?.name ?? 'a traveler'}.`
+              : `Declined the additional-stay request.`,
+            true
+          ),
+        ],
+      })),
     [patch]
   );
 
@@ -372,6 +439,10 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         toggleReaction,
         setHotelAllowList,
         setWhitelistOnly,
+        setRoomTierPolicy,
+        setEventBudget,
+        requestExtraStay,
+        resolveExtraStay,
         joinEvent,
         startDinner,
         joinDinner,

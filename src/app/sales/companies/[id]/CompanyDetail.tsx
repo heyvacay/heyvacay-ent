@@ -77,12 +77,14 @@ export default function CompanyDetail({ id }: { id: string }) {
     setContractStatus,
     addNote,
     viewerRole,
+    provisionAccount,
     globalStarRate,
     setCompanyCustomCommission,
     setCompanyStarRate,
     commissionApprovals,
   } = useCrm();
   const router = useRouter();
+  const [provisionPrompt, setProvisionPrompt] = useState(false);
   const c = companyById(id);
   // Live stats from the customer workspace when this account is provisioned
   // in this browser (ids match). Null otherwise.
@@ -104,7 +106,8 @@ export default function CompanyDetail({ id }: { id: string }) {
     );
   }
 
-  const enterAccount = () => {
+  // Drop into the customer's workspace as their account manager.
+  const openWorkspace = () => {
     try {
       sessionStorage.setItem('hv_view_as', c.name);
       sessionStorage.setItem(
@@ -116,6 +119,22 @@ export default function CompanyDetail({ id }: { id: string }) {
       /* ignore */
     }
     router.push('/app');
+  };
+
+  // A lead has no account yet — prompt the rep to create one first. Anything
+  // past "lead" already has a workspace, so enter it directly.
+  const enterAccount = () => {
+    if (c.status === 'lead') {
+      setProvisionPrompt(true);
+      return;
+    }
+    openWorkspace();
+  };
+
+  const createAccountAndEnter = () => {
+    provisionAccount(c.id);
+    setProvisionPrompt(false);
+    openWorkspace();
   };
 
   const pct = onboardingPct(c);
@@ -135,7 +154,8 @@ export default function CompanyDetail({ id }: { id: string }) {
               <Receipt className="h-4 w-4" /> Account brief PDF
             </Button>
             <Button onClick={enterAccount}>
-              Enter account <ArrowRight className="h-4 w-4" />
+              {c.status === 'lead' ? 'Create account' : 'Enter account'}{' '}
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
         }
@@ -386,14 +406,16 @@ export default function CompanyDetail({ id }: { id: string }) {
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                <Building className="h-4 w-4 text-brand-dark" /> Enter their account
+                <Building className="h-4 w-4 text-brand-dark" />{' '}
+                {c.status === 'lead' ? 'Create their account' : 'Enter their account'}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Drop into {c.name}&apos;s workspace to set things up or troubleshoot as the
-                customer sees it.
+                {c.status === 'lead'
+                  ? `${c.name} is still a lead — no workspace exists yet. Create the account to drop in as their account manager.`
+                  : `Drop into ${c.name}'s workspace to set things up or troubleshoot as the customer sees it.`}
               </p>
               <Button size="sm" className="mt-2 w-full" onClick={enterAccount}>
-                Open their workspace
+                {c.status === 'lead' ? 'Create account' : 'Open their workspace'}
               </Button>
             </div>
 
@@ -448,6 +470,38 @@ export default function CompanyDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {provisionPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setProvisionPrompt(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display text-lg font-bold text-slate-900">Create account?</h2>
+            <p className="mt-1.5 text-sm text-slate-500">
+              <span className="font-semibold text-slate-700">{c.name}</span> is still a lead, so no
+              workspace has been created yet. Creating the account will move it into onboarding and
+              open a fresh workspace you can set up on their behalf.
+            </p>
+            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+              Account manager will be set to{' '}
+              <span className="font-semibold text-slate-700">{c.accountManager ?? 'you'}</span>. You
+              can invite their team and configure policies once inside.
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setProvisionPrompt(false)}>
+                Cancel
+              </Button>
+              <Button onClick={createAccountAndEnter}>
+                Create account &amp; enter <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {wizard && <ContractWizard company={c} onClose={() => setWizard(false)} />}
     </div>

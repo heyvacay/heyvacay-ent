@@ -15,6 +15,7 @@ import {
   cn,
 } from '@/components/app/ui';
 import { money, num, todayISO, addDays, daysUntil, dateRange, milesBetween } from '@/lib/format';
+import { roomTierRank, type RoomTier, type TravelEvent } from '@/lib/events';
 import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
@@ -596,7 +597,7 @@ type HotelSug = HotelPlace & Suggestion;
 export default function BookPage() {
   const { state, role, activeUser, evaluatePolicies, book, pointsBalance, approvalModeFor, setHomeCity } =
     useStore();
-  const { events } = useEvents();
+  const { events, requestExtraStay } = useEvents();
   const router = useRouter();
   const searchParams = useSearchParams();
   const canBookForOthers = role === 'admin' || role === 'booker';
@@ -636,6 +637,20 @@ export default function BookPage() {
   const eventHotelMode = !!selectedEvent && type === 'hotel';
   const allowHotels = selectedEvent?.allowHotelList ?? [];
 
+  // Already booked a hotel for this event? A second stay needs manager approval.
+  const alreadyBookedEventHotel =
+    !!selectedEvent &&
+    state.bookings.some(
+      (b) =>
+        b.eventId === selectedEvent.id &&
+        b.type === 'hotel' &&
+        b.status !== 'cancelled' &&
+        b.travelerId === travelerId
+    );
+  const extraStayReq = selectedEvent?.extraStayRequests?.find((r) => r.userId === travelerId);
+  const extraStayGranted = extraStayReq?.status === 'granted';
+  const blockSecondStay = eventHotelMode && alreadyBookedEventHotel && !extraStayGranted;
+
   // Picking an event autofills its dates (traveler can still change them).
   useEffect(() => {
     if (selectedEvent) {
@@ -644,6 +659,56 @@ export default function BookPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  // Keep the selected event in sync with the URL so deep links and in-page
+  // navigation (e.g. the red "book your hotel" banner) actually take effect.
+  useEffect(() => {
+    const urlEvent = searchParams.get('eventId');
+    if (urlEvent && urlEvent !== eventId) setEventId(urlEvent);
+    if (urlEvent && searchParams.get('type') === 'hotel') setType('hotel');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Direct link to hotel results for an event the traveler still needs to book.
+  // Whitelist-only events route back here with the event selected (the allow-
+  // listed hotels are the "results"); everything else goes straight to results.
+  const hotelHrefForEvent = (ev: (typeof events)[number]) => {
+    if (ev.whitelistOnly) return `/app/book?eventId=${ev.id}&type=hotel`;
+    const q = new URLSearchParams();
+    q.set('checkin', ev.startDate);
+    q.set('checkout', ev.endDate);
+    q.set('adults', '1');
+    q.set('label', ev.city);
+    q.set('travelerId', activeUser.id);
+    q.set('eventId', ev.id);
+    q.set('eventName', ev.name);
+    if (ev.regionId) q.set('regionId', String(ev.regionId));
+    else if (ev.lat != null && ev.lng != null) {
+      q.set('lat', String(ev.lat));
+      q.set('lng', String(ev.lng));
+    }
+    return `/app/hotels?${q.toString()}`;
+  };
+
+  // The highest room tier this traveler may book for the event (base, bumped
+  // by any per-position allowance), plus what happens if they exceed it.
+  const allowedTierFor = (ev: TravelEvent, uid: string): { tier: RoomTier; action: string } | null => {
+    const pol = ev.roomTierPolicy;
+    if (!pol) return null;
+    const title = state.users.find((u) => u.id === uid)?.title;
+    const posRule = pol.byPosition.find((r) => r.position === title);
+    const tier =
+      posRule && roomTierRank(posRule.maxTier) > roomTierRank(pol.base) ? posRule.maxTier : pol.base;
+    return { tier, action: pol.overAction };
+  };
+
+  const applyTier = (q: URLSearchParams, ev: TravelEvent) => {
+    const allowed = allowedTierFor(ev, travelerId);
+    if (allowed) {
+      q.set('maxTier', allowed.tier);
+      q.set('overAction', allowed.action);
+    }
+  };
 
   const bookAllowHotel = (h: { hid: string; name: string }) => {
     if (!selectedEvent) return;
@@ -660,6 +725,7 @@ export default function BookPage() {
     q.set('eventId', selectedEvent.id);
     q.set('eventName', selectedEvent.name);
     q.set('eventAllow', '1');
+    applyTier(q, selectedEvent);
     router.push(`/app/hotels/${h.hid}?${q.toString()}`);
   };
 
@@ -684,6 +750,7 @@ export default function BookPage() {
       q.set('lat', String(selectedEvent.lat));
       q.set('lng', String(selectedEvent.lng));
     }
+    applyTier(q, selectedEvent);
     router.push(`/app/hotels?${q.toString()}`);
   };
 
@@ -921,7 +988,7 @@ export default function BookPage() {
           return (
             <Link
               key={ev.id}
-              href={flag ? `/app/book?eventId=${ev.id}` : `/app/events/${ev.id}`}
+              href={flag ? hotelHrefForEvent(ev) : `/app/events/${ev.id}`}
               className={cn(
                 'mb-6 flex items-center justify-between gap-3 rounded-2xl border p-4 transition',
                 flag
@@ -1113,7 +1180,40 @@ export default function BookPage() {
             </div>
           </>
         ) : type === 'hotel' ? (
-          eventHotelMode ? (
+          eventHotelMode && blockSecondStay ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-5">
+              <p className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                <Shield className="h-4 w-4 shrink-0 text-amber-600" />
+                You already have a hotel booked for {selectedEvent!.name}
+              </p>
+              <p className="mt-1.5 text-sm text-amber-700">
+                Only one hotel stay per event books automatically. To book an additional stay for
+                this event, request approval from a manager.
+              </p>
+              {extraStayReq?.status === 'pending' ? (
+                <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-amber-700">
+                  <Shield className="h-4 w-4" /> Request sent — waiting on a manager.
+                </p>
+              ) : extraStayReq?.status === 'declined' ? (
+                <p className="mt-3 text-sm font-medium text-red-600">
+                  Your last request was declined. Contact your manager if you still need a second stay.
+                </p>
+              ) : (
+                <Button
+                  className="mt-3"
+                  onClick={() =>
+                    requestExtraStay(
+                      selectedEvent!.id,
+                      travelerId,
+                      state.users.find((u) => u.id === travelerId)?.name ?? activeUser.name
+                    )
+                  }
+                >
+                  Request access to book another stay
+                </Button>
+              )}
+            </div>
+          ) : eventHotelMode ? (
             <div>
               <div
                 className={cn(

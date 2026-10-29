@@ -284,6 +284,10 @@ export default function HotelsResults() {
     if (travelerId) q.set('travelerId', travelerId);
     if (eventId) q.set('eventId', eventId);
     if (eventName) q.set('eventName', eventName);
+    const maxTier = params.get('maxTier');
+    const overAction = params.get('overAction');
+    if (maxTier) q.set('maxTier', maxTier);
+    if (overAction) q.set('overAction', overAction);
     return `/app/hotels/${opt.hid}?${q.toString()}`;
   };
 

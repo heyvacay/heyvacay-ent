@@ -46,6 +46,36 @@ export interface EventAttendee {
   name: string;
 }
 
+/**
+ * Room tiers, cheapest → most premium. A person may book their allowed tier
+ * "or lower"; anything higher triggers the event's over-tier action.
+ */
+export const ROOM_TIERS = ['Standard', 'Superior', 'Deluxe', 'Suite', 'Presidential'] as const;
+export type RoomTier = (typeof ROOM_TIERS)[number];
+
+export const roomTierRank = (t: RoomTier): number => ROOM_TIERS.indexOf(t);
+
+/** What happens when someone picks a room above their allowed tier. */
+export type OverTierAction = 'block' | 'manager' | 'host';
+
+export interface RoomTierPolicy {
+  /** Baseline max tier everyone on the event may book. */
+  base: RoomTier;
+  /** Positions (job titles) that may book a higher tier, and how high. */
+  byPosition: { position: string; maxTier: RoomTier }[];
+  /** What to do when a room exceeds the person's allowed tier. */
+  overAction: OverTierAction;
+}
+
+/** A request to book an additional stay for an event (beyond the first hotel). */
+export interface ExtraStayRequest {
+  userId: string;
+  name: string;
+  note?: string;
+  requestedAt: string;
+  status: 'pending' | 'granted' | 'declined';
+}
+
 export interface DinnerCandidate {
   id: string;
   name: string;
@@ -115,6 +145,14 @@ export interface TravelEvent {
   regionId?: number;
   lat?: number;
   lng?: number;
+  /** Room-tier allow-list by position (optional). */
+  roomTierPolicy?: RoomTierPolicy;
+  /** Event hotel budget (total, USD) if the planner set one. */
+  budget?: number;
+  /** Smart planning: let HeyVacay pick a hotel that fits the budget. */
+  smartPlanning?: boolean;
+  /** Requests to book a second stay for this event, keyed by user. */
+  extraStayRequests?: ExtraStayRequest[];
   messages: EventMessage[];
   dinner?: Dinner;
   createdAt: string;

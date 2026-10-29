@@ -14,6 +14,8 @@ import {
 } from '@/lib/search';
 import type { InventoryOption } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
+import { roomTierRank, type RoomTier, type OverTierAction } from '@/lib/events';
+import { classifyRoomTier } from '@/lib/eventPlanning';
 import { Lightbox } from '@/components/hotels/Lightbox';
 import { RoomSelection } from '@/components/hotels/RoomSelection';
 import type { ReserveArgs } from '@/components/hotels/RoomCard';
@@ -143,9 +145,25 @@ export default function HotelDetail({ hid }: { hid: string }) {
   };
   const flags = eventAllow ? [] : evaluatePolicies(opt, checkin || new Date().toISOString());
   const { savings, points } = rewardsFor(opt);
+
+  // Event room-tier cap: the traveler's allowed tier (+ what to do if exceeded)
+  // comes through the query when booking for an event. The cap applies even to
+  // allow-listed hotels.
+  const rawMaxTier = params.get('maxTier');
+  const maxTier = (rawMaxTier as RoomTier | null) ?? null;
+  const overAction = (params.get('overAction') as OverTierAction) || 'manager';
+  const selectedTier = classifyRoomTier(selected?.roomTitle);
+  const tierExceeded =
+    !!maxTier && !!selected && roomTierRank(selectedTier) > roomTierRank(maxTier);
+  const tierBlocked = tierExceeded && overAction === 'block';
+  const tierApproval = tierExceeded && overAction !== 'block';
+  const tierApprover = overAction === 'host' ? 'the event host' : 'a manager';
+
   const needsApproval =
-    !eventAllow &&
-    (forceApproval || flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block'));
+    tierApproval ||
+    (!eventAllow &&
+      (forceApproval ||
+        flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block')));
 
   // Per-room policy check — each room card evaluates its own all-in price so a
   // cheap room can be in policy while a suite has a note / needs approval /
@@ -225,6 +243,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   // "Request this stay" / "Confirm booking" primary action.
   const reserve = () => {
+    if (tierBlocked) return; // over-tier room is blocked for this event
     if (needsApproval) {
       // Approvals route to an admin — no payment taken up front.
       commitBooking();
@@ -790,10 +809,32 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 </div>
               )}
 
-              <Button className="w-full" onClick={reserve} disabled={!price}>
-                {needsApproval ? 'Request this stay' : 'Confirm booking'}
+              {tierExceeded && (
+                <div
+                  className={cn(
+                    'mb-2 flex items-start gap-2 rounded-lg border p-3 text-sm',
+                    tierBlocked
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : 'border-amber-300 bg-amber-50 text-amber-800'
+                  )}
+                >
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    This {selectedTier} room is above the {maxTier} tier allowed for this event.{' '}
+                    {tierBlocked
+                      ? 'It can’t be booked — pick a room at or below the allowed tier.'
+                      : `It can be requested, but needs approval from ${tierApprover} first.`}
+                  </span>
+                </div>
+              )}
+              <Button className="w-full" onClick={reserve} disabled={!price || tierBlocked}>
+                {tierBlocked
+                  ? 'Room not allowed for this event'
+                  : needsApproval
+                    ? 'Request this stay'
+                    : 'Confirm booking'}
               </Button>
-              {needsApproval && (
+              {needsApproval && !tierBlocked && (
                 <p className="text-center text-[11px] text-slate-400">
                   Routes to an admin for approval.{' '}
                   {opt.freeCancellation

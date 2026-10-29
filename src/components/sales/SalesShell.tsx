@@ -13,7 +13,7 @@ import {
   Users,
   Wallet,
 } from '@/components/icons';
-import { ME } from '@/lib/crm';
+import { useCrm } from '@/lib/crmStore';
 import { Logo } from '@/components/app/Logo';
 
 const NAV = [
@@ -28,6 +28,7 @@ const NAV = [
 
 export default function SalesShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { reps, currentRep, setCurrentRep, viewerRole } = useCrm();
   const [open, setOpen] = useState(false);
 
   const isActive = (href: string) =>
@@ -104,10 +105,30 @@ export default function SalesShell({ children }: { children: ReactNode }) {
           <p className="text-sm font-medium text-slate-400">Internal sales console</p>
           <div className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">
-              {ME.slice(0, 1)}
+              {currentRep.slice(0, 1)}
             </span>
-            <span className="hidden text-sm font-semibold text-slate-700 sm:block">
-              {ME}
+            <label className="flex items-center gap-1.5">
+              <span className="sr-only">Signed in as</span>
+              <select
+                value={currentRep}
+                onChange={(e) => setCurrentRep(e.target.value)}
+                className="max-w-[9.5rem] truncate rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-700 outline-none focus:border-brand"
+                title="Switch signed-in rep"
+              >
+                {reps.map((r) => (
+                  <option key={r.name} value={r.name}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span
+              className={cn(
+                'hidden rounded-full px-2 py-0.5 text-[11px] font-semibold sm:inline',
+                viewerRole === 'C-Suite' ? 'bg-brand/15 text-brand-dark' : 'bg-slate-100 text-slate-500'
+              )}
+            >
+              {viewerRole}
             </span>
           </div>
         </header>

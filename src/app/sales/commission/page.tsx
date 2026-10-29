@@ -314,7 +314,9 @@ export default function CommissionPage() {
     upsertOverride,
     removeOverride,
     viewerRole,
-    setViewerRole,
+    reps,
+    currentRep,
+    setCurrentRep,
     companies,
     commissionApprovals,
     resolveCommissionApproval,
@@ -365,20 +367,28 @@ export default function CommissionPage() {
         title="Commission"
         subtitle="Set commission per hotel or region, with star ratings as the fallback. Hotel rules beat region rules; region rules beat the star-based rate."
         actions={
-          <div className="inline-flex rounded-full bg-slate-100 p-1 text-xs">
-            {(['C-Suite', 'Account Executive'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setViewerRole(r)}
-                className={cn(
-                  'rounded-full px-3 py-1 font-semibold',
-                  viewerRole === r ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-                )}
-              >
-                {r === 'C-Suite' ? 'View as C-Suite' : 'View as Rep'}
-              </button>
-            ))}
-          </div>
+          <label className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400">Signed in as</span>
+            <select
+              value={currentRep}
+              onChange={(e) => setCurrentRep(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-800 outline-none focus:border-brand"
+            >
+              {reps.map((r) => (
+                <option key={r.name} value={r.name}>
+                  {r.name} — {r.role}
+                </option>
+              ))}
+            </select>
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                canManage ? 'bg-brand/15 text-brand-dark' : 'bg-slate-100 text-slate-500'
+              )}
+            >
+              {viewerRole}
+            </span>
+          </label>
         }
       />
 
