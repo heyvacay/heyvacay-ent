@@ -112,6 +112,8 @@ export interface StoreApi {
     bypassPolicy?: boolean;
   }) => Booking;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
+  /** Tie an already-booked trip to an event (no rebooking needed). */
+  attachBookingToEvent: (bookingId: string, eventId: string, eventName: string) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Manager "approve if changed": sends a counter-offer to the traveler. */
   proposeChange: (
@@ -741,6 +743,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const attachBookingToEvent: StoreApi['attachBookingToEvent'] = useCallback(
+    (bookingId, eventId, eventName) => {
+      setState((s) => ({
+        ...s,
+        bookings: s.bookings.map((b) =>
+          b.id === bookingId ? { ...b, eventId, eventName } : b
+        ),
+      }));
+    },
+    []
+  );
+
   const proposeChange: StoreApi['proposeChange'] = useCallback((id, data) => {
     setState((s) => ({
       ...s,
@@ -1043,6 +1057,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     resolvePolicyChange,
     book,
     cancelBooking,
+    attachBookingToEvent,
     approveBooking,
     proposeChange,
     respondOffer,

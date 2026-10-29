@@ -596,7 +596,7 @@ type FlightSug = FlightPlace & Suggestion;
 type HotelSug = HotelPlace & Suggestion;
 
 export default function BookPage() {
-  const { state, role, activeUser, evaluatePolicies, book, pointsBalance, approvalModeFor, setHomeCity } =
+  const { state, role, activeUser, evaluatePolicies, book, pointsBalance, approvalModeFor, setHomeCity, attachBookingToEvent } =
     useStore();
   const { events, requestExtraStay } = useEvents();
   const router = useRouter();
@@ -1003,10 +1003,48 @@ export default function BookPage() {
           const dist = need.dist;
           const needsHotel = need.needs;
           const flag = needsHotel && !hasHotel;
+          // Already booked a hotel in this city that isn't tied to an event? Offer
+          // to attach it instead of booking again.
+          const cityLc = ev.city.split(',')[0].trim().toLowerCase();
+          const matchingExisting =
+            flag &&
+            state.bookings.find(
+              (b) =>
+                b.type === 'hotel' &&
+                b.status !== 'cancelled' &&
+                b.travelerId === activeUser.id &&
+                !b.eventId &&
+                [b.destination, b.title, b.detail]
+                  .filter(Boolean)
+                  .some((f) => f!.toLowerCase().includes(cityLc))
+            );
           return (
-            <Link
-              key={ev.id}
-              href={flag ? hotelHrefForEvent(ev) : `/app/events/${ev.id}`}
+            <div key={ev.id}>
+              {matchingExisting && (
+                <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-brand/40 bg-brand/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
+                      <Building className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        You already have a stay in {ev.city}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {matchingExisting.title} · attach it to {ev.name} instead of booking again.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    className="shrink-0"
+                    onClick={() => attachBookingToEvent(matchingExisting.id, ev.id, ev.name)}
+                  >
+                    Add to {ev.name}
+                  </Button>
+                </div>
+              )}
+              <Link
+                href={flag ? hotelHrefForEvent(ev) : `/app/events/${ev.id}`}
               className={cn(
                 'mb-6 flex items-center justify-between gap-3 rounded-2xl border p-4 transition',
                 flag
@@ -1046,7 +1084,8 @@ export default function BookPage() {
               >
                 {flag ? 'Book now →' : 'View →'}
               </span>
-            </Link>
+              </Link>
+            </div>
           );
         })}
 
