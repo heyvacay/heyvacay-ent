@@ -84,6 +84,12 @@ export interface StoreApi {
   linkCard: (brand: string, last4: string) => void;
   requestNet30: () => void;
   updateBudgetLimit: (id: string, limit: number) => void;
+  setScopedBudget: (
+    scope: BudgetScope,
+    refId: string | null,
+    limit: number,
+    label?: string
+  ) => void;
   addPolicy: (p: Omit<Policy, 'id'>) => void;
   togglePolicy: (id: string) => void;
   updatePolicy: (id: string, patch: Partial<Omit<Policy, 'id'>>) => void;
@@ -459,6 +465,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...s,
         budgets: s.budgets.map((b) => (b.id === id ? { ...b, limit } : b)),
       }));
+    },
+    []
+  );
+
+  // Upsert an employee's (or department's) budget so every person can be given
+  // a budget even if they don't have one yet.
+  const setScopedBudget: StoreApi['setScopedBudget'] = useCallback(
+    (scope, refId, limit, label) => {
+      setState((s) => {
+        const existing = s.budgets.find((b) => b.scope === scope && b.refId === refId);
+        if (existing) {
+          return {
+            ...s,
+            budgets: s.budgets.map((b) => (b.id === existing.id ? { ...b, limit } : b)),
+          };
+        }
+        return {
+          ...s,
+          budgets: [
+            ...s.budgets,
+            {
+              id: uid('bud'),
+              scope,
+              refId,
+              label: label ?? refId ?? scope,
+              limit,
+              period: 'year' as const,
+            },
+          ],
+        };
+      });
     },
     []
   );
@@ -997,6 +1034,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     linkCard,
     requestNet30,
     updateBudgetLimit,
+    setScopedBudget,
     addPolicy,
     togglePolicy,
     updatePolicy,
