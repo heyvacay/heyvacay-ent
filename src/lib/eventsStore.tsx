@@ -310,7 +310,15 @@ export function EventsProvider({ children }: { children: ReactNode }) {
               ? e.dinner.attendees
               : [...e.dinner.attendees, { userId, name }]
             : e.dinner.attendees.filter((a) => a.userId !== userId);
-        return { ...e, dinner: { ...e.dinner, rsvps, attendees } };
+        // As soon as someone's in, open genre voting so people can vote right
+        // after they RSVP — no waiting on the host to start it.
+        const phase =
+          e.dinner.phase === 'rsvp' && status === 'yes' ? 'genre' : e.dinner.phase;
+        const messages =
+          phase !== e.dinner.phase
+            ? [...e.messages, msg(e.hostId, 'HeyVacay', 'Dinner voting is open — pick your food genre!', true)]
+            : e.messages;
+        return { ...e, dinner: { ...e.dinner, rsvps, attendees, phase }, messages };
       }),
     [patch]
   );

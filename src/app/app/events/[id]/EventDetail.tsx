@@ -62,7 +62,13 @@ export default function EventDetail({ id }: { id: string }) {
     setReservation,
   } = useEvents();
   const e = eventById(id);
-  const [tab, setTab] = useState<Tab>('overview');
+  const initialTab =
+    typeof window !== 'undefined'
+      ? ((new URLSearchParams(window.location.search).get('tab') as Tab) ?? 'overview')
+      : 'overview';
+  const [tab, setTab] = useState<Tab>(
+    initialTab === 'dinner' || initialTab === 'chat' ? initialTab : 'overview'
+  );
   const [booking, setBooking] = useState(false);
   const [availNote, setAvailNote] = useState('');
   const bookedRef = useRef(false);

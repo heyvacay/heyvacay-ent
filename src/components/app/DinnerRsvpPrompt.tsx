@@ -20,19 +20,25 @@ export function DinnerRsvpPrompt() {
   const { events, setRsvp } = useEvents();
   const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
 
-  // The first event with a dinner still collecting RSVPs that the user is
-  // invited to and hasn't answered yet.
+  // The first event with an open dinner that needs this user's input — either
+  // an RSVP, or (once they're in) a vote on the food genre / restaurant.
   const nowISO = new Date().toISOString();
   const pendingEvent = events.find((e) => {
     const d = e.dinner;
-    if (!d || d.phase !== 'rsvp' || dinnerExpired(d, nowISO)) return false;
+    if (!d || dinnerExpired(d, nowISO) || dismissed[e.id]) return false;
     const invited = e.attendees.some((a) => a.userId === activeUser.id);
-    const answered = d.rsvps[activeUser.id] != null;
-    return invited && !answered && !dismissed[e.id];
+    if (!invited) return false;
+    if (d.phase === 'rsvp' || d.phase === 'join') return d.rsvps[activeUser.id] == null;
+    const inParty = d.attendees.some((a) => a.userId === activeUser.id);
+    if (!inParty) return false;
+    if (d.phase === 'genre') return d.genreVotes[activeUser.id] == null;
+    if (d.phase === 'restaurant') return d.restaurantVotes[activeUser.id] == null;
+    return false;
   });
 
   if (!pendingEvent || !pendingEvent.dinner) return null;
   const d = pendingEvent.dinner;
+  const needsRsvp = d.phase === 'rsvp' || d.phase === 'join';
 
   const answer = (status: RsvpStatus) => {
     setRsvp(pendingEvent.id, activeUser.id, activeUser.name, status);
@@ -47,7 +53,11 @@ export function DinnerRsvpPrompt() {
           </span>
           <div className="min-w-0">
             <p className="font-semibold text-slate-900">
-              You&apos;re invited to the group dinner for {pendingEvent.name}
+              {needsRsvp
+                ? `You're invited to the group dinner for ${pendingEvent.name}`
+                : d.phase === 'genre'
+                  ? `Vote on the food genre for ${pendingEvent.name}'s dinner`
+                  : `Vote on the restaurant for ${pendingEvent.name}'s dinner`}
             </p>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1">
@@ -66,24 +76,35 @@ export function DinnerRsvpPrompt() {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <button
-            onClick={() => answer('yes')}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy-deep hover:brightness-95"
-          >
-            <Check className="h-4 w-4" /> I&apos;m in
-          </button>
-          <button
-            onClick={() => answer('maybe')}
-            className="rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
-          >
-            Maybe
-          </button>
-          <button
-            onClick={() => answer('no')}
-            className="rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
-          >
-            Can&apos;t make it
-          </button>
+          {needsRsvp ? (
+            <>
+              <button
+                onClick={() => answer('yes')}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy-deep hover:brightness-95"
+              >
+                <Check className="h-4 w-4" /> I&apos;m in
+              </button>
+              <button
+                onClick={() => answer('maybe')}
+                className="rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+              >
+                Maybe
+              </button>
+              <button
+                onClick={() => answer('no')}
+                className="rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+              >
+                Can&apos;t make it
+              </button>
+            </>
+          ) : (
+            <Link
+              href={`/app/events/${pendingEvent.id}?tab=dinner`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy-deep hover:brightness-95"
+            >
+              Vote now →
+            </Link>
+          )}
           <button
             onClick={() => setDismissed((s) => ({ ...s, [pendingEvent.id]: true }))}
             aria-label="Dismiss"
