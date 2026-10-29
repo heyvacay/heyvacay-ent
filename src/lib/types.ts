@@ -386,6 +386,34 @@ export interface Billing {
   cardLast4?: string;
   /** true once an admin has requested Net 30 (routes to the account manager). */
   netRequested?: boolean;
+  /** Net-30 underwriting. Only a sales rep can start this; it sends a KYC form
+   *  to the account owner, who fills it in. Net 30 goes live once approved. */
+  netKyc?: Net30Kyc;
+}
+
+/** Fields the account owner fills in on the Net-30 KYC form. */
+export interface Net30KycFields {
+  legalName: string;
+  taxId: string;
+  billingEmail: string;
+  billingAddress: string;
+  estMonthlySpend: string;
+  signerName: string;
+  signerTitle: string;
+}
+
+export interface Net30Kyc {
+  /** sent = waiting on the owner; submitted = owner returned it; approved = Net 30 live. */
+  status: 'sent' | 'submitted' | 'approved';
+  /** Sales rep who started the Net-30 setup. */
+  rep: string;
+  /** Account owner the form was sent to. */
+  ownerName: string;
+  ownerEmail: string;
+  sentAt: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  fields?: Net30KycFields;
 }
 
 export interface AppState {

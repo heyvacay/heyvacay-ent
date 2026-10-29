@@ -193,17 +193,46 @@ export default function CompanyDetail({ id }: { id: string }) {
 
           {tab === 'overview' && (
             <>
-              {/* Net 30 request from the customer */}
-              {linked?.netRequested && (
-                <Card className="border-amber-300 bg-amber-50">
-                  <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
-                    <Receipt className="h-4 w-4" /> 1 Net 30 request
-                  </p>
-                  <p className="mt-1 text-sm text-amber-700">
-                    {c.name} asked to set up Net 30 terms. As the account manager
-                    {c.accountManager ? ` (${c.accountManager})` : ''}, reach out to approve and
-                    configure invoicing.
-                  </p>
+              {/* Net 30 setup — only a rep can start it; status shown here */}
+              {linked && (linked.netRequested || linked.netKycStatus) && (
+                <Card
+                  className={
+                    linked.netKycStatus === 'approved'
+                      ? 'border-emerald-300 bg-emerald-50'
+                      : 'border-amber-300 bg-amber-50'
+                  }
+                >
+                  {linked.netKycStatus === 'approved' ? (
+                    <>
+                      <p className="flex items-center gap-2 text-sm font-bold text-emerald-800">
+                        <Receipt className="h-4 w-4" /> Net 30 active
+                      </p>
+                      <p className="mt-1 text-sm text-emerald-700">
+                        KYC approved — {c.name} is invoiced on Net 30 terms.
+                      </p>
+                    </>
+                  ) : linked.netKycStatus === 'sent' || linked.netKycStatus === 'submitted' ? (
+                    <>
+                      <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                        <Receipt className="h-4 w-4" /> Net 30 — KYC {linked.netKycStatus}
+                      </p>
+                      <p className="mt-1 text-sm text-amber-700">
+                        The KYC form has been sent to the account owner. Net 30 goes live once they
+                        submit it.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                        <Receipt className="h-4 w-4" /> 1 Net 30 request
+                      </p>
+                      <p className="mt-1 text-sm text-amber-700">
+                        {c.name} asked to set up Net 30 terms. As the account manager
+                        {c.accountManager ? ` (${c.accountManager})` : ''}, open their workspace
+                        (View account) → Billing to send the KYC form to the account owner.
+                      </p>
+                    </>
+                  )}
                 </Card>
               )}
 

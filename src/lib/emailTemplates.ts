@@ -209,6 +209,23 @@ export function dinnerBookedEmail(d: {
   };
 }
 
+export function net30KycEmail(d: {
+  ownerName: string;
+  company: string;
+  rep: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.ownerName}, ${d.rep} is setting up <strong>Net 30 invoicing</strong> for ${d.company}.</p>
+    <p style="font-size:14px;color:#334155">Before we can switch on Net 30, we need a quick Know-Your-Customer (KYC) form from the account owner — legal entity name, tax ID, billing contact, and an authorized signer. It takes about two minutes.</p>
+    <a href="#" style="display:inline-block;margin-top:8px;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px">Complete the KYC form</a>
+    <p style="font-size:13px;color:#64748b;margin-top:12px">Open HeyVacay → Billing & payments to fill it in. Net 30 goes live as soon as it's approved.</p>`;
+  return {
+    subject: `Action needed: KYC form to enable Net 30 for ${d.company}`,
+    html: wrap('Finish setting up Net 30', body),
+    text: `${d.rep} started Net 30 setup for ${d.company}. Complete the KYC form in HeyVacay → Billing to enable it.`,
+  };
+}
+
 export const TEMPLATES = {
   confirmation: confirmationEmail,
   approvalPending: approvalPendingEmail,
@@ -217,6 +234,7 @@ export const TEMPLATES = {
   dinnerInvite: dinnerInviteEmail,
   dinnerReminder: dinnerReminderEmail,
   dinnerBooked: dinnerBookedEmail,
+  net30Kyc: net30KycEmail,
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

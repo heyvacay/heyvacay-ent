@@ -12,6 +12,7 @@ import {
 import type {
   AppState,
   Billing,
+  Net30KycFields,
   Booking,
   BookingApprovalMode,
   BudgetScope,
@@ -88,6 +89,10 @@ export interface StoreApi {
   setBillingMode: (mode: Billing['mode']) => void;
   linkCard: (brand: string, last4: string) => void;
   requestNet30: () => void;
+  /** Sales-rep only: start Net 30 by sending a KYC form to the account owner. */
+  startNet30Kyc: () => void;
+  /** Account owner: submit the KYC form; approves and switches billing to Net 30. */
+  submitNet30Kyc: (fields: Net30KycFields) => void;
   updateBudgetLimit: (id: string, limit: number) => void;
   setScopedBudget: (
     scope: BudgetScope,
@@ -471,6 +476,68 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const requestNet30: StoreApi['requestNet30'] = useCallback(() => {
     setState((s) => ({ ...s, billing: { ...(s.billing ?? { mode: 'employee' }), netRequested: true } }));
+  }, []);
+
+  // Sales-rep only: begin Net 30 by sending a KYC form to the account owner
+  // (the company's super admin). Net 30 is not active until the owner submits
+  // and it's approved.
+  const startNet30Kyc: StoreApi['startNet30Kyc'] = useCallback(() => {
+    let repName = 'Your HeyVacay rep';
+    try {
+      repName = localStorage.getItem('hv_crm_me_v1') || repName;
+    } catch {
+      /* ignore */
+    }
+    setState((s) => {
+      const owner =
+        s.users.find((u) => u.role === 'admin' && u.superAdmin) ??
+        s.users.find((u) => u.role === 'admin') ??
+        s.users[0];
+      if (!owner) return s;
+      sendEmail('net30Kyc', owner.email, {
+        ownerName: owner.name,
+        company: s.company.name,
+        rep: repName,
+      });
+      return {
+        ...s,
+        billing: {
+          ...(s.billing ?? { mode: 'employee' as Billing['mode'] }),
+          netRequested: true,
+          netKyc: {
+            status: 'sent',
+            rep: repName,
+            ownerName: owner.name,
+            ownerEmail: owner.email,
+            sentAt: todayISO(),
+          },
+        },
+      };
+    });
+  }, []);
+
+  // Account owner submits the KYC form. For the demo this auto-approves and
+  // switches billing to Net 30 so the flow is visible end-to-end.
+  const submitNet30Kyc: StoreApi['submitNet30Kyc'] = useCallback((fields: Net30KycFields) => {
+    setState((s) => {
+      const prev = s.billing?.netKyc;
+      if (!prev) return s;
+      return {
+        ...s,
+        billing: {
+          ...(s.billing ?? { mode: 'net30' as Billing['mode'] }),
+          mode: 'net30',
+          netRequested: true,
+          netKyc: {
+            ...prev,
+            status: 'approved',
+            submittedAt: todayISO(),
+            approvedAt: todayISO(),
+            fields,
+          },
+        },
+      };
+    });
   }, []);
 
   const updateBudgetLimit: StoreApi['updateBudgetLimit'] = useCallback(
@@ -1158,6 +1225,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUserApprovalMode,
     setDepartmentApprovalMode,
     setBillingMode,
+    startNet30Kyc,
+    submitNet30Kyc,
     linkCard,
     requestNet30,
     updateBudgetLimit,

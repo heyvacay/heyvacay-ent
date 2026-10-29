@@ -31,6 +31,8 @@ export interface LinkedStats {
   /** Net-30 request raised by the company admin, if any. */
   netRequested: boolean;
   billingMode?: string;
+  /** Net-30 KYC status, if a rep has started setup. */
+  netKycStatus?: 'sent' | 'submitted' | 'approved';
 }
 
 export function readAppLink(companyId: string): LinkedStats | null {
@@ -62,6 +64,7 @@ export function readAppLink(companyId: string): LinkedStats | null {
       recent,
       netRequested: Boolean(billing.netRequested),
       billingMode: billing.mode,
+      netKycStatus: billing.netKyc?.status,
     };
   } catch {
     return null;

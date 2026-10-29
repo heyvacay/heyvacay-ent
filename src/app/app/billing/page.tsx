@@ -4,18 +4,30 @@ import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Field, Input, PageHeader, cn } from '@/components/app/ui';
 import { Check, Wallet, Shield } from '@/components/icons';
-import type { BillingMode } from '@/lib/types';
+import type { BillingMode, Net30KycFields } from '@/lib/types';
 
 const METHODS = ['Credit card', 'Debit card', 'Apple Pay'];
 
 export default function BillingPage() {
-  const { state, activeUser, setBillingMode, linkCard, requestNet30, setPersonalCard } = useStore();
+  const {
+    state,
+    activeUser,
+    viewingAs,
+    setBillingMode,
+    linkCard,
+    requestNet30,
+    startNet30Kyc,
+    submitNet30Kyc,
+    setPersonalCard,
+  } = useStore();
   const billing = state.billing ?? { mode: 'employee' as BillingMode };
   const [card, setCard] = useState({ brand: 'Visa', last4: '' });
   const [pcard, setPcard] = useState({ brand: 'Visa', last4: '' });
 
   const linkedCard = billing.cardLast4;
   const personalCard = activeUser.personalCard;
+  const kyc = billing.netKyc;
+  const net30Approved = kyc?.status === 'approved';
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -58,9 +70,10 @@ export default function BillingPage() {
           <Option
             active={billing.mode === 'net30'}
             title="Net 30 (invoiced)"
-            sub="We invoice the company; travelers are never prompted to pay. Requires sales approval — see below."
-            onClick={() => billing.netRequested && setBillingMode('net30')}
-            disabled={!billing.netRequested}
+            sub="We invoice the company; travelers are never prompted to pay. Set up by a sales rep after KYC approval — see below."
+            onClick={() => net30Approved && setBillingMode('net30')}
+            disabled={!net30Approved}
+            disabledLabel="Needs KYC approval"
           />
         </div>
 
@@ -138,23 +151,152 @@ export default function BillingPage() {
       </Card>
 
       {/* net 30 */}
-      <Card>
-        <h2 className="mb-1 font-display text-lg font-bold text-slate-900">How do I start Net 30 payments?</h2>
-        {billing.netRequested ? (
+      <Card className="mt-6">
+        <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+          <Shield className="h-5 w-5 text-brand-dark" /> Net 30 invoicing
+        </h2>
+
+        {net30Approved ? (
+          <div className="rounded-xl bg-emerald-50 p-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+              <Check className="h-4 w-4" /> Net 30 is approved and active.
+            </p>
+            {kyc?.fields && (
+              <p className="mt-1 text-xs text-emerald-700/80">
+                Invoices go to {kyc.fields.billingEmail || kyc.ownerEmail} · signed by{' '}
+                {kyc.fields.signerName}
+                {kyc.fields.signerTitle ? `, ${kyc.fields.signerTitle}` : ''}.
+              </p>
+            )}
+          </div>
+        ) : viewingAs ? (
+          // Sales rep, viewing this account from the CRM — only they can start Net 30.
+          kyc?.status === 'submitted' || kyc?.status === 'sent' ? (
+            <div className="rounded-xl bg-brand/5 p-3">
+              <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Check className="h-4 w-4 text-brand-dark" /> KYC form sent to {kyc.ownerName} (
+                {kyc.ownerEmail}) on {kyc.sentAt}.
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Net 30 switches on automatically once the account owner completes and submits it.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="mb-3 text-sm text-slate-500">
+                As the sales rep on this account, you can turn on Net 30 terms. We&apos;ll send a
+                short KYC (Know Your Customer) form to the account owner; once they complete it,
+                Net 30 goes live.
+              </p>
+              <Button onClick={startNet30Kyc}>
+                <Shield className="h-4 w-4" /> Set up Net 30 — send KYC to account owner
+              </Button>
+            </>
+          )
+        ) : kyc?.status === 'sent' || kyc?.status === 'submitted' ? (
+          // Account owner — fill in the KYC form that the rep sent.
+          <KycForm
+            ownerName={kyc.ownerName}
+            rep={kyc.rep}
+            onSubmit={submitNet30Kyc}
+            defaults={{
+              legalName: state.company.name,
+              billingEmail: kyc.ownerEmail,
+              signerName: activeUser.name,
+              signerTitle: activeUser.title,
+            }}
+          />
+        ) : billing.netRequested ? (
           <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
-            <Check className="h-4 w-4" /> Request received — a sales rep will be in touch to set up Net 30.
+            <Check className="h-4 w-4" /> Request received — your sales rep will set up Net 30 and
+            send a KYC form to the account owner.
           </p>
         ) : (
           <>
             <p className="mb-3 text-sm text-slate-500">
-              Net 30 terms are approved by our team. Click below and your account manager will reach out.
+              Net 30 is set up by your sales rep and requires a quick KYC form from the account
+              owner. Request it below and your account manager will start the process.
             </p>
             <Button onClick={requestNet30}>
-              <Shield className="h-4 w-4" /> Request Net 30 — have a rep contact me
+              <Shield className="h-4 w-4" /> Request Net 30 — have a rep set it up
             </Button>
           </>
         )}
       </Card>
+    </div>
+  );
+}
+
+function KycForm({
+  ownerName,
+  rep,
+  onSubmit,
+  defaults,
+}: {
+  ownerName: string;
+  rep: string;
+  onSubmit: (f: Net30KycFields) => void;
+  defaults: Partial<Net30KycFields>;
+}) {
+  const [f, setF] = useState<Net30KycFields>({
+    legalName: defaults.legalName ?? '',
+    taxId: '',
+    billingEmail: defaults.billingEmail ?? '',
+    billingAddress: '',
+    estMonthlySpend: '',
+    signerName: defaults.signerName ?? '',
+    signerTitle: defaults.signerTitle ?? '',
+  });
+  const set = (k: keyof Net30KycFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setF((p) => ({ ...p, [k]: e.target.value }));
+  const ready =
+    f.legalName.trim() && f.taxId.trim() && f.billingEmail.trim() && f.signerName.trim();
+
+  return (
+    <div>
+      <p className="mb-3 text-sm text-slate-500">
+        Hi {ownerName} — {rep} started Net 30 setup. Complete this KYC form to turn on invoiced
+        billing. As the account owner, your details authorize the invoicing relationship.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Legal entity name">
+          <Input value={f.legalName} onChange={set('legalName')} placeholder="Acme, Inc." />
+        </Field>
+        <Field label="Tax ID / EIN">
+          <Input value={f.taxId} onChange={set('taxId')} placeholder="12-3456789" />
+        </Field>
+        <Field label="Billing email">
+          <Input value={f.billingEmail} onChange={set('billingEmail')} placeholder="ap@acme.com" />
+        </Field>
+        <Field label="Est. monthly travel spend">
+          <Input
+            value={f.estMonthlySpend}
+            onChange={set('estMonthlySpend')}
+            placeholder="$25,000"
+          />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Billing address">
+            <Input
+              value={f.billingAddress}
+              onChange={set('billingAddress')}
+              placeholder="500 Main St, Austin, TX 78701"
+            />
+          </Field>
+        </div>
+        <Field label="Authorized signer">
+          <Input value={f.signerName} onChange={set('signerName')} placeholder="Full name" />
+        </Field>
+        <Field label="Signer title">
+          <Input value={f.signerTitle} onChange={set('signerTitle')} placeholder="CFO" />
+        </Field>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <Button onClick={() => ready && onSubmit(f)} disabled={!ready}>
+          <Shield className="h-4 w-4" /> Submit KYC & enable Net 30
+        </Button>
+        <span className="text-xs text-slate-400">Reviewed and approved on submit for this demo.</span>
+      </div>
     </div>
   );
 }
@@ -165,12 +307,14 @@ function Option({
   sub,
   onClick,
   disabled,
+  disabledLabel = 'Needs sales approval',
 }: {
   active: boolean;
   title: string;
   sub: string;
   onClick: () => void;
   disabled?: boolean;
+  disabledLabel?: string;
 }) {
   return (
     <button
@@ -189,7 +333,7 @@ function Option({
       <span>
         <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
           {title}
-          {disabled && <Badge color="slate">Needs sales approval</Badge>}
+          {disabled && <Badge color="slate">{disabledLabel}</Badge>}
         </span>
         <span className="mt-0.5 block text-xs text-slate-400">{sub}</span>
       </span>
