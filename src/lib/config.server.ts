@@ -68,13 +68,26 @@ export const EMAIL = {
   },
 };
 
-/** Stripe — card payments at checkout. Flip on with the secret + publishable
- *  keys; without them, checkout stays in demo mode (no real charge). */
+/**
+ * Stripe — card payments at checkout. Integrated the same way as RateHawk:
+ * the booking total's PaymentIntent is created by the shared HeyVacay backend
+ * (/bookings/payment/init-stripe), so charges run on the same Stripe account,
+ * keys and tracking tags as heyvacay.co. The client only needs the publishable
+ * key to mount Stripe Elements — it is NOT secret, and we read the SAME env var
+ * the consumer site uses (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) so one key value
+ * lights up both apps. A local STRIPE_SECRET_KEY is optional — only used for a
+ * direct-to-Stripe fallback when the backend can't mint the intent.
+ */
 export const STRIPE = {
   base: 'https://api.stripe.com/v1',
   secretKey: process.env.STRIPE_SECRET_KEY || '',
-  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+  publishableKey:
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+    process.env.STRIPE_PUBLISHABLE_KEY ||
+    '',
+  /** Whether real card entry can be shown (publishable key present). The intent
+   *  itself comes from the backend, so the local secret is not required. */
   get live() {
-    return Boolean(this.secretKey && this.publishableKey);
+    return Boolean(this.publishableKey);
   },
 };

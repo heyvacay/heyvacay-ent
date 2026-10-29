@@ -10,6 +10,7 @@
  * rows, wrapped paragraphs, a cursor that auto-paginates).
  */
 import { jsPDF } from 'jspdf';
+import { LOGO_WHITE_PNG, LOGO_RATIO } from './logoData';
 import {
   CONTRACT_TYPE_LABEL,
   PRICING_LABEL,
@@ -59,21 +60,28 @@ function brandHeader(d: Doc, kicker: string, title: string) {
   pdf.setFillColor(...BRAND);
   pdf.rect(0, 96, PAGE_W, 4, 'F');
 
-  // Wordmark lockup: "heyvacay" (white) + cyan dot + a small blue ENTERPRISE.
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(18);
-  pdf.text('heyvacay', MARGIN, 42);
-  const wmW = pdf.getTextWidth('heyvacay');
+  // Real HeyVacay logo (white) + a small blue ENTERPRISE lockup.
+  const logoH = 26;
+  const logoW = logoH * LOGO_RATIO;
+  const logoY = 20;
+  try {
+    pdf.addImage(LOGO_WHITE_PNG, 'PNG', MARGIN, logoY, logoW, logoH, 'hvlogo', 'FAST');
+  } catch {
+    // Fallback to a text wordmark if the image can't be embedded.
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.text('heyvacay', MARGIN, 42);
+  }
   pdf.setTextColor(...BRAND);
-  pdf.text('.', MARGIN + wmW + 1, 42);
+  pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(8);
-  pdf.text('ENTERPRISE', MARGIN + wmW + 10, 41);
+  pdf.text('ENTERPRISE', MARGIN + logoW + 8, logoY + logoH - 2);
 
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'normal');
-  pdf.text(kicker.toUpperCase(), MARGIN, 56);
+  pdf.text(kicker.toUpperCase(), MARGIN, 58);
 
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(20);
