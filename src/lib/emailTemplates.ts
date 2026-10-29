@@ -226,6 +226,48 @@ export function net30KycEmail(d: {
   };
 }
 
+export function verifyCodeEmail(d: {
+  code: string;
+  company?: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Here's your HeyVacay verification code${
+      d.company ? ` for ${d.company}` : ''
+    }. Enter it to confirm your email and continue.</p>
+    <div style="margin:16px 0;text-align:center">
+      <span style="display:inline-block;font-family:monospace;font-size:34px;font-weight:800;letter-spacing:10px;color:${NAVY};background:#f1f5f9;border-radius:12px;padding:14px 22px">${d.code}</span>
+    </div>
+    <p style="font-size:13px;color:#64748b">This code expires in 10 minutes. If you didn't request it, you can ignore this email.</p>`;
+  return {
+    subject: `Your HeyVacay verification code: ${d.code}`,
+    html: wrap('Verify your email', body),
+    text: `Your HeyVacay verification code is ${d.code}. It expires in 10 minutes.`,
+  };
+}
+
+export function inviteEmail(d: {
+  name: string;
+  company: string;
+  inviter: string;
+  role: string;
+  joinUrl: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.name}, ${d.inviter} invited you to join <strong>${d.company}</strong> on HeyVacay — your company's travel &amp; expense platform.</p>
+    ${kv([
+      ['Company', d.company],
+      ['Your access', d.role],
+    ])}
+    <p style="font-size:14px;color:#334155">Click below to set up your profile, verify your work email, and start booking in policy.</p>
+    <a href="${d.joinUrl}" style="display:inline-block;margin-top:8px;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px">Accept your invite</a>
+    <p style="font-size:13px;color:#64748b;margin-top:12px">Booking flights and hotels through HeyVacay keeps you in policy automatically and earns you reward points on every trip.</p>`;
+  return {
+    subject: `${d.inviter} invited you to ${d.company} on HeyVacay`,
+    html: wrap(`You're invited to ${d.company}`, body),
+    text: `${d.inviter} invited you to join ${d.company} on HeyVacay as ${d.role}. Accept: ${d.joinUrl}`,
+  };
+}
+
 export const TEMPLATES = {
   confirmation: confirmationEmail,
   approvalPending: approvalPendingEmail,
@@ -235,6 +277,8 @@ export const TEMPLATES = {
   dinnerReminder: dinnerReminderEmail,
   dinnerBooked: dinnerBookedEmail,
   net30Kyc: net30KycEmail,
+  verifyCode: verifyCodeEmail,
+  invite: inviteEmail,
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

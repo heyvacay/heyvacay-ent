@@ -39,6 +39,7 @@ export default function PeoplePage() {
   const submit = () => {
     if (!form.name.trim() || !form.email.trim()) return;
     inviteUser(form);
+    window.alert(`Invite email sent to ${form.email}. They'll verify their email and join your workspace.`);
     setForm({ name: '', email: '', department: 'Sales', title: '', role: 'employee' });
     setOpen(false);
   };

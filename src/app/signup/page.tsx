@@ -9,6 +9,7 @@ import { Button, Field, Input, cn } from '@/components/app/ui';
 import { money, num, todayISO } from '@/lib/format';
 import type { OnboardingProfile } from '@/lib/types';
 import { pushSignupToCrm } from '@/lib/crmBridge';
+import { EmailVerify } from '@/components/app/EmailVerify';
 import {
   ArrowRight,
   Building,
@@ -41,6 +42,7 @@ const INITIAL: Form = {
 
 const STEPS = [
   { key: 'company', label: 'Company', icon: Building },
+  { key: 'verify', label: 'Verify email', icon: Lock },
   { key: 'travel', label: 'How you travel', icon: Plane },
   { key: 'summary', label: 'Your savings', icon: Sparkles },
 ] as const;
@@ -157,6 +159,7 @@ export default function SignupPage() {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Form>(INITIAL);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -169,6 +172,7 @@ export default function SignupPage() {
   const canContinue = () => {
     if (STEPS[step].key === 'company')
       return form.companyName.trim().length > 1 && /\S+@\S+\.\S+/.test(form.workEmail);
+    if (STEPS[step].key === 'verify') return emailVerified;
     if (STEPS[step].key === 'travel') return form.annualSpend > 0;
     return true;
   };
@@ -351,6 +355,28 @@ export default function SignupPage() {
                 value={form.teamSize}
                 onChange={(v) => set('teamSize', v)}
               />
+            </StepShell>
+          )}
+
+          {/* STEP: verify email */}
+          {STEPS[step].key === 'verify' && (
+            <StepShell
+              eyebrow="Confirm it's you"
+              title="Verify your work email"
+              blurb="We sent a code to make sure we're setting up the right account — this becomes the owner login for your company."
+            >
+              {emailVerified ? (
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                  <Check className="h-4 w-4" /> {form.workEmail} verified — you&apos;re good to go.
+                </div>
+              ) : (
+                <EmailVerify
+                  email={form.workEmail}
+                  company={form.companyName}
+                  onVerified={() => setEmailVerified(true)}
+                  cta="Verify email"
+                />
+              )}
             </StepShell>
           )}
 

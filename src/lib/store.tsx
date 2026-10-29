@@ -428,23 +428,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const inviteUser: StoreApi['inviteUser'] = useCallback((data) => {
-    setState((s) => ({
-      ...s,
-      users: [
-        ...s.users,
-        {
-          id: uid('u'),
-          name: data.name,
-          email: data.email,
-          role: data.role,
-          department: data.department,
-          title: data.title,
-          status: 'invited',
-          loyalty: [],
-          personalLinked: false,
-        },
-      ],
-    }));
+    setState((s) => {
+      const inviter =
+        s.users.find((u) => u.id === s.activeUserId)?.name ?? 'Your team admin';
+      const roleLabel =
+        data.role === 'admin' ? 'Admin' : data.role === 'booker' ? 'Travel booker' : 'Traveler';
+      let joinUrl = '/join';
+      try {
+        joinUrl = `${window.location.origin}/join?email=${encodeURIComponent(data.email)}`;
+      } catch {
+        /* non-browser */
+      }
+      sendEmail('invite', data.email, {
+        name: data.name,
+        company: s.company.name,
+        inviter,
+        role: roleLabel,
+        joinUrl,
+      });
+      return {
+        ...s,
+        users: [
+          ...s.users,
+          {
+            id: uid('u'),
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            department: data.department,
+            title: data.title,
+            status: 'invited',
+            loyalty: [],
+            personalLinked: false,
+          },
+        ],
+      };
+    });
   }, []);
 
   const updateUser: StoreApi['updateUser'] = useCallback((id, patch) => {

@@ -113,6 +113,12 @@ export default function SignInPage() {
               Set up your company
             </Link>
           </p>
+          <p className="mt-1.5 text-center text-sm text-slate-500">
+            Invited to a team?{' '}
+            <Link href="/join" className="font-semibold text-brand-dark hover:underline">
+              Accept your invite
+            </Link>
+          </p>
           <p className="mt-6 text-center text-xs text-slate-400">
             Internal team?{' '}
             <Link href="/sales" className="font-medium text-brand-dark hover:underline">
