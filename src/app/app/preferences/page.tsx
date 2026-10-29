@@ -39,7 +39,9 @@ const DEFAULT_PREFS: Prefs = {
 };
 
 export default function PreferencesPage() {
-  const { activeUser } = useStore();
+  const { activeUser, setHomeCity } = useStore();
+  const [homeCity, setHomeCityDraft] = useState(activeUser.homeCity ?? '');
+  useEffect(() => setHomeCityDraft(activeUser.homeCity ?? ''), [activeUser.homeCity]);
   const key = `hv_prefs_${activeUser.id}`;
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -100,7 +102,26 @@ export default function PreferencesPage() {
           <Field label="Title">
             <Input value={activeUser.title} readOnly />
           </Field>
+          <Field label="Home city">
+            <div className="flex gap-2">
+              <Input
+                value={homeCity}
+                onChange={(e) => setHomeCityDraft(e.target.value)}
+                placeholder="e.g. Austin"
+              />
+              <Button
+                variant="outline"
+                onClick={() => setHomeCity(activeUser.id, homeCity.trim())}
+                disabled={!homeCity.trim() || homeCity.trim() === (activeUser.homeCity ?? '')}
+              >
+                Save
+              </Button>
+            </div>
+          </Field>
         </div>
+        <p className="mt-2 text-xs text-slate-400">
+          Used for events — whether you&apos;ll need a hotel. Saved to your profile.
+        </p>
       </Card>
 
       {/* payment */}

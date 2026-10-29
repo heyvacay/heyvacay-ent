@@ -6,7 +6,7 @@ import { Badge, Button, Card, Field, Input, PageHeader, Select } from '@/compone
 import { money } from '@/lib/format';
 import { ME, type RepRole } from '@/lib/crm';
 
-const ROLES: RepRole[] = ['Admin', 'Account Executive', 'SDR'];
+const ROLES: RepRole[] = ['C-Suite', 'Admin', 'Account Executive', 'SDR'];
 
 export default function TeamPage() {
   const { reps, companies, addRep, updateRep, removeRep } = useCrm();

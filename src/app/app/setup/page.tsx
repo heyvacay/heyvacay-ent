@@ -12,7 +12,7 @@ import { Check, Shield, Users, Wallet, Globe, Lock, ArrowRight } from '@/compone
  * step shows live status from the workspace and links to where it's done.
  */
 export default function SetupPage() {
-  const { state, role, isSuperAdmin } = useStore();
+  const { state, role, viewingAs } = useStore();
 
   if (role !== 'admin') {
     return (
@@ -147,15 +147,16 @@ export default function SetupPage() {
         <div className="mt-3">
           <ProgressBar value={doneCount} max={required.length} tone={pctDone === 100 ? 'brand' : 'brand'} />
         </div>
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-white/70 px-3 py-2 text-xs text-slate-500">
-          <Users className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
-          <span>
-            <span className="font-semibold text-slate-700">Setting a customer up?</span> Walk through
-            these steps together — assign access, confirm policies and budgets, connect SSO, then
-            verify each person can sign in and sees the right tools.
-            {isSuperAdmin ? '' : ' (Some company-wide steps need a super admin.)'}
-          </span>
-        </div>
+        {viewingAs && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-white/70 px-3 py-2 text-xs text-slate-500">
+            <Users className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
+            <span>
+              <span className="font-semibold text-slate-700">Setting this customer up?</span> Walk
+              through these steps together — assign access, confirm policies and budgets, connect
+              SSO, then verify each person can sign in and sees the right tools.
+            </span>
+          </div>
+        )}
       </Card>
 
       <div className="space-y-3">

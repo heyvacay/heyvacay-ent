@@ -56,6 +56,8 @@ export interface StoreApi {
   setRole: (r: Role) => void;
   /** True when the effective user is a company-wide (super) admin. */
   isSuperAdmin: boolean;
+  /** True when a Nova rep is viewing this company's account from the CRM. */
+  viewingAs: boolean;
   setActiveUser: (id: string) => void;
 
   userById: (id: string) => User | undefined;
@@ -1140,6 +1142,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     role,
     setRole,
     isSuperAdmin,
+    viewingAs: impersonation != null,
     setActiveUser,
     userById,
     spentForScope,

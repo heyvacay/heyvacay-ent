@@ -1780,6 +1780,17 @@ function HomeCityPrompt({
     };
   }, [q]);
 
+  // Save the typed city — use a matching suggestion's coordinates when the text
+  // lines up, otherwise just the name (distance falls back to a city match).
+  const saveTyped = () => {
+    const term = q.trim();
+    if (!term) return;
+    const match = items.find((p) => p.label.toLowerCase().startsWith(term.toLowerCase()));
+    if (match) onSet(match.label, match.lat, match.lng);
+    else onSet(term);
+    setDismissed(true);
+  };
+
   if (dismissed) return null;
 
   return (
@@ -1803,7 +1814,8 @@ function HomeCityPrompt({
           Later
         </button>
       </div>
-      <div className="relative mt-3 max-w-sm">
+      <div className="relative mt-3 flex max-w-md gap-2">
+        <div className="relative flex-1">
         <Input
           value={q}
           onChange={(e) => {
@@ -1812,7 +1824,13 @@ function HomeCityPrompt({
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search your home city…"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && q.trim()) {
+              e.preventDefault();
+              saveTyped();
+            }
+          }}
+          placeholder="Your home city…"
           autoComplete="off"
         />
         {open && items.length > 0 && (
@@ -1838,7 +1856,14 @@ function HomeCityPrompt({
             ))}
           </ul>
         )}
+        </div>
+        <Button onClick={saveTyped} disabled={!q.trim()}>
+          Save
+        </Button>
       </div>
+      <p className="mt-1.5 text-xs text-slate-400">
+        Pick a suggestion for exact distance, or just type your city and hit Save.
+      </p>
     </div>
   );
 }
