@@ -75,6 +75,7 @@ export interface StoreApi {
   setCompanyApprovalMode: (mode: BookingApprovalMode) => void;
   /** Set (or clear → 'default') a single employee's approval-mode override. */
   setUserApprovalMode: (userId: string, mode: BookingApprovalMode | 'default') => void;
+  setDepartmentApprovalMode: (dept: string, mode: BookingApprovalMode | 'default') => void;
   setBillingMode: (mode: Billing['mode']) => void;
   linkCard: (brand: string, last4: string) => void;
   requestNet30: () => void;
@@ -347,13 +348,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [state.policies]
   );
 
+  // Resolution order: per-employee override → per-department override →
+  // company default. This mirrors how most TMCs layer policy.
   const approvalModeFor = useCallback(
     (userId: string): BookingApprovalMode => {
       const u = state.users.find((x) => x.id === userId);
       if (u?.approvalMode && u.approvalMode !== 'default') return u.approvalMode;
+      const dept = u?.department;
+      const deptMode = dept ? state.departmentApprovalModes?.[dept] : undefined;
+      if (deptMode) return deptMode;
       return state.company.approvalMode ?? 'open';
     },
-    [state.users, state.company.approvalMode]
+    [state.users, state.company.approvalMode, state.departmentApprovalModes]
   );
 
   const setCompanyApprovalMode: StoreApi['setCompanyApprovalMode'] = useCallback(
@@ -367,6 +373,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...s,
         users: s.users.map((u) => (u.id === userId ? { ...u, approvalMode: mode } : u)),
       })),
+    []
+  );
+
+  const setDepartmentApprovalMode: StoreApi['setDepartmentApprovalMode'] = useCallback(
+    (dept, mode) =>
+      setState((s) => {
+        const next = { ...(s.departmentApprovalModes ?? {}) };
+        if (mode === 'default') delete next[dept];
+        else next[dept] = mode;
+        return { ...s, departmentApprovalModes: next };
+      }),
     []
   );
 
@@ -471,11 +488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // every trip through a manager; event-scoped trips not tied to an event
       // also route for approval (the UI normally prevents that case).
       const traveler = state.users.find((u) => u.id === travelerId);
-      let mode: BookingApprovalMode = 'open';
-      {
-        const am = traveler?.approvalMode;
-        mode = am && am !== 'default' ? am : state.company.approvalMode ?? 'open';
-      }
+      const mode: BookingApprovalMode = approvalModeFor(travelerId);
       const needsApproval =
         flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block') ||
         (!bypassPolicy && mode === 'pre_approval') ||
@@ -542,7 +555,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return booking;
     },
-    [evaluatePolicies, state.activeUserId, state.users, state.company.approvalMode, activeUser.department]
+    [evaluatePolicies, approvalModeFor, state.activeUserId, state.users, state.company.approvalMode, activeUser.department]
   );
 
   const approveBooking: StoreApi['approveBooking'] = useCallback(
@@ -871,6 +884,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     approvalModeFor,
     setCompanyApprovalMode,
     setUserApprovalMode,
+    setDepartmentApprovalMode,
     setBillingMode,
     linkCard,
     requestNet30,

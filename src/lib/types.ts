@@ -343,6 +343,9 @@ export interface AppState {
   accountingMap: Record<string, string>;
   /** Trailing monthly spend & savings, for the Reports charts. */
   history: { month: string; spend: number; savings: number }[];
+  /** Per-department approval-mode overrides (department name → mode). Applied
+   *  between the per-employee override and the company default. */
+  departmentApprovalModes?: Record<string, BookingApprovalMode>;
   /** who is signed in for the demo */
   activeUserId: string;
 }

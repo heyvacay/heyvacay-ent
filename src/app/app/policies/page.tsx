@@ -1,7 +1,8 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { Button, Card, PageHeader, Select, cn } from '@/components/app/ui';
+import { Button, Card, Input, PageHeader, Select, cn } from '@/components/app/ui';
 import { Plane, Receipt, Shield, Check, Calendar, Users } from '@/components/icons';
 import type {
   BookingApprovalMode,
@@ -233,9 +234,35 @@ export default function PoliciesPage() {
     removePolicy,
     setCompanyApprovalMode,
     setUserApprovalMode,
+    setDepartmentApprovalMode,
   } = useStore();
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
   const companyMode = state.company.approvalMode ?? 'open';
+
+  // Smart overrides: searchable employee list (scales to thousands) + the
+  // distinct departments for department-level overrides.
+  const [empQuery, setEmpQuery] = useState('');
+  const activeUsers = useMemo(
+    () => state.users.filter((u) => u.status === 'active'),
+    [state.users]
+  );
+  const departments = useMemo(
+    () => Array.from(new Set(activeUsers.map((u) => u.department).filter(Boolean))).sort(),
+    [activeUsers]
+  );
+  const deptModes = state.departmentApprovalModes ?? {};
+  const eq = empQuery.trim().toLowerCase();
+  // Show matches when searching; otherwise only people who already have an
+  // override set (so the list stays short at 1,000 employees).
+  const shownUsers = useMemo(() => {
+    if (eq)
+      return activeUsers
+        .filter((u) =>
+          [u.name, u.title, u.department, u.email].some((f) => f?.toLowerCase().includes(eq))
+        )
+        .slice(0, 25);
+    return activeUsers.filter((u) => u.approvalMode && u.approvalMode !== 'default');
+  }, [activeUsers, eq]);
 
   // Multiple nightly-rate rules (e.g. >$400 approve, >$1000 block, per city).
   const nightlyRules = state.policies.filter((p) => p.type === 'max_nightly');
@@ -313,30 +340,34 @@ export default function PoliciesPage() {
             ))}
           </div>
 
+          {/* Per-department override */}
           <div className="mt-4 rounded-xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Per-employee override
+                Per-department override
               </p>
-              <p className="text-xs text-slate-400">Company default applies unless set</p>
+              <p className="text-xs text-slate-400">Applies to everyone in the department</p>
             </div>
             <div className="divide-y divide-slate-100">
-              {state.users
-                .filter((u) => u.status === 'active')
-                .map((u) => (
-                  <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+              {departments.length === 0 && (
+                <p className="px-4 py-3 text-sm text-slate-400">No departments yet.</p>
+              )}
+              {departments.map((dept) => {
+                const count = activeUsers.filter((u) => u.department === dept).length;
+                return (
+                  <div key={dept} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800">{u.name}</p>
-                      <p className="truncate text-xs text-slate-400">
-                        {u.title} · {u.department}
+                      <p className="truncate text-sm font-medium text-slate-800">{dept}</p>
+                      <p className="text-xs text-slate-400">
+                        {count} {count === 1 ? 'person' : 'people'}
                       </p>
                     </div>
                     <span className="inline-block w-56 shrink-0">
                       <Select
-                        value={u.approvalMode ?? 'default'}
+                        value={deptModes[dept] ?? 'default'}
                         onChange={(e) =>
-                          setUserApprovalMode(
-                            u.id,
+                          setDepartmentApprovalMode(
+                            dept,
                             e.target.value as BookingApprovalMode | 'default'
                           )
                         }
@@ -350,8 +381,71 @@ export default function PoliciesPage() {
                       </Select>
                     </span>
                   </div>
-                ))}
+                );
+              })}
             </div>
+          </div>
+
+          {/* Per-employee override (searchable) */}
+          <div className="mt-4 rounded-xl border border-slate-200">
+            <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Per-employee override
+              </p>
+              <div className="w-full sm:w-64">
+                <Input
+                  value={empQuery}
+                  onChange={(e) => setEmpQuery(e.target.value)}
+                  placeholder="Search name, title, dept, email…"
+                />
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {shownUsers.length === 0 && (
+                <p className="px-4 py-3 text-sm text-slate-400">
+                  {eq
+                    ? 'No employees match your search.'
+                    : 'No per-employee overrides set. Search above to add one — everyone else follows their department or the company default.'}
+                </p>
+              )}
+              {shownUsers.map((u) => (
+                <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-800">{u.name}</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {u.title} · {u.department}
+                    </p>
+                  </div>
+                  <span className="inline-block w-56 shrink-0">
+                    <Select
+                      value={u.approvalMode ?? 'default'}
+                      onChange={(e) =>
+                        setUserApprovalMode(
+                          u.id,
+                          e.target.value as BookingApprovalMode | 'default'
+                        )
+                      }
+                    >
+                      <option value="default">
+                        {deptModes[u.department]
+                          ? `Department default (${deptModes[u.department]})`
+                          : 'Company default'}
+                      </option>
+                      {APPROVAL_MODES.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </span>
+                </div>
+              ))}
+            </div>
+            {eq && shownUsers.length === 25 && (
+              <p className="px-4 py-2 text-xs text-slate-400">
+                Showing the first 25 matches — refine your search to narrow it down.
+              </p>
+            )}
           </div>
         </SectionCard>
 
