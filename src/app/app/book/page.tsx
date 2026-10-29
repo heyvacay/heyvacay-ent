@@ -14,8 +14,9 @@ import {
   EmptyState,
   cn,
 } from '@/components/app/ui';
-import { money, num, todayISO, addDays, daysUntil, dateRange, milesBetween } from '@/lib/format';
+import { money, num, todayISO, addDays, daysUntil, dateRange } from '@/lib/format';
 import { roomTierRank, type RoomTier, type TravelEvent } from '@/lib/events';
+import { hotelNeed } from '@/lib/hotelNeed';
 import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
@@ -978,12 +979,18 @@ export default function BookPage() {
               b.status !== 'cancelled' &&
               b.travelerId === activeUser.id
           );
-          // Needs a hotel if home is >50mi from the event (or home unknown).
-          const dist =
-            activeUser.homeLat != null && ev.lat != null && ev.lng != null
-              ? milesBetween(activeUser.homeLat, activeUser.homeLng ?? 0, ev.lat, ev.lng)
-              : null;
-          const needsHotel = dist == null ? true : dist > 50;
+          // Needs a hotel if home is >50mi from the event; falls back to a
+          // city-name match so "home = event city" reads as local.
+          const need = hotelNeed({
+            homeCity: activeUser.homeCity,
+            homeLat: activeUser.homeLat,
+            homeLng: activeUser.homeLng,
+            eventCity: ev.city,
+            eventLat: ev.lat,
+            eventLng: ev.lng,
+          });
+          const dist = need.dist;
+          const needsHotel = need.needs;
           const flag = needsHotel && !hasHotel;
           return (
             <Link
@@ -1012,9 +1019,11 @@ export default function BookPage() {
                   <p className={cn('text-xs', flag ? 'text-red-600' : 'text-slate-500')}>
                     {ev.city} · {dateRange(ev.startDate, ev.endDate)}
                     {flag
-                      ? dist == null
-                        ? ' · no home city set — a hotel may be needed'
-                        : ` · ${dist} mi from home — you'll need a hotel`
+                      ? need.reason === 'no-home'
+                        ? ' · set your home city so we know if you need a hotel'
+                        : dist != null
+                          ? ` · ${dist} mi from home — you'll need a hotel`
+                          : ' · away from home — a hotel may be needed'
                       : hasHotel
                         ? ' · hotel booked ✓'
                         : ' · no hotel needed'}
@@ -1057,10 +1066,6 @@ export default function BookPage() {
           <h1 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">
             Where to, {firstName}?
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-mist/80 sm:text-base">
-            Search live flights and hotels — always below market, always in your
-            company&apos;s policy. Every trip earns points you keep.
-          </p>
 
           {/* product switcher */}
           <div className="mt-6 inline-flex flex-wrap rounded-full bg-white/10 p-1 ring-1 ring-white/15 backdrop-blur">

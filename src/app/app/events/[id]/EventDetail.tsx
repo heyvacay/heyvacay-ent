@@ -28,7 +28,8 @@ import {
   Select,
   cn,
 } from '@/components/app/ui';
-import { shortDate, milesBetween, money } from '@/lib/format';
+import { shortDate, money } from '@/lib/format';
+import { hotelNeed } from '@/lib/hotelNeed';
 import { EventChat } from '@/components/app/EventChat';
 import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
 import { sendEmail } from '@/lib/email';
@@ -378,11 +379,14 @@ export default function EventDetail({ id }: { id: string }) {
                     b.status !== 'cancelled' &&
                     b.travelerId === a.userId
                 );
-                const dist =
-                  u?.homeLat != null && e.lat != null && e.lng != null
-                    ? milesBetween(u.homeLat, u.homeLng ?? 0, e.lat, e.lng)
-                    : null;
-                const needsHotel = dist == null ? true : dist > 50;
+                const needsHotel = hotelNeed({
+                  homeCity: u?.homeCity,
+                  homeLat: u?.homeLat,
+                  homeLng: u?.homeLng,
+                  eventCity: e.city,
+                  eventLat: e.lat,
+                  eventLng: e.lng,
+                }).needs;
                 return (
                   <div key={a.userId} className="flex items-center gap-2 text-sm text-slate-700">
                     <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
@@ -805,8 +809,14 @@ function RoomPolicyCard({
   // Headcount needing a hotel (home >50mi, or unknown).
   const hotelHeadcount = e.attendees.filter((a) => {
     const u = users.find((x) => x.id === a.userId);
-    if (!u || u.homeLat == null || u.homeLng == null || e.lat == null || e.lng == null) return true;
-    return milesBetween(u.homeLat, u.homeLng, e.lat, e.lng) > 50;
+    return hotelNeed({
+      homeCity: u?.homeCity,
+      homeLat: u?.homeLat,
+      homeLng: u?.homeLng,
+      eventCity: e.city,
+      eventLat: e.lat,
+      eventLng: e.lng,
+    }).needs;
   }).length;
   const nights = Math.max(
     1,

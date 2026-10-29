@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import {
@@ -17,7 +16,7 @@ import {
 } from '@/components/app/ui';
 import { money, money2, shortDate, todayISO } from '@/lib/format';
 import { ACCOUNTING_IDS } from '@/lib/seed';
-import { Check, Globe, Receipt, Wallet, Calendar, Sparkles } from '@/components/icons';
+import { Check, Globe, Receipt, Shield } from '@/components/icons';
 import type { ExpenseCategory, ExpenseStatus } from '@/lib/types';
 
 /** Plausible merchants the simulated receipt scanner "reads". */
@@ -63,8 +62,7 @@ export default function ExpensesPage() {
   const showPosting = isAdmin && !!accounting;
   const [open, setOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [tool, setTool] = useState<null | 'cards' | 'perdiem'>(null);
-  const [cards, setCards] = useState<{ id: string; last4: string; limit: number; label: string }[]>([]);
+  const [tool, setTool] = useState<null | 'perdiem'>(null);
   // Expense decision modal (approve/reject with an optional comment).
   const [decide, setDecide] = useState<{ id: string; kind: 'approved' | 'rejected' } | null>(
     null
@@ -136,11 +134,6 @@ export default function ExpensesPage() {
     }, 1500);
   };
 
-  const issueCard = (label: string, limit: number) =>
-    setCards((cs) => [
-      { id: `vc_${Date.now()}`, last4: String(1000 + Math.floor(Math.random() * 8999)), limit, label },
-      ...cs,
-    ]);
 
   const submit = () => {
     if (!form.merchant.trim() || !form.amount) return;
@@ -188,8 +181,8 @@ export default function ExpensesPage() {
         <StatCard accent label="Approved" value={money2(approvedTotal)} />
       </div>
 
-      {/* Smart expense tools — the features we promise on the marketing site. */}
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Smart expense tools. */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
           onClick={() => scanReceipt()}
           className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
@@ -199,19 +192,7 @@ export default function ExpensesPage() {
           </span>
           <span>
             <span className="block text-sm font-semibold text-slate-800">Scan a receipt</span>
-            <span className="block text-xs text-slate-400">Snap it — we read the details.</span>
-          </span>
-        </button>
-        <button
-          onClick={() => setTool('cards')}
-          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
-            <Wallet className="h-5 w-5" />
-          </span>
-          <span>
-            <span className="block text-sm font-semibold text-slate-800">Virtual cards</span>
-            <span className="block text-xs text-slate-400">Issue a single-use card.</span>
+            <span className="block text-xs text-slate-400">Snap or upload it — we read the details.</span>
           </span>
         </button>
         <button
@@ -219,25 +200,13 @@ export default function ExpensesPage() {
           className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
         >
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
-            <Sparkles className="h-5 w-5" />
+            <Shield className="h-5 w-5" />
           </span>
           <span>
-            <span className="block text-sm font-semibold text-slate-800">Per diems</span>
-            <span className="block text-xs text-slate-400">Daily allowance by city.</span>
+            <span className="block text-sm font-semibold text-slate-800">Expense policies</span>
+            <span className="block text-xs text-slate-400">Daily allowances &amp; limits by city.</span>
           </span>
         </button>
-        <Link
-          href="/app/integrations"
-          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-sm"
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-dark">
-            <Calendar className="h-5 w-5" />
-          </span>
-          <span>
-            <span className="block text-sm font-semibold text-slate-800">Calendar sync</span>
-            <span className="block text-xs text-slate-400">Trips on your calendar.</span>
-          </span>
-        </Link>
       </div>
 
       {showPosting && accounting && (
@@ -511,9 +480,6 @@ export default function ExpensesPage() {
         )}
       </div>
 
-      {tool === 'cards' && (
-        <VirtualCardsModal cards={cards} onIssue={issueCard} onClose={() => setTool(null)} />
-      )}
       {tool === 'perdiem' && <PerDiemModal onClose={() => setTool(null)} />}
 
       {/* approve / reject with a comment */}
@@ -533,7 +499,12 @@ export default function ExpensesPage() {
             </div>
             <div className="space-y-3 px-5 py-4">
               <label className="block text-sm font-medium text-slate-700">
-                Comment to the employee {decide.kind === 'rejected' ? '' : '(optional)'}
+                Comment to the employee{' '}
+                {decide.kind === 'rejected' ? (
+                  <span className="text-red-500">*</span>
+                ) : (
+                  '(optional)'
+                )}
               </label>
               <textarea
                 value={decideNote}
@@ -554,7 +525,9 @@ export default function ExpensesPage() {
               </Button>
               <Button
                 variant={decide.kind === 'rejected' ? 'danger' : 'primary'}
+                disabled={decide.kind === 'rejected' && !decideNote.trim()}
                 onClick={() => {
+                  if (decide.kind === 'rejected' && !decideNote.trim()) return;
                   setExpenseStatus(decide.id, decide.kind, decideNote.trim() || undefined);
                   setDecide(null);
                 }}
@@ -585,69 +558,6 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
   );
 }
 
-function VirtualCardsModal({
-  cards,
-  onIssue,
-  onClose,
-}: {
-  cards: { id: string; last4: string; limit: number; label: string }[];
-  onIssue: (label: string, limit: number) => void;
-  onClose: () => void;
-}) {
-  const [label, setLabel] = useState('');
-  const [limit, setLimit] = useState('500');
-  return (
-    <Overlay onClose={onClose}>
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-        <h2 className="font-display text-lg font-bold text-slate-900">Virtual cards</h2>
-        <button onClick={onClose} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">✕</button>
-      </div>
-      <div className="space-y-4 px-5 py-4">
-        <p className="text-sm text-slate-500">
-          Issue a single-use virtual card with its own limit — perfect for a specific trip or
-          vendor. Charges reconcile straight into expenses.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="For (label)">
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Austin offsite" />
-          </Field>
-          <Field label="Limit (USD)">
-            <Input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} />
-          </Field>
-        </div>
-        <Button
-          className="w-full"
-          onClick={() => {
-            onIssue(label.trim() || 'Virtual card', Number(limit) || 0);
-            setLabel('');
-          }}
-        >
-          Issue virtual card
-        </Button>
-        {cards.length > 0 && (
-          <div className="space-y-2">
-            {cards.map((c) => (
-              <div
-                key={c.id}
-                className="rounded-xl bg-gradient-to-br from-navy to-surface p-4 text-white"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-brand">
-                    HeyVacay virtual card
-                  </span>
-                  <span className="text-xs text-mist/70">Limit {money(c.limit)}</span>
-                </div>
-                <p className="mt-3 font-mono text-lg tracking-widest">4242 •••• •••• {c.last4}</p>
-                <p className="mt-1 text-xs text-mist/70">{c.label}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </Overlay>
-  );
-}
-
 function PerDiemModal({ onClose }: { onClose: () => void }) {
   const [days, setDays] = useState('3');
   const [tier, setTier] = useState<'standard' | 'high'>('standard');
@@ -659,7 +569,7 @@ function PerDiemModal({ onClose }: { onClose: () => void }) {
   return (
     <Overlay onClose={onClose}>
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-        <h2 className="font-display text-lg font-bold text-slate-900">Per diem</h2>
+        <h2 className="font-display text-lg font-bold text-slate-900">Expense policies</h2>
         <button onClick={onClose} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100">✕</button>
       </div>
       <div className="space-y-4 px-5 py-4">

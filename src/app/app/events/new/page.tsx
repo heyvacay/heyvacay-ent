@@ -556,7 +556,7 @@ export default function NewEventPage() {
                   value={routeText}
                   onChange={(e) => setRouteText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRoute())}
-                  placeholder="SFO→AUS"
+                  placeholder="ex: SFO-AUS"
                 />
                 <Button variant="outline" onClick={addRoute}>
                   Add

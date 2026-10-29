@@ -119,35 +119,35 @@ const bookings: Booking[] = [
     id: 'bk_1', type: 'flight', title: 'SFO → JFK', detail: 'United · Economy · round trip',
     travelerId: 'u_marcus', bookedById: 'u_dana', department: 'Sales',
     startDate: addDays(T, -18), endDate: addDays(T, -15),
-    marketPrice: 842, price: 611, savings: 231, pointsEarned: 462,
+    marketPrice: 842, price: 611, savings: 231, pointsEarned: 153,
     status: 'confirmed', createdAt: addDays(T, -26),
   },
   {
     id: 'bk_2', type: 'hotel', title: 'The Standard, New York', detail: '3 nights · King · refundable',
     travelerId: 'u_marcus', bookedById: 'u_dana', department: 'Sales',
     startDate: addDays(T, -18), endDate: addDays(T, -15),
-    marketPrice: 1290, price: 1044, savings: 246, pointsEarned: 492,
+    marketPrice: 1290, price: 1044, savings: 246, pointsEarned: 261,
     status: 'confirmed', createdAt: addDays(T, -26),
   },
   {
     id: 'bk_3', type: 'flight', title: 'SEA → AUS', detail: 'Alaska · Economy · round trip',
     travelerId: 'u_priya', bookedById: 'u_priya', department: 'Engineering',
     startDate: addDays(T, 9), endDate: addDays(T, 12),
-    marketPrice: 498, price: 404, savings: 94, pointsEarned: 188,
+    marketPrice: 498, price: 404, savings: 94, pointsEarned: 101,
     status: 'confirmed', createdAt: addDays(T, -4),
   },
   {
     id: 'bk_4', type: 'hotel', title: 'Hotel Van Zandt, Austin', detail: '3 nights · Queen · breakfast',
     travelerId: 'u_priya', bookedById: 'u_priya', department: 'Engineering',
     startDate: addDays(T, 9), endDate: addDays(T, 12),
-    marketPrice: 960, price: 828, savings: 132, pointsEarned: 264,
+    marketPrice: 960, price: 828, savings: 132, pointsEarned: 207,
     status: 'pending_approval', createdAt: addDays(T, -4),
   },
   {
     id: 'bk_5', type: 'flight', title: 'JFK → LHR', detail: 'Delta · Economy · round trip',
     travelerId: 'u_leo', bookedById: 'u_leo', department: 'Engineering',
     startDate: addDays(T, 24), endDate: addDays(T, 30),
-    marketPrice: 1180, price: 905, savings: 275, pointsEarned: 550,
+    marketPrice: 1180, price: 905, savings: 275, pointsEarned: 226,
     status: 'confirmed', createdAt: addDays(T, -2),
   },
 ];
@@ -161,11 +161,11 @@ const expenses: Expense[] = [
 ];
 
 const points: PointsEntry[] = [
-  { id: 'pt_1', userId: 'u_marcus', delta: 462, reason: 'Flight savings · SFO → JFK', bucket: 'self', bookingId: 'bk_1', createdAt: addDays(T, -26) },
-  { id: 'pt_2', userId: 'u_marcus', delta: 246, reason: 'Hotel savings · The Standard', bucket: 'self', bookingId: 'bk_2', createdAt: addDays(T, -26) },
-  { id: 'pt_3', userId: 'u_dana', delta: 708, reason: 'Booker reward · Marcus NYC trip', bucket: 'booker', createdAt: addDays(T, -26) },
-  { id: 'pt_4', userId: 'u_priya', delta: 188, reason: 'Flight savings · SEA → AUS', bucket: 'self', bookingId: 'bk_3', createdAt: addDays(T, -4) },
-  { id: 'pt_5', userId: 'u_leo', delta: 550, reason: 'Flight savings · JFK → LHR', bucket: 'self', bookingId: 'bk_5', createdAt: addDays(T, -2) },
+  { id: 'pt_1', userId: 'u_marcus', delta: 153, reason: 'Trip reward · SFO → JFK', bucket: 'self', bookingId: 'bk_1', createdAt: addDays(T, -26) },
+  { id: 'pt_2', userId: 'u_marcus', delta: 261, reason: 'Trip reward · The Standard', bucket: 'self', bookingId: 'bk_2', createdAt: addDays(T, -26) },
+  { id: 'pt_3', userId: 'u_dana', delta: 414, reason: 'Booker reward · Marcus NYC trip', bucket: 'booker', createdAt: addDays(T, -26) },
+  { id: 'pt_4', userId: 'u_priya', delta: 101, reason: 'Trip reward · SEA → AUS', bucket: 'self', bookingId: 'bk_3', createdAt: addDays(T, -4) },
+  { id: 'pt_5', userId: 'u_leo', delta: 226, reason: 'Trip reward · JFK → LHR', bucket: 'self', bookingId: 'bk_5', createdAt: addDays(T, -2) },
 ];
 
 /** Catalog of integrations shown in onboarding and the Integrations page. */
