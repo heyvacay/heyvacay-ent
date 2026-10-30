@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { STRIPE } from '@/lib/config.server';
+import { STRIPE, isLiveBooking } from '@/lib/config.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,5 +17,9 @@ export async function GET() {
   return NextResponse.json({
     live: Boolean(publishableKey),
     publishableKey,
+    // Whether the service account is wired so real supplier orders can be
+    // issued. The checkout runs the real prebook→pay→finish flow when true,
+    // and records the trip in the workspace (no supplier order) when false.
+    liveBooking: isLiveBooking(),
   });
 }

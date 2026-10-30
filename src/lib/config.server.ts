@@ -16,6 +16,28 @@ export const API_BASE_URL =
   process.env.ENT_API_BASE_URL?.replace(/\/+$/, '') ||
   'https://api.stage.heyvacay.co';
 
+/**
+ * Service account the Enterprise app logs in as, server-side, to issue REAL
+ * supplier bookings (Duffel flights / RateHawk hotels) through the shared
+ * backend — the same endpoints heyvacay.co books through. All Enterprise
+ * bookings run under this one corporate account (so they show in the backend's
+ * my-bookings / billing). Credentials live only on the ECS task (Secrets
+ * Manager), never on the client.
+ *
+ * When these are absent, live booking is OFF and the app falls back to
+ * recording the trip in the workspace (no supplier order, no charge) — so the
+ * product keeps working until the account is wired.
+ */
+export const BACKEND_AUTH = {
+  email: process.env.ENT_BACKEND_EMAIL || '',
+  password: process.env.ENT_BACKEND_PASSWORD || '',
+};
+
+/** True when real supplier booking is enabled (service account configured). */
+export function isLiveBooking(): boolean {
+  return Boolean(BACKEND_AUTH.email && BACKEND_AUTH.password);
+}
+
 /* ---------------------------------------------------------------------------
  * Third-party integrations.
  *
