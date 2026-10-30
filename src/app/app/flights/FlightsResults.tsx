@@ -6,17 +6,17 @@ import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { searchFlights } from '@/lib/search';
 import { getSeatMap, type SeatRow } from '@/lib/seatmap';
-import type { InventoryOption, FlightDetails } from '@/lib/types';
+import type { InventoryOption, FlightDetails, User } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import {
   Button,
   Card,
-  Select,
   Field,
   EmptyState,
   cn,
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
+import { TravelerPicker } from '@/components/app/TravelerPicker';
 import { Plane, Check, Shield, Gift, Wallet } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
@@ -244,6 +244,7 @@ export default function FlightsResults() {
   const [detailOpt, setDetailOpt] = useState<InventoryOption | null>(null);
   const [selected, setSelected] = useState<InventoryOption | null>(null);
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
+  const [guestName, setGuestName] = useState<string | null>(params.get('guestName') || null);
   const [confirmed, setConfirmed] = useState<{ opt: InventoryOption; pending: boolean } | null>(null);
 
   useEffect(() => {
@@ -288,6 +289,7 @@ export default function FlightsResults() {
     book({
       opt: finalOpt,
       travelerId,
+      guestName: guestName ?? undefined,
       startDate: departDate,
       endDate: returnDate || departDate,
       eventId,
@@ -405,7 +407,10 @@ export default function FlightsResults() {
           canBookForOthers={canBookForOthers}
           travelerId={travelerId}
           setTravelerId={setTravelerId}
-          users={state.users.filter((u) => u.status === 'active')}
+          guestName={guestName}
+          setGuestName={setGuestName}
+          selfUser={activeUser}
+          users={state.users}
           spent={spentForScope('employee', travelerId)}
           budget={state.budgets.find((b) => b.scope === 'employee' && b.refId === travelerId)?.limit}
         />
@@ -511,6 +516,9 @@ function CheckoutPanel({
   canBookForOthers,
   travelerId,
   setTravelerId,
+  guestName,
+  setGuestName,
+  selfUser,
   users,
   spent,
   budget,
@@ -522,7 +530,10 @@ function CheckoutPanel({
   canBookForOthers: boolean;
   travelerId: string;
   setTravelerId: (id: string) => void;
-  users: { id: string; name: string }[];
+  guestName: string | null;
+  setGuestName: (name: string | null) => void;
+  selfUser: User;
+  users: User[];
   spent: number;
   budget?: number;
 }) {
@@ -547,15 +558,18 @@ function CheckoutPanel({
             <p className="text-sm text-slate-400">{opt.detail}</p>
           </div>
 
-          {canBookForOthers && (
-            <Field label="Traveler">
-              <Select value={travelerId} onChange={(e) => setTravelerId(e.target.value)}>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </Select>
-            </Field>
-          )}
+          <Field label="Traveler">
+            <TravelerPicker
+              users={users}
+              canBookForOthers={canBookForOthers}
+              selfUser={selfUser}
+              value={{ travelerId, guestName }}
+              onChange={(v) => {
+                setTravelerId(v.travelerId);
+                setGuestName(v.guestName);
+              }}
+            />
+          </Field>
 
           {/* fare type */}
           <div>

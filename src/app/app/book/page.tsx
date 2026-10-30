@@ -20,6 +20,7 @@ import { hotelNeed } from '@/lib/hotelNeed';
 import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
+import { TravelerPicker } from '@/components/app/TravelerPicker';
 import { OfferBanner } from '@/components/app/OfferBanner';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 import {
@@ -521,6 +522,8 @@ export default function BookPage() {
   const [start, setStart] = useState(addDays(todayISO(), 14));
   const [end, setEnd] = useState(addDays(todayISO(), 17));
   const [travelerId, setTravelerId] = useState(activeUser.id);
+  // null = booking for an employee from the list; a string = a custom guest name.
+  const [guestName, setGuestName] = useState<string | null>(null);
   const [eventId, setEventId] = useState(searchParams.get('eventId') ?? '');
 
   // Booking approval mode for whoever the trip is for.
@@ -756,6 +759,7 @@ export default function BookPage() {
         if (roundTrip) q.set('return', end);
         q.set('cabin', cabin);
         q.set('travelerId', travelerId);
+        if (guestName) q.set('guestName', guestName);
         if (eventId && selectedEvent) {
           q.set('eventId', eventId);
           q.set('eventName', selectedEvent.name);
@@ -782,6 +786,7 @@ export default function BookPage() {
         }
         if (p.hid) q.set('hid', String(p.hid));
         q.set('travelerId', travelerId);
+        if (guestName) q.set('guestName', guestName);
         if (eventId && selectedEvent) {
           q.set('eventId', eventId);
           q.set('eventName', selectedEvent.name);
@@ -801,6 +806,7 @@ export default function BookPage() {
     book({
       opt,
       travelerId,
+      guestName: guestName ?? undefined,
       startDate: start,
       endDate: end,
       eventId: eventId || undefined,
@@ -1154,22 +1160,16 @@ export default function BookPage() {
                 </Select>
               </Field>
               <Field label="Traveler">
-                {canBookForOthers ? (
-                  <Select
-                    value={travelerId}
-                    onChange={(e) => setTravelerId(e.target.value)}
-                  >
-                    {state.users
-                      .filter((u) => u.status === 'active')
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </Select>
-                ) : (
-                  <Input value={activeUser.name} disabled />
-                )}
+                <TravelerPicker
+                  users={state.users}
+                  canBookForOthers={canBookForOthers}
+                  selfUser={activeUser}
+                  value={{ travelerId, guestName }}
+                  onChange={(v) => {
+                    setTravelerId(v.travelerId);
+                    setGuestName(v.guestName);
+                  }}
+                />
               </Field>
             </div>
           </>
@@ -1336,19 +1336,16 @@ export default function BookPage() {
                 />
               </Field>
               <Field label="Guest">
-                {canBookForOthers ? (
-                  <Select value={travelerId} onChange={(e) => setTravelerId(e.target.value)}>
-                    {state.users
-                      .filter((u) => u.status === 'active')
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </Select>
-                ) : (
-                  <Input value={activeUser.name} disabled />
-                )}
+                <TravelerPicker
+                  users={state.users}
+                  canBookForOthers={canBookForOthers}
+                  selfUser={activeUser}
+                  value={{ travelerId, guestName }}
+                  onChange={(v) => {
+                    setTravelerId(v.travelerId);
+                    setGuestName(v.guestName);
+                  }}
+                />
               </Field>
             </div>
           )

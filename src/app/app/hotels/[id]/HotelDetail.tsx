@@ -20,7 +20,8 @@ import { Lightbox } from '@/components/hotels/Lightbox';
 import { RoomSelection } from '@/components/hotels/RoomSelection';
 import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
-import { Button, Card, Field, Input, Select, cn } from '@/components/app/ui';
+import { Button, Card, Field, cn } from '@/components/app/ui';
+import { TravelerPicker } from '@/components/app/TravelerPicker';
 import { StripeCheckout } from '@/components/app/StripeCheckout';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 import { HvLoader } from '@/components/HvLoader';
@@ -46,6 +47,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
     useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
+  const [guestName, setGuestName] = useState<string | null>(params.get('guestName') || null);
   const [review, setReview] = useState(false);
 
   const eventId = params.get('eventId') || undefined;
@@ -200,6 +202,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
     book({
       opt,
       travelerId,
+      guestName: guestName ?? undefined,
       startDate: checkin,
       endDate: checkout,
       roomType: selected?.roomTitle,
@@ -235,7 +238,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
     const trav = state.users.find((u) => u.id === travelerId);
     const manager = state.users.find((u) => u.role === 'admin');
     const emailData = {
-      travelerName: trav?.name ?? 'there',
+      travelerName: guestName?.trim() || trav?.name || 'there',
       title: name,
       roomType: selected?.roomTitle,
       dates: dateRange(checkin, checkout),
@@ -753,20 +756,18 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 </div>
               </div>
 
-              {canBookForOthers && (
+              {!eventAllow && (
                 <Field label="Guest">
-                  <Select
-                    value={travelerId}
-                    onChange={(e) => setTravelerId(e.target.value)}
-                  >
-                    {state.users
-                      .filter((u) => u.status === 'active')
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </Select>
+                  <TravelerPicker
+                    users={state.users}
+                    canBookForOthers={canBookForOthers}
+                    selfUser={activeUser}
+                    value={{ travelerId, guestName }}
+                    onChange={(v) => {
+                      setTravelerId(v.travelerId);
+                      setGuestName(v.guestName);
+                    }}
+                  />
                 </Field>
               )}
 

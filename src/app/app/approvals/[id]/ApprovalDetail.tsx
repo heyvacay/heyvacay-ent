@@ -83,6 +83,8 @@ export default function ApprovalDetail({ id }: { id: string }) {
   }
 
   const traveler = userById(b.travelerId);
+  // Who's travelling: the custom guest name if set, else the matched employee.
+  const travelerName = b.guestName || traveler?.name;
   const booker = userById(b.bookedById);
   const empBudget = state.budgets.find(
     (x) => x.scope === 'employee' && x.refId === b.travelerId
@@ -120,14 +122,14 @@ export default function ApprovalDetail({ id }: { id: string }) {
     }
     if (traveler?.email) {
       sendEmail('approvalDecided', traveler.email, {
-        travelerName: traveler.name,
+        travelerName: travelerName ?? traveler.name,
         title: b.title,
         approved: kind === 'approved',
         note: noteVisible ? comment : undefined,
       });
       if (kind === 'approved') {
         sendEmail('confirmation', traveler.email, {
-          travelerName: traveler.name,
+          travelerName: travelerName ?? traveler.name,
           title: b.title,
           roomType: b.roomType,
           dates: dateRange(b.startDate, b.endDate),
@@ -396,10 +398,15 @@ export default function ApprovalDetail({ id }: { id: string }) {
               Traveler
             </h3>
             <div className="mt-2 flex items-center gap-3">
-              <Avatar name={traveler?.name ?? '?'} />
+              <Avatar name={travelerName ?? '?'} />
               <div className="min-w-0">
                 <p className="truncate font-medium text-slate-800">
-                  {traveler?.name}
+                  {travelerName}
+                  {b.guestName && (
+                    <span className="ml-1 text-xs font-normal text-slate-400">
+                      (guest · booked by {traveler?.name})
+                    </span>
+                  )}
                 </p>
                 <p className="truncate text-xs text-slate-400">
                   {traveler?.title} · {b.department}

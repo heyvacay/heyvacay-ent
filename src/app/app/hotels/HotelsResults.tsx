@@ -279,9 +279,11 @@ export default function HotelsResults() {
     if (opt.location) q.set('loc', opt.location);
     // Carry traveler + event context through to the detail/booking page.
     const travelerId = params.get('travelerId');
+    const guestName = params.get('guestName');
     const eventId = params.get('eventId');
     const eventName = params.get('eventName');
     if (travelerId) q.set('travelerId', travelerId);
+    if (guestName) q.set('guestName', guestName);
     if (eventId) q.set('eventId', eventId);
     if (eventName) q.set('eventName', eventName);
     const maxTier = params.get('maxTier');

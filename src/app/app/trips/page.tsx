@@ -340,7 +340,7 @@ export default function TripsPage() {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={viewingTeam ? nameOf(b.travelerId) : undefined} />
+                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)} />
                 ))}
               </div>
             )}
@@ -353,7 +353,7 @@ export default function TripsPage() {
               </h2>
               <div className="space-y-3">
                 {past.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={viewingTeam ? nameOf(b.travelerId) : undefined} />
+                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)} />
                 ))}
               </div>
             </section>

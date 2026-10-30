@@ -16,6 +16,7 @@ import type {
   Booking,
   BookingApprovalMode,
   BudgetScope,
+  GuestBookingMode,
   Expense,
   ExpenseStatus,
   IntegrationStatus,
@@ -111,6 +112,8 @@ export interface StoreApi {
   book: (args: {
     opt: InventoryOption;
     travelerId: string;
+    /** Custom traveler name when booking for someone not in the system. */
+    guestName?: string;
     startDate: string;
     endDate: string;
     roomType?: string;
@@ -121,6 +124,9 @@ export interface StoreApi {
     /** Event allow-listed stay — skip travel policy (no approval / no block). */
     bypassPolicy?: boolean;
   }) => Booking;
+  /** Company rule: whether booking for a custom/guest name needs approval. */
+  guestBookingMode: GuestBookingMode;
+  setGuestBookingMode: (mode: GuestBookingMode) => void;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Tie an already-booked trip to an event (no rebooking needed). */
   attachBookingToEvent: (bookingId: string, eventId: string, eventName: string) => void;
@@ -404,6 +410,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setCompanyApprovalMode: StoreApi['setCompanyApprovalMode'] = useCallback(
     (mode) => setState((s) => ({ ...s, company: { ...s.company, approvalMode: mode } })),
+    []
+  );
+
+  const setGuestBookingMode: StoreApi['setGuestBookingMode'] = useCallback(
+    (mode) => setState((s) => ({ ...s, guestBookingMode: mode })),
     []
   );
 
@@ -706,8 +717,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy }) => {
+    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
+      const guest = guestName?.trim() || undefined;
       // An event allow-listed stay is pre-cleared by an admin: skip the travel
       // policy entirely (no approval, no block) even if it's out of policy.
       const flags = bypassPolicy ? [] : evaluatePolicies(opt, startDate);
@@ -716,10 +728,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // also route for approval (the UI normally prevents that case).
       const traveler = state.users.find((u) => u.id === travelerId);
       const mode: BookingApprovalMode = approvalModeFor(travelerId);
+      // Booking for a custom name can require approval per company policy.
+      const guestNeedsApproval =
+        !!guest && (state.guestBookingMode ?? 'allowed') === 'approval';
       const needsApproval =
         flags.some((f) => f.policy.action === 'approve' || f.policy.action === 'block') ||
         (!bypassPolicy && mode === 'pre_approval') ||
-        (mode === 'event_required' && !eventId);
+        (mode === 'event_required' && !eventId) ||
+        guestNeedsApproval;
 
       const booking: Booking = {
         id: uid('bk'),
@@ -727,6 +743,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         title: opt.title,
         detail: opt.detail,
         travelerId,
+        guestName: guest,
         bookedById: state.activeUserId,
         department: traveler?.department ?? activeUser.department,
         startDate,
@@ -1241,6 +1258,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setHomeCity,
     approvalModeFor,
     setCompanyApprovalMode,
+    guestBookingMode: state.guestBookingMode ?? 'allowed',
+    setGuestBookingMode,
     setUserApprovalMode,
     setDepartmentApprovalMode,
     setBillingMode,

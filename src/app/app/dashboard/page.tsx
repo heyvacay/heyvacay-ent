@@ -124,7 +124,7 @@ export default function AdminDashboard() {
                         {b.title}
                       </p>
                       <p className="text-xs text-slate-400">
-                        {userById(b.travelerId)?.name} · {money(b.price)}
+                        {b.guestName || userById(b.travelerId)?.name} · {money(b.price)}
                       </p>
                     </div>
                     <Badge color="amber">Review</Badge>
@@ -182,7 +182,7 @@ export default function AdminDashboard() {
                     </div>
                   </td>
                   <td className="px-5 py-3 text-slate-600">
-                    {userById(b.travelerId)?.name}
+                    {b.guestName || userById(b.travelerId)?.name}
                   </td>
                   <td className="px-5 py-3 whitespace-nowrap text-slate-500">
                     {dateRange(b.startDate, b.endDate)}

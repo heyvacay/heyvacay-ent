@@ -7,6 +7,7 @@ import { Plane, Receipt, Shield, Check, Calendar, Users } from '@/components/ico
 import type {
   BookingApprovalMode,
   FlightCabinTier,
+  GuestBookingMode,
   Policy,
   PolicyAction,
 } from '@/lib/types';
@@ -26,6 +27,19 @@ const APPROVAL_MODES: { value: BookingApprovalMode; label: string; desc: string 
     value: 'event_required',
     label: 'Only against an approved event',
     desc: 'Employees can only book travel tied to a manager-approved event.',
+  },
+];
+
+const GUEST_MODES: { value: GuestBookingMode; label: string; desc: string }[] = [
+  {
+    value: 'allowed',
+    label: 'Allow — book directly',
+    desc: 'Anyone can book under a custom name without extra sign-off (default).',
+  },
+  {
+    value: 'approval',
+    label: 'Require approval',
+    desc: 'A booking under a custom name is sent to a manager before it’s confirmed.',
   },
 ];
 
@@ -226,7 +240,8 @@ function FlightPreview({ tiers }: { tiers: FlightCabinTier[] }) {
 /* ---------------- page ---------------- */
 
 export default function PoliciesPage() {
-  const { state, isSuperAdmin, changePolicy, resolvePolicyChange } = useStore();
+  const { state, isSuperAdmin, changePolicy, resolvePolicyChange, guestBookingMode, setGuestBookingMode } =
+    useStore();
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
   const companyMode = state.company.approvalMode ?? 'open';
 
@@ -516,6 +531,39 @@ export default function PoliciesPage() {
                 Showing the first 25 matches — refine your search to narrow it down.
               </p>
             )}
+          </div>
+        </SectionCard>
+
+        {/* Booking for a custom / guest name */}
+        <SectionCard
+          icon={<Users className="h-5 w-5" />}
+          title="Booking for others (custom name)"
+          sub="When someone books a trip under a custom name — a guest, candidate, or contractor who isn't in the system — decide whether they can do it themselves or if it needs a manager's sign-off."
+        >
+          <div className="space-y-2">
+            {GUEST_MODES.map((m) => (
+              <label
+                key={m.value}
+                className={cn(
+                  'flex cursor-pointer gap-3 rounded-xl border p-4 transition-colors',
+                  guestBookingMode === m.value
+                    ? 'border-brand bg-brand/5'
+                    : 'border-slate-200 hover:border-slate-300'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="guest-booking-mode"
+                  checked={guestBookingMode === m.value}
+                  onChange={() => setGuestBookingMode(m.value)}
+                  className="mt-0.5 h-4 w-4 shrink-0 text-brand focus:ring-brand"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">{m.label}</span>
+                  <span className="block text-xs text-slate-400">{m.desc}</span>
+                </span>
+              </label>
+            ))}
           </div>
         </SectionCard>
 

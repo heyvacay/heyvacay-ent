@@ -150,6 +150,10 @@ export interface Booking {
   title: string;
   detail: string;
   travelerId: string;
+  /** Free-text traveler name when booking for someone not in the system
+   *  (a guest, candidate, or contractor). When set, it is who's travelling;
+   *  travelerId is the booker who owns the trip. */
+  guestName?: string;
   bookedById: string;
   department: string;
   startDate: string; // ISO date
@@ -376,6 +380,9 @@ export interface OnboardingProfile {
   completedAt: string;
 }
 
+/** How bookings made for a custom (non-employee) traveler name are handled. */
+export type GuestBookingMode = 'allowed' | 'approval';
+
 export type BillingMode = 'card' | 'employee' | 'net30';
 
 export interface Billing {
@@ -434,6 +441,9 @@ export interface AppState {
   /** Per-department approval-mode overrides (department name → mode). Applied
    *  between the per-employee override and the company default. */
   departmentApprovalModes?: Record<string, BookingApprovalMode>;
+  /** Whether booking for a custom/guest name needs manager approval.
+   *  'allowed' (default) lets the booker do it directly; 'approval' routes it. */
+  guestBookingMode?: GuestBookingMode;
   /** Pending/decided policy-change requests awaiting super-admin approval. */
   policyChangeRequests?: PolicyChangeRequest[];
   /** Combined flight+hotel trip plans (booked together on approval). */

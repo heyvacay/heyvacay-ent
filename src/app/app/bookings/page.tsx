@@ -89,7 +89,7 @@ export default function BookingsPage() {
                 </div>
                 <p className="mt-0.5 text-sm text-slate-400">{b.detail}</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  {userById(b.travelerId)?.name} · {b.department} ·{' '}
+                  {b.guestName || userById(b.travelerId)?.name} · {b.department} ·{' '}
                   {dateRange(b.startDate, b.endDate)}
                 </p>
               </div>
