@@ -94,7 +94,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [payMethod, setPayMethod] = useState<'company' | 'personal'>('company');
   const [processing, setProcessing] = useState(false);
   const [useDifferentCard, setUseDifferentCard] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number } | null>(
+  const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number; ref: string } | null>(
     null
   );
 
@@ -212,7 +212,11 @@ export default function HotelDetail({ hid }: { hid: string }) {
       eventName,
       bypassPolicy: eventAllow,
     });
-    setConfirmed({ pending: needsApproval, points });
+    setConfirmed({
+      pending: needsApproval,
+      points,
+      ref: `HV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    });
     setReview(false);
     setPayStep(false);
     setProcessing(false);
@@ -331,10 +335,29 @@ export default function HotelDetail({ hid }: { hid: string }) {
         </div>
 
         <div className="mt-5 rounded-2xl border border-slate-200 p-4">
+          {!confirmed.pending && (
+            <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                Confirmation
+              </span>
+              <span className="font-mono text-sm font-bold text-slate-900">{confirmed.ref}</span>
+            </div>
+          )}
           <p className="font-semibold text-slate-900">{name}</p>
           {selected?.roomTitle && <p className="text-sm text-slate-500">{selected.roomTitle}</p>}
+          {(selected?.refund || selected?.meal) && (
+            <p className="text-xs text-slate-400">
+              {[selected?.meal, selected?.refund].filter(Boolean).join(' · ')}
+            </p>
+          )}
           <p className="text-sm text-slate-400">
             {dateRange(checkin, checkout)} · {nights} night{nights === 1 ? '' : 's'}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Guest:{' '}
+            <span className="font-medium text-slate-700">
+              {guestName || state.users.find((u) => u.id === travelerId)?.name || activeUser.name}
+            </span>
           </p>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-slate-50 p-3">
