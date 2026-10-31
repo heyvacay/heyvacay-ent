@@ -42,6 +42,10 @@ interface EventsApi {
     roomTierPolicy?: RoomTierPolicy;
     budget?: number;
     smartPlanning?: boolean;
+    /** Group-dinner setup chosen in the create flow. */
+    dinnerPlanMode?: 'now' | 'later' | 'none';
+    /** For 'later': the date planning should kick off (ISO yyyy-mm-dd). */
+    dinnerPlanAt?: string;
   }) => TravelEvent;
   addMessage: (
     eventId: string,
@@ -125,6 +129,37 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   });
 
   const createEvent: EventsApi['createEvent'] = useCallback((data) => {
+    const attendees =
+      data.attendees.length > 0
+        ? data.attendees
+        : [{ userId: data.hostId, name: data.hostName }];
+    const host = attendees.find((a) => a.userId === data.hostId);
+
+    // "Start now" kicks off RSVPs immediately with sensible defaults (dinner on
+    // the trip's first night, 7pm, voting closes in 48h). The host can adjust.
+    const startNow = data.dinnerPlanMode === 'now';
+    const dinner: TravelEvent['dinner'] = startNow
+      ? {
+          hostId: data.hostId,
+          phase: 'rsvp',
+          date: data.startDate,
+          time: '19:00',
+          expiresAt: new Date(Date.now() + 48 * 3600_000).toISOString(),
+          attendees: host ? [host] : [],
+          rsvps: host ? { [data.hostId]: 'yes' as RsvpStatus } : {},
+          genreVotes: {},
+          restaurantVotes: {},
+          candidates: [],
+        }
+      : undefined;
+
+    const dinnerNote =
+      data.dinnerPlanMode === 'now'
+        ? ' Group dinner planning has started — RSVP in the Dinner tab.'
+        : data.dinnerPlanMode === 'later' && data.dinnerPlanAt
+          ? ` Group dinner planning is scheduled to start ${data.dinnerPlanAt}.`
+          : '';
+
     const ev: TravelEvent = {
       id: uid('ev'),
       name: data.name,
@@ -132,10 +167,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       startDate: data.startDate,
       endDate: data.endDate,
       hostId: data.hostId,
-      attendees:
-        data.attendees.length > 0
-          ? data.attendees
-          : [{ userId: data.hostId, name: data.hostName }],
+      attendees,
       allowHotels: data.allowHotels,
       allowHotelList: data.allowHotelList,
       whitelistOnly: data.whitelistOnly,
@@ -146,7 +178,12 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       roomTierPolicy: data.roomTierPolicy,
       budget: data.budget,
       smartPlanning: data.smartPlanning,
-      messages: [msg(data.hostId, data.hostName, `Created the "${data.name}" event thread.`, true)],
+      dinnerPlanMode: data.dinnerPlanMode,
+      dinnerPlanAt: data.dinnerPlanMode === 'later' ? data.dinnerPlanAt : undefined,
+      dinner,
+      messages: [
+        msg(data.hostId, data.hostName, `Created the "${data.name}" event thread.${dinnerNote}`, true),
+      ],
       createdAt: new Date().toISOString().slice(0, 10),
     };
     setEvents((es) => [ev, ...es]);

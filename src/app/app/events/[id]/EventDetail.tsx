@@ -11,6 +11,7 @@ import {
   tally,
   winner,
   type DinnerCandidate,
+  type DinnerPhase,
   type EventAttendee,
   type RoomTier,
   type OverTierAction,
@@ -28,7 +29,7 @@ import {
   Select,
   cn,
 } from '@/components/app/ui';
-import { shortDate, money } from '@/lib/format';
+import { shortDate, money, todayISO } from '@/lib/format';
 import { hotelNeed } from '@/lib/hotelNeed';
 import { EventChat } from '@/components/app/EventChat';
 import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
@@ -163,6 +164,32 @@ export default function EventDetail({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d?.phase]);
 
+  // Auto-start a dinner that was scheduled for "later" once its start day
+  // arrives. Whoever opens the event on/after that day kicks it off (client
+  // prototype — on the real backend a scheduled job would do this).
+  const scheduledStartedRef = useRef(false);
+  useEffect(() => {
+    if (!e || e.dinner || scheduledStartedRef.current) return;
+    if (e.dinnerPlanMode !== 'later' || !e.dinnerPlanAt) return;
+    if (todayISO() < e.dinnerPlanAt) return;
+    scheduledStartedRef.current = true;
+    const time = '19:00';
+    const expiresAt = new Date(Date.now() + 48 * 3600_000).toISOString();
+    startDinner(e.id, e.hostId, e.startDate, time, expiresAt);
+    e.attendees.forEach((a) => {
+      const email = emailById(a.userId);
+      if (email && a.userId !== e.hostId)
+        sendEmail('dinnerInvite', email, {
+          name: a.name,
+          event: e.name,
+          date: e.startDate,
+          time,
+          city: e.city,
+        });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e?.id, e?.dinner, e?.dinnerPlanMode, e?.dinnerPlanAt]);
+
   if (!e) {
     return (
       <div>
@@ -219,7 +246,7 @@ export default function EventDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {d && (
+            {d ? (
               <span
                 className={cn(
                   'rounded-full px-3 py-1 text-xs font-semibold',
@@ -228,6 +255,13 @@ export default function EventDetail({ id }: { id: string }) {
               >
                 {d.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
               </span>
+            ) : (
+              e.dinnerPlanMode === 'later' &&
+              e.dinnerPlanAt && (
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-mist">
+                  Dinner {shortDate(e.dinnerPlanAt)}
+                </span>
+              )
             )}
             {!isAttendee ? (
               <Button onClick={() => joinEvent(e.id, activeUser.id, activeUser.name)}>
@@ -484,6 +518,75 @@ export default function EventDetail({ id }: { id: string }) {
 
 /* ---------------- dinner panel ---------------- */
 
+/** The group-dinner flow, as plain-English steps for the progress bar. */
+const DINNER_STEPS = [
+  { key: 'rsvp', label: 'RSVP' },
+  { key: 'genre', label: 'Pick cuisine' },
+  { key: 'restaurant', label: 'Pick spot' },
+  { key: 'booked', label: 'Booked' },
+] as const;
+
+function dinnerStepIndex(phase: DinnerPhase): number {
+  switch (phase) {
+    case 'rsvp':
+    case 'join':
+      return 0;
+    case 'genre':
+      return 1;
+    case 'restaurant':
+      return 2;
+    case 'booked':
+      return 3;
+  }
+}
+
+function dinnerPhaseLabel(phase: DinnerPhase): string {
+  return ['Collecting RSVPs', 'Voting on cuisine', 'Voting on the spot', 'Booked'][
+    dinnerStepIndex(phase)
+  ];
+}
+
+/** Horizontal RSVP → Pick cuisine → Pick spot → Booked progress bar. */
+function DinnerStepper({ current }: { current: number }) {
+  return (
+    <ol className="flex items-center">
+      {DINNER_STEPS.map((s, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <li key={s.key} className="flex items-center">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold',
+                  active
+                    ? 'bg-brand text-navy-deep'
+                    : done
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-slate-200 text-slate-500'
+                )}
+              >
+                {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              </span>
+              <span
+                className={cn(
+                  'text-xs font-semibold',
+                  active ? 'text-slate-900' : done ? 'text-emerald-600' : 'text-slate-400'
+                )}
+              >
+                {s.label}
+              </span>
+            </div>
+            {i < DINNER_STEPS.length - 1 && (
+              <span className={cn('mx-2 h-px w-5 sm:w-8', done ? 'bg-emerald-400' : 'bg-slate-200')} />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function DinnerPanel({
   e,
   d,
@@ -528,40 +631,88 @@ function DinnerPanel({
   const [hours, setHours] = useState(2);
 
   if (!d) {
+    const scheduled =
+      e.dinnerPlanMode === 'later' && e.dinnerPlanAt && todayISO() < e.dinnerPlanAt
+        ? e.dinnerPlanAt
+        : null;
     return (
-      <Card>
-        <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-          <Sparkles className="h-5 w-5 text-brand-dark" /> Plan a group dinner
-        </h2>
-        <p className="mb-4 text-sm text-slate-500">
-          Collect RSVPs from the group, nudge anyone who hasn&apos;t replied, then about a week out
-          pick the spot and send everyone the details.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Date">
-            <Input type="date" value={date} onChange={(ev) => setDate(ev.target.value)} />
-          </Field>
-          <Field label="Time">
-            <Input type="time" value={time} onChange={(ev) => setTime(ev.target.value)} />
-          </Field>
-          <Field label="Auto-book in">
-            <Select value={hours} onChange={(ev) => setHours(Number(ev.target.value))}>
-              <option value={1}>1 hour</option>
-              <option value={2}>2 hours</option>
-              <option value={4}>4 hours</option>
-              <option value={24}>24 hours</option>
-            </Select>
-          </Field>
-        </div>
-        <Button
-          className="mt-4"
-          onClick={() =>
-            onStart(date, time, new Date(Date.now() + hours * 3600_000).toISOString())
-          }
-        >
-          Start dinner planning
-        </Button>
-      </Card>
+      <div className="space-y-5">
+        {/* how it works — the whole flow at a glance */}
+        <Card>
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+            <Sparkles className="h-5 w-5 text-brand-dark" /> Plan a group dinner
+          </h2>
+          <p className="mb-4 text-sm text-slate-500">
+            HeyVacay runs the whole thing in four simple steps — you just kick it off and we handle
+            the rest.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-4">
+            {(
+              [
+                ['1', 'RSVP', 'Everyone says whether they’re coming.'],
+                ['2', 'Pick cuisine', 'The group votes on a type of food.'],
+                ['3', 'Pick spot', `Vote between real restaurants in ${e.city}.`],
+                ['4', 'Booked', 'The winner is reserved and details go out.'],
+              ] as [string, string, string][]
+            ).map(([n, t, dsc]) => (
+              <div key={n} className="rounded-xl border border-slate-200 p-3">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-brand/15 text-xs font-bold text-brand-dark">
+                  {n}
+                </span>
+                <p className="mt-2 text-sm font-semibold text-slate-800">{t}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{dsc}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {scheduled && (
+          <Card className="border-brand/30 bg-brand/5">
+            <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <Check className="h-4 w-4 text-brand-dark" /> Scheduled to start {shortDate(scheduled)}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              We&apos;ll send RSVP requests to everyone automatically that day — far enough ahead to
+              plan, close enough that people know their schedule. You can also start it now below.
+            </p>
+          </Card>
+        )}
+
+        <Card>
+          <h3 className="mb-1 font-display text-base font-bold text-slate-900">
+            {scheduled ? 'Start it now instead' : 'Start dinner planning'}
+          </h3>
+          <p className="mb-4 text-sm text-slate-500">
+            Set the date and time, and how long the group gets to vote. When voting closes, the
+            top-voted restaurant is booked automatically — nobody has to remember to do it.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Dinner date">
+              <Input type="date" value={date} onChange={(ev) => setDate(ev.target.value)} />
+            </Field>
+            <Field label="Dinner time">
+              <Input type="time" value={time} onChange={(ev) => setTime(ev.target.value)} />
+            </Field>
+            <Field label="Voting closes in">
+              <Select value={hours} onChange={(ev) => setHours(Number(ev.target.value))}>
+                <option value={1}>1 hour</option>
+                <option value={2}>2 hours</option>
+                <option value={4}>4 hours</option>
+                <option value={24}>24 hours</option>
+                <option value={48}>48 hours</option>
+              </Select>
+            </Field>
+          </div>
+          <Button
+            className="mt-4"
+            onClick={() =>
+              onStart(date, time, new Date(Date.now() + hours * 3600_000).toISOString())
+            }
+          >
+            {scheduled ? 'Start now' : 'Start dinner planning'}
+          </Button>
+        </Card>
+      </div>
     );
   }
 
@@ -590,12 +741,23 @@ function DinnerPanel({
               Group dinner · {shortDate(d.date)} at {d.time}
             </p>
             <p className="text-sm text-slate-400">
-              {yesCount} coming · {maybeCount} maybe · {noCount} can&apos;t · auto-books by{' '}
-              {expiresLabel}
+              {yesCount} coming · {maybeCount} maybe · {noCount} can&apos;t make it
             </p>
           </div>
-          <Badge color={d.phase === 'booked' ? 'green' : 'amber'}>{d.phase}</Badge>
+          <Badge color={d.phase === 'booked' ? 'green' : 'amber'}>{dinnerPhaseLabel(d.phase)}</Badge>
         </div>
+
+        <div className="mt-4 overflow-x-auto border-t border-slate-100 pt-4">
+          <DinnerStepper current={dinnerStepIndex(d.phase)} />
+        </div>
+
+        {d.phase === 'restaurant' && (
+          <p className="mt-3 text-xs text-slate-500">
+            Voting closes {expiresLabel} — the most-voted restaurant books automatically then, so no
+            one has to chase it down.
+          </p>
+        )}
+
         {availNote && (
           <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-sm text-amber-800">
             <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {availNote}
@@ -607,11 +769,11 @@ function DinnerPanel({
       {(d.phase === 'rsvp' || d.phase === 'join') && (
         <Card>
           <h3 className="mb-1 font-display text-base font-bold text-slate-900">
-            Can you make it?
+            Step 1 · Can you make it?
           </h3>
           <p className="mb-3 text-sm text-slate-500">
-            RSVP so we know the headcount. We&apos;ll pick the spot about a week out and send you
-            the details.
+            RSVP so we know the headcount. Once the host closes RSVPs, everyone who&apos;s in votes
+            on the cuisine and the spot.
           </p>
 
           {isAttendee && (
@@ -686,7 +848,7 @@ function DinnerPanel({
                 Remind to RSVP
               </Button>
               <Button onClick={onStartGenre} disabled={yesCount < 1}>
-                Close RSVPs &amp; pick a spot →
+                Close RSVPs &amp; start cuisine vote →
               </Button>
             </div>
           )}
@@ -696,7 +858,12 @@ function DinnerPanel({
       {/* GENRE VOTE */}
       {d.phase === 'genre' && (
         <Card>
-          <h3 className="mb-3 font-display text-base font-bold text-slate-900">Vote: what are we feeling?</h3>
+          <h3 className="mb-1 font-display text-base font-bold text-slate-900">
+            Step 2 · What are we in the mood for?
+          </h3>
+          <p className="mb-3 text-sm text-slate-500">
+            Vote on a cuisine. The winner decides which restaurants you&apos;ll choose between next.
+          </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {FOOD_GENRES.map((g) => {
               const count = genreTally.find((t) => t.key === g)?.count ?? 0;
@@ -721,7 +888,7 @@ function DinnerPanel({
           {!joined && <p className="mt-2 text-xs text-slate-400">Join the dinner to vote.</p>}
           {isHost && (
             <Button className="mt-4" onClick={onPickRestaurants} disabled={genreTally.length === 0}>
-              Tally &amp; pick restaurants →
+              Close cuisine vote &amp; show restaurants →
             </Button>
           )}
         </Card>
@@ -731,9 +898,11 @@ function DinnerPanel({
       {d.phase === 'restaurant' && (
         <Card>
           <h3 className="mb-1 font-display text-base font-bold text-slate-900">
-            Vote: {d.winningGenre} restaurants in {e.city}
+            Step 3 · Vote for a {d.winningGenre} spot in {e.city}
           </h3>
-          <p className="mb-4 text-xs text-slate-400">Top-voted is auto-booked at the deadline.</p>
+          <p className="mb-4 text-xs text-slate-400">
+            Tap a restaurant to vote — change it any time before voting closes.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             {d.candidates.map((c) => {
               const count = restTally.find((t) => t.key === c.id)?.count ?? 0;

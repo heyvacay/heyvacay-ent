@@ -155,7 +155,49 @@ export interface TravelEvent {
   extraStayRequests?: ExtraStayRequest[];
   messages: EventMessage[];
   dinner?: Dinner;
+  /** How the group dinner was set up at event creation:
+   *  'now' kicks off RSVPs immediately, 'later' schedules it for dinnerPlanAt,
+   *  'none' skips the dinner. Undefined = legacy event (plan from the tab). */
+  dinnerPlanMode?: 'now' | 'later' | 'none';
+  /** For 'later': the date dinner planning should kick off (ISO yyyy-mm-dd). */
+  dinnerPlanAt?: string;
   createdAt: string;
+}
+
+export interface DinnerScheduleOption {
+  key: 'month' | 'two_weeks' | 'week';
+  label: string;
+  /** How many days before the trip this option starts planning. */
+  daysBefore: number;
+  /** The actual date planning would start (ISO yyyy-mm-dd). */
+  date: string;
+}
+
+/**
+ * When to kick off group-dinner planning if the host picks "later". We offer
+ * 1 month / 2 weeks / 1 week before the trip, but only the ones there's still
+ * enough lead time for (their start date is in the future). 1 week is the
+ * baseline; the earlier options appear only when the trip is far enough out.
+ */
+export function dinnerScheduleOptions(
+  startDate: string,
+  todayISO: string
+): DinnerScheduleOption[] {
+  const start = new Date(`${startDate}T00:00:00`);
+  const today = new Date(`${todayISO}T00:00:00`);
+  const defs: { key: DinnerScheduleOption['key']; label: string; daysBefore: number }[] = [
+    { key: 'month', label: '1 month before', daysBefore: 30 },
+    { key: 'two_weeks', label: '2 weeks before', daysBefore: 14 },
+    { key: 'week', label: '1 week before', daysBefore: 7 },
+  ];
+  return defs
+    .map((d) => {
+      const at = new Date(start);
+      at.setDate(at.getDate() - d.daysBefore);
+      return { ...d, date: at.toISOString().slice(0, 10) };
+    })
+    // Only keep options whose start date hasn't already passed.
+    .filter((o) => new Date(`${o.date}T00:00:00`) >= today);
 }
 
 export function tally(votes: Record<string, string>): { key: string; count: number }[] {

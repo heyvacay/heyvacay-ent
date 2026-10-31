@@ -16,9 +16,9 @@ import { Calendar, MapPin, Users, Plane, Check, Sparkles, Wallet } from '@/compo
 import {
   ROOM_TIERS,
   roomTierRank,
+  dinnerScheduleOptions,
   type OverTierAction,
   type RoomTier,
-  type RoomTierPolicy,
 } from '@/lib/events';
 import {
   estimateEventSpend,
@@ -31,6 +31,7 @@ const STEPS = [
   { key: 'who', title: "Who's coming", sub: 'Pick the attendees' },
   { key: 'hotels', title: 'Allowed hotels', sub: 'Pin the properties' },
   { key: 'flights', title: 'Allowed flights', sub: 'Optional routes' },
+  { key: 'dinner', title: 'Group dinner', sub: 'Plan it now or later' },
   { key: 'review', title: 'Review', sub: 'Create the event' },
 ] as const;
 
@@ -60,6 +61,21 @@ export default function NewEventPage() {
   const [budgetOn, setBudgetOn] = useState(false);
   const [budgetAmt, setBudgetAmt] = useState(50000);
   const [smartPlanning, setSmartPlanning] = useState(false);
+  // Group dinner: start now, schedule for later, or skip.
+  const [dinnerMode, setDinnerMode] = useState<'now' | 'later' | 'none'>('now');
+  const [dinnerWhen, setDinnerWhen] = useState('');
+
+  // Dinner "later" schedule options with enough lead time, computed from the
+  // trip's start date. 1 week is the baseline; 2 weeks / 1 month appear only
+  // when the trip is far enough out.
+  const dinnerOptions = dinnerScheduleOptions(start, todayISO());
+  // Keep the chosen "later" date valid as dates/options change.
+  useEffect(() => {
+    if (dinnerMode !== 'later') return;
+    if (!dinnerOptions.some((o) => o.date === dinnerWhen)) {
+      setDinnerWhen(dinnerOptions[dinnerOptions.length - 1]?.date ?? '');
+    }
+  }, [dinnerMode, dinnerOptions, dinnerWhen]);
 
   if (role !== 'admin' && role !== 'booker') {
     return (
@@ -143,6 +159,8 @@ export default function NewEventPage() {
       },
       budget: budgetOn ? budgetAmt : undefined,
       smartPlanning: budgetOn && smartPlanning,
+      dinnerPlanMode: dinnerMode,
+      dinnerPlanAt: dinnerMode === 'later' ? dinnerWhen || undefined : undefined,
     });
     // Let everyone who was added know (no-ops without an email provider key).
     activeUsers
@@ -162,9 +180,7 @@ export default function NewEventPage() {
   const canNext =
     (step === 0 && basicsValid) ||
     (step === 1 && attendeeIds.length > 0) ||
-    step === 2 ||
-    step === 3 ||
-    step === 4;
+    step >= 2;
 
   return (
     <div className="pb-10">
@@ -584,6 +600,91 @@ export default function NewEventPage() {
           )}
 
           {step === 4 && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="font-display text-lg font-bold text-slate-900">
+                  Want a group dinner on this trip?
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  HeyVacay runs it for you: collect RSVPs, let the group vote on a cuisine and a
+                  spot, then auto-book the winner on OpenTable. You choose when it kicks off.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {(
+                  [
+                    ['now', 'Start planning now', 'Send RSVP requests to everyone as soon as the event is created.'],
+                    ['later', 'Schedule for later', 'Kick it off automatically closer to the trip, when people can commit.'],
+                    ['none', 'No dinner', 'Skip the group dinner for this trip. You can still start one anytime.'],
+                  ] as ['now' | 'later' | 'none', string, string][]
+                ).map(([val, title, desc]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setDinnerMode(val)}
+                    className={cn(
+                      'flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition',
+                      dinnerMode === val
+                        ? 'border-brand bg-brand/8 ring-1 ring-brand/40'
+                        : 'border-slate-200 hover:border-slate-300'
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                      {dinnerMode === val && <Check className="h-4 w-4 text-brand-dark" />}
+                      {title}
+                    </span>
+                    <span className="text-xs text-slate-500">{desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              {dinnerMode === 'now' && (
+                <p className="flex items-start gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                  Planning starts right away — everyone gets an RSVP request, with the dinner
+                  pencilled in for your first night ({shortDate(start)}, 7:00 PM). You can change the
+                  date and time on the event&apos;s Dinner tab.
+                </p>
+              )}
+
+              {dinnerMode === 'later' && (
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="mb-1 text-sm font-semibold text-slate-800">When should it start?</p>
+                  <p className="mb-3 text-xs text-slate-500">
+                    We&apos;ll automatically send RSVP requests on this day — far enough ahead to
+                    plan, close enough that people know their schedule.
+                  </p>
+                  {dinnerOptions.length === 0 ? (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                      This trip is too soon to schedule ahead — pick “Start planning now” instead.
+                    </p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {dinnerOptions.map((o) => (
+                        <button
+                          key={o.key}
+                          type="button"
+                          onClick={() => setDinnerWhen(o.date)}
+                          className={cn(
+                            'rounded-xl border p-3 text-left transition',
+                            dinnerWhen === o.date
+                              ? 'border-brand bg-brand/8 ring-1 ring-brand/40'
+                              : 'border-slate-200 hover:border-slate-300'
+                          )}
+                        >
+                          <span className="block text-sm font-semibold text-slate-800">{o.label}</span>
+                          <span className="block text-xs text-slate-500">Starts {shortDate(o.date)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 5 && (
             <div className="space-y-4">
               <h2 className="font-display text-lg font-bold text-slate-900">Review &amp; create</h2>
               <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-sm">
@@ -599,6 +700,17 @@ export default function NewEventPage() {
                   icon={<Plane className="h-4 w-4" />}
                   k="Allowed flights"
                   v={routes.length ? routes.join(', ') : 'No restriction'}
+                />
+                <Row
+                  icon={<Users className="h-4 w-4" />}
+                  k="Group dinner"
+                  v={
+                    dinnerMode === 'now'
+                      ? 'Starts now'
+                      : dinnerMode === 'later'
+                        ? `Starts ${shortDate(dinnerWhen || start)}`
+                        : 'Not planned'
+                  }
                 />
               </div>
               {allowHotelList.length > 0 && (
