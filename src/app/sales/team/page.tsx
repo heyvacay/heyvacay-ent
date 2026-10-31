@@ -4,17 +4,17 @@ import { useState } from 'react';
 import { useCrm } from '@/lib/crmStore';
 import { Badge, Button, Card, Field, Input, PageHeader, Select } from '@/components/app/ui';
 import { money } from '@/lib/format';
-import { ME, type RepRole } from '@/lib/crm';
+import { ME, isCrmAdmin, type RepRole } from '@/lib/crm';
 
 const ROLES: RepRole[] = ['C-Suite', 'Admin', 'Account Executive', 'SDR'];
 
 export default function TeamPage() {
-  const { reps, companies, addRep, updateRep, removeRep } = useCrm();
+  const { reps, companies, addRep, updateRep, removeRep, viewerRole } = useCrm();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', role: 'Account Executive' as RepRole, quota: 1_000_000 });
 
-  // Danil (ME) is the admin and can manage the team.
-  const isAdmin = reps.find((r) => r.name === ME)?.role === 'Admin';
+  // Admin and C-Suite can manage the team (C-Suite sits above Admin).
+  const isAdmin = isCrmAdmin(viewerRole);
 
   const wonFor = (name: string) =>
     companies
@@ -39,7 +39,7 @@ export default function TeamPage() {
 
       {!isAdmin && (
         <Card className="mb-4 border-amber-200 bg-amber-50">
-          <p className="text-sm text-amber-700">Only an admin can edit the team. You can view it here.</p>
+          <p className="text-sm text-amber-700">Only an admin or C-Suite can edit the team. You can view it here.</p>
         </Card>
       )}
 
@@ -69,7 +69,7 @@ export default function TeamPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-slate-800">{r.name}{r.name === ME && ' · you'}</p>
-                  <Badge color={r.role === 'Admin' ? 'brand' : 'slate'}>{r.role}</Badge>
+                  <Badge color={isCrmAdmin(r.role) ? 'brand' : 'slate'}>{r.role}</Badge>
                 </div>
                 <p className="text-xs text-slate-400">{r.email ?? '—'} · {money(won)} won ({pct}% of quota)</p>
               </div>

@@ -39,6 +39,19 @@ export const QUOTA: Record<string, number> = {
 
 export type RepRole = 'C-Suite' | 'Admin' | 'Account Executive' | 'SDR';
 
+/**
+ * C-Suite sits ABOVE Admin: it can do everything an Admin can, plus the
+ * C-Suite-only things (set any commission, approve out-of-band rates). Use
+ * these helpers for gating instead of `=== 'Admin'`, so C-Suite is never
+ * locked out of an admin capability.
+ */
+export function isCrmAdmin(role: RepRole): boolean {
+  return role === 'Admin' || role === 'C-Suite';
+}
+export function isCrmCSuite(role: RepRole): boolean {
+  return role === 'C-Suite';
+}
+
 /** How far a non-C-Suite rep may move a company's commission before it needs
  *  C-Suite approval: down 1 point, up 2 points from the global rate. */
 export const REP_COMMISSION_DOWN = 1;
