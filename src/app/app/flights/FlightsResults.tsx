@@ -20,6 +20,8 @@ import { TravelerPicker } from '@/components/app/TravelerPicker';
 import { Plane, Check, Shield, Gift, Wallet } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
+import { LiveFlightCheckout } from '@/components/app/LiveFlightCheckout';
+import { splitName, type FlightContact, type FlightPassenger } from '@/lib/liveBooking';
 
 /* ---------------- helpers ---------------- */
 
@@ -246,6 +248,20 @@ export default function FlightsResults() {
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
   const [guestName, setGuestName] = useState<string | null>(params.get('guestName') || null);
   const [confirmed, setConfirmed] = useState<{ opt: InventoryOption; pending: boolean } | null>(null);
+  // Whether the server can issue a real Duffel order (service account wired).
+  const [liveBooking, setLiveBooking] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/payments/config')
+      .then((r) => r.json())
+      .then((cfg) => alive && setLiveBooking(Boolean(cfg?.liveBooking)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!origin || !destination || !departDate) {
@@ -278,7 +294,8 @@ export default function FlightsResults() {
     opt: InventoryOption,
     extra = 0,
     fareLabel = '',
-    seat: string | null = null
+    seat: string | null = null,
+    realRef?: string
   ) => {
     const finalOpt: InventoryOption = {
       ...opt,
@@ -294,6 +311,7 @@ export default function FlightsResults() {
       endDate: returnDate || departDate,
       eventId,
       eventName,
+      supplierRef: realRef,
     });
     setConfirmed({ opt: finalOpt, pending: needsApproval });
     setSelected(null);
@@ -338,6 +356,21 @@ export default function FlightsResults() {
         <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <span>Your company requires manager approval on all bookings — any fare you pick is sent for approval.</span>
+        </div>
+      )}
+
+      {liveError && (
+        <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <span className="flex items-start gap-2">
+            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {liveError}
+          </span>
+          <button
+            onClick={() => setLiveError(null)}
+            className="shrink-0 rounded-md px-2 text-amber-500 hover:bg-amber-100"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -403,6 +436,13 @@ export default function FlightsResults() {
           opt={selected}
           onClose={() => setSelected(null)}
           onConfirm={(extra, fareLabel, seat) => confirm(selected, extra, fareLabel, seat)}
+          onLiveConfirmed={(ref) => confirm(selected, 0, '', null, ref)}
+          onLiveUnavailable={(msg) => {
+            setSelected(null);
+            setLiveError(msg);
+          }}
+          onFallback={() => setLiveBooking(false)}
+          liveBooking={liveBooking}
           sig={sig}
           canBookForOthers={canBookForOthers}
           travelerId={travelerId}
@@ -512,6 +552,10 @@ function CheckoutPanel({
   opt,
   onClose,
   onConfirm,
+  onLiveConfirmed,
+  onLiveUnavailable,
+  onFallback,
+  liveBooking,
   sig,
   canBookForOthers,
   travelerId,
@@ -526,6 +570,10 @@ function CheckoutPanel({
   opt: InventoryOption;
   onClose: () => void;
   onConfirm: (extra: number, fareLabel: string, seat: string | null) => void;
+  onLiveConfirmed: (ref: string) => void;
+  onLiveUnavailable: (msg: string) => void;
+  onFallback: () => void;
+  liveBooking: boolean;
   sig: (o: InventoryOption) => { flags: ReturnType<typeof Object>[]; points: number; needsApproval: boolean };
   canBookForOthers: boolean;
   travelerId: string;
@@ -538,6 +586,20 @@ function CheckoutPanel({
   budget?: number;
 }) {
   const { flags, points, needsApproval } = sig(opt);
+  // A real Duffel order books the base offer at its live price; the demo fare
+  // ladder / seat fees aren't charged by the airline, so the live path skips
+  // them and books opt as-is.
+  const liveReady = liveBooking && !needsApproval;
+  const travUser = users.find((u) => u.id === travelerId);
+  const paxName = splitName(guestName?.trim() || travUser?.name || selfUser.name);
+  const liveDefaultPassenger: Partial<FlightPassenger> = {
+    givenName: paxName.firstName,
+    familyName: paxName.lastName,
+  };
+  const liveDefaultContact: FlightContact = {
+    email: travUser?.email || selfUser.email || '',
+    phone: '',
+  };
   const [fareIdx, setFareIdx] = useState(1);
   const [seat, setSeat] = useState<string | null>(null);
   const [seatFee, setSeatFee] = useState(0);
@@ -571,6 +633,39 @@ function CheckoutPanel({
             />
           </Field>
 
+          {liveReady ? (
+            <>
+              <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Fare</span>
+                  <span className="font-semibold text-slate-900">{money(opt.price)}</span>
+                </div>
+                <div className="mt-1 flex justify-between">
+                  <span className="text-slate-500">Points earned</span>
+                  <span className="font-semibold text-brand-dark">+{num(points)}</span>
+                </div>
+              </div>
+              {flags.length > 0 && (
+                <div className="space-y-1.5">
+                  {(flags as { message?: string }[]).map((f, i) => (
+                    <p key={i} className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
+                      <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" /> {f.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+              <LiveFlightCheckout
+                offerId={opt.id}
+                amount={opt.price}
+                defaultPassenger={liveDefaultPassenger}
+                defaultContact={liveDefaultContact}
+                onConfirmed={onLiveConfirmed}
+                onUnavailable={onLiveUnavailable}
+                onFallback={onFallback}
+              />
+            </>
+          ) : (
+            <>
           {/* fare type */}
           <div>
             <p className="mb-2 text-sm font-medium text-slate-700">Fare type</p>
@@ -673,6 +768,8 @@ function CheckoutPanel({
             <p className="text-center text-[11px] text-slate-400">
               Routes to an admin for approval — fare re-priced at ticketing.
             </p>
+          )}
+            </>
           )}
         </div>
       </div>

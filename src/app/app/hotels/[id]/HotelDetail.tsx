@@ -23,6 +23,8 @@ import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, cn } from '@/components/app/ui';
 import { TravelerPicker } from '@/components/app/TravelerPicker';
 import { StripeCheckout } from '@/components/app/StripeCheckout';
+import { LiveHotelCheckout } from '@/components/app/LiveHotelCheckout';
+import { splitName, type LiveGuest } from '@/lib/liveBooking';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 import { HvLoader } from '@/components/HvLoader';
 import { sendEmail } from '@/lib/email';
@@ -97,6 +99,21 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [confirmed, setConfirmed] = useState<{ pending: boolean; points: number; ref: string } | null>(
     null
   );
+  // Whether the server can issue a real supplier order (service account wired).
+  // Until then the checkout runs the workspace-record demo flow.
+  const [liveBooking, setLiveBooking] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/payments/config')
+      .then((r) => r.json())
+      .then((cfg) => alive && setLiveBooking(Boolean(cfg?.liveBooking)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -197,8 +214,9 @@ export default function HotelDetail({ hid }: { hid: string }) {
     return { status: 'in', notes: [] };
   };
 
-  // Commit the booking (after payment / approval decision).
-  const commitBooking = () => {
+  // Commit the booking (after payment / approval decision). A realRef is passed
+  // when a live supplier order was actually issued; otherwise we show a demo ref.
+  const commitBooking = (realRef?: string) => {
     book({
       opt,
       travelerId,
@@ -211,11 +229,12 @@ export default function HotelDetail({ hid }: { hid: string }) {
       eventId,
       eventName,
       bypassPolicy: eventAllow,
+      supplierRef: realRef,
     });
     setConfirmed({
       pending: needsApproval,
       points,
-      ref: `HV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+      ref: realRef ?? `HV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
     });
     setReview(false);
     setPayStep(false);
@@ -271,6 +290,21 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   const savedCard = state.billing?.mode === 'card' && !!state.billing?.cardLast4;
   const personalCard = activeUser.personalCard;
+
+  // A real supplier order can be issued only when live booking is configured and
+  // we captured the untouched supplier rate on the selected room.
+  const liveReady = liveBooking && !!selected?.rateRaw && !!detail;
+  const liveGuest: LiveGuest = (() => {
+    const trav = state.users.find((u) => u.id === travelerId);
+    const display = guestName?.trim() || trav?.name || activeUser.name;
+    const { firstName, lastName } = splitName(display);
+    return {
+      firstName,
+      lastName,
+      email: trav?.email || activeUser.email || '',
+      note: bookNote.trim() || undefined,
+    };
+  })();
 
   // "Request this stay" / "Confirm booking" primary action.
   const reserve = () => {
@@ -408,6 +442,21 @@ export default function HotelDetail({ hid }: { hid: string }) {
       >
         ← Back to results
       </Link>
+
+      {liveError && (
+        <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <span className="flex items-start gap-2">
+            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {liveError}
+          </span>
+          <button
+            onClick={() => setLiveError(null)}
+            className="shrink-0 rounded-md px-2 text-amber-500 hover:bg-amber-100"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* header */}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -982,7 +1031,36 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   ))}
                 </div>
 
-                {payMethod === 'company' ? (
+                {liveReady && selected ? (
+                  <>
+                    <p className="rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-dark">
+                      {payMethod === 'personal'
+                        ? 'Paying personally — you’ll be reimbursed. This books a real room with the hotel.'
+                        : 'This books a real room with the hotel — your card is authorized now and charged when the hotel confirms.'}
+                    </p>
+                    <LiveHotelCheckout
+                      hid={hid}
+                      detail={detail!}
+                      rate={selected}
+                      checkin={checkin}
+                      checkout={checkout}
+                      adults={adults}
+                      guest={liveGuest}
+                      amount={price}
+                      onConfirmed={(ref) => {
+                        setPayStep(false);
+                        commitBooking(ref);
+                      }}
+                      onUnavailable={(msg) => {
+                        setPayStep(false);
+                        setLiveError(msg);
+                        setSelected(null);
+                        scrollToRooms();
+                      }}
+                      onFallback={() => setLiveBooking(false)}
+                    />
+                  </>
+                ) : payMethod === 'company' ? (
                   savedCard && !useDifferentCard ? (
                     <>
                       <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">

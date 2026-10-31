@@ -29,6 +29,13 @@ export interface ReserveArgs {
   policy: PolicyStatus;
   policyNotes: string[];
   points: number;
+  /** Live-booking payload inputs — the untouched supplier rate + room descriptor
+   *  needed to build a real prebook. Undefined on display-only rates. */
+  rateRaw?: Record<string, unknown>;
+  roomCapacity?: number;
+  roomImages?: string[];
+  roomAmenities?: string[];
+  currency?: string;
 }
 
 function fmtFreeUntil(iso: string): string {
@@ -287,6 +294,11 @@ export function RoomCard({
                 policy,
                 policyNotes,
                 points,
+                rateRaw: rate.raw,
+                roomCapacity: room.capacity,
+                roomImages: room.images,
+                roomAmenities: room.amenities,
+                currency: rate.currency,
               })
             }
           >

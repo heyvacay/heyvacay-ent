@@ -123,6 +123,8 @@ export interface StoreApi {
     eventName?: string;
     /** Event allow-listed stay — skip travel policy (no approval / no block). */
     bypassPolicy?: boolean;
+    /** Supplier/booking reference from a real (live) booking, when issued. */
+    supplierRef?: string;
   }) => Booking;
   /** Company rule: whether booking for a custom/guest name needs approval. */
   guestBookingMode: GuestBookingMode;
@@ -717,7 +719,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy }) => {
+    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy, supplierRef }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
       const guest = guestName?.trim() || undefined;
       // An event allow-listed stay is pre-cleared by an admin: skip the travel
@@ -769,6 +771,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         travelerNote,
         eventId,
         eventName,
+        supplierRef,
       };
 
       setState((s) => {

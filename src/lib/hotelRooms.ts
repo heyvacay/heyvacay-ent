@@ -21,6 +21,14 @@ export interface RateRef {
   competitivePrice?: number;
   currency: string;
   freeCancellationBefore?: string | null;
+  /**
+   * The untouched supplier rate object from /hotels/details. A real prebook has
+   * to echo the supplier's own fields (price signature, payment_type, the full
+   * cancellation_policy, room descriptor), which the normalized fields above
+   * don't carry — so we keep the raw object to build the live booking payload
+   * exactly like heyvacay.co does.
+   */
+  raw?: Record<string, unknown>;
 }
 
 export interface MealOption {
@@ -103,6 +111,7 @@ function normRate(raw: Record<string, unknown> | null | undefined): RateRef | nu
     freeCancellationBefore:
       (raw.freeCancellationBefore as string | null | undefined) ?? null,
     taxes_fees: Array.isArray(raw.taxes_fees) ? (raw.taxes_fees as TaxFee[]) : undefined,
+    raw,
   };
 }
 

@@ -204,6 +204,8 @@ export interface Booking {
   /** The event this trip is tied to (when booking is event-scoped). */
   eventId?: string;
   eventName?: string;
+  /** The supplier/booking reference from a real (live) booking, when issued. */
+  supplierRef?: string;
 }
 
 export interface ChatMessage {

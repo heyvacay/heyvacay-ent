@@ -377,6 +377,10 @@ export interface HotelDetailData {
   about: string[];
   uiRooms: UiRoom[];
   noAvailability?: boolean;
+  /** Untouched supplier hotel + rooms, kept so a live booking can build the
+   *  prebook `hotel` payload exactly like heyvacay.co. */
+  rawHotel?: Record<string, unknown>;
+  rawRooms?: unknown[];
 }
 export interface HotelReviewTheme {
   theme: string;
@@ -447,6 +451,8 @@ export async function getHotelDetail(args: {
     about: Array.isArray(h.about_property) ? h.about_property : [],
     uiRooms: enrichUiRooms(data.UIRooms),
     noAvailability: data.noAvailability,
+    rawHotel: h as Record<string, unknown>,
+    rawRooms: Array.isArray(data.UIRooms) ? data.UIRooms : [],
   };
 }
 
