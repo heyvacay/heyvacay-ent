@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AccessControl,
   AppState,
   Billing,
   Net30KycFields,
@@ -58,6 +59,16 @@ export interface StoreApi {
   setRole: (r: Role) => void;
   /** True when the effective user is a company-wide (super) admin. */
   isSuperAdmin: boolean;
+  /** True when the active user can see ALL company data (owner, or a role /
+   *  department the company granted full access, or a per-user grant). */
+  fullAccess: boolean;
+  /** Whether a given user has full company-wide data visibility. */
+  userHasFullAccess: (u?: User | null) => boolean;
+  /** The ids of everyone who reports (directly or indirectly) to a manager. */
+  directReportIds: (managerId: string) => string[];
+  /** The company's data-access configuration (which roles/departments see all). */
+  accessControl: AccessControl;
+  setAccessControl: (patch: Partial<AccessControl>) => void;
   /** True when a Nova rep is viewing this company's account from the CRM. */
   viewingAs: boolean;
   setActiveUser: (id: string) => void;
@@ -77,7 +88,15 @@ export interface StoreApi {
     title: string;
     role: Role;
   }) => void;
-  updateUser: (id: string, patch: Partial<Pick<User, 'name' | 'title' | 'department' | 'role' | 'status' | 'approvalMode'>>) => void;
+  updateUser: (
+    id: string,
+    patch: Partial<
+      Pick<
+        User,
+        'name' | 'title' | 'department' | 'role' | 'status' | 'approvalMode' | 'managerId' | 'fullAccess' | 'superAdmin'
+      >
+    >
+  ) => void;
   /** Set a user's home city (used to decide if they need a hotel for an event). */
   setHomeCity: (userId: string, city: string, lat?: number, lng?: number) => void;
   /** Effective booking approval mode for a traveler (employee override ∨ company default). */
@@ -284,6 +303,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // A super admin is an admin flagged with company-wide control. A plain admin
   // is a team manager scoped to their department.
   const isSuperAdmin = role === 'admin' && !!activeUser?.superAdmin;
+
+  // Who sees ALL company data: the owner always, plus any role or department
+  // the company put on its access list, plus any per-user grant. Companies
+  // configure this on the Access & visibility settings.
+  const accessControl: AccessControl = state.company.accessControl ?? {
+    fullAccessRoles: [],
+    fullAccessDepartments: ['Finance'],
+  };
+  const userHasFullAccess = useCallback(
+    (u?: User | null): boolean => {
+      if (!u) return false;
+      if (u.superAdmin) return true;
+      if (u.fullAccess) return true;
+      if (accessControl.fullAccessRoles.includes(u.role)) return true;
+      if (accessControl.fullAccessDepartments.includes(u.department)) return true;
+      return false;
+    },
+    [accessControl]
+  );
+  const fullAccess = userHasFullAccess(activeUser);
+
+  const directReportIds = useCallback(
+    (managerId: string): string[] => {
+      const out: string[] = [];
+      const walk = (mid: string) => {
+        for (const u of state.users) {
+          if (u.managerId === mid && !out.includes(u.id)) {
+            out.push(u.id);
+            walk(u.id);
+          }
+        }
+      };
+      walk(managerId);
+      return out;
+    },
+    [state.users]
+  );
+
+  const setAccessControl: StoreApi['setAccessControl'] = useCallback((patch) => {
+    setState((s) => {
+      const current = s.company.accessControl ?? {
+        fullAccessRoles: [],
+        fullAccessDepartments: ['Finance'],
+      };
+      return { ...s, company: { ...s.company, accessControl: { ...current, ...patch } } };
+    });
+  }, []);
 
   const userById = useCallback(
     (id: string) => state.users.find((u) => u.id === id),
@@ -1275,6 +1341,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     role,
     setRole,
     isSuperAdmin,
+    fullAccess,
+    userHasFullAccess,
+    directReportIds,
+    accessControl,
+    setAccessControl,
     viewingAs: impersonation != null,
     setActiveUser,
     userById,

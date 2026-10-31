@@ -89,13 +89,12 @@ function BudgetRow({
 }
 
 export default function BudgetsPage() {
-  const { state, activeUser, isSuperAdmin, spentForScope, updateBudgetLimit, setScopedBudget, companySpend } =
+  const { state, activeUser, fullAccess, spentForScope, updateBudgetLimit, setScopedBudget, companySpend } =
     useStore();
 
-  // Finance and super admins see the whole company. A team manager sees the
-  // company T&E (read-only context) and manages only their own team.
-  const isFinance = activeUser.department === 'Finance';
-  const fullAccess = isSuperAdmin || isFinance;
+  // Full-access viewers (owner, finance, or any role/department the company
+  // grants) see and manage the whole company. A team manager sees the company
+  // T&E (read-only context) and manages only their own team.
   const myDept = activeUser.department;
 
   const company = state.budgets.find((b) => b.scope === 'company');

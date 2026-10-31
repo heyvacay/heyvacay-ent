@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import {
   getHotelDetail,
@@ -45,6 +45,7 @@ function Stars({ n = 0 }: { n?: number }) {
 
 export default function HotelDetail({ hid }: { hid: string }) {
   const params = useSearchParams();
+  const router = useRouter();
   const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor, submitExpense } =
     useStore();
   const canBookForOthers = role === 'admin' || role === 'booker';
@@ -436,7 +437,19 @@ export default function HotelDetail({ hid }: { hid: string }) {
         href="#"
         onClick={(e) => {
           e.preventDefault();
-          history.back();
+          // Prefer going back; on a fresh load (no history) rebuild the results
+          // URL from the search context we carry, falling back to the search.
+          if (typeof window !== 'undefined' && window.history.length > 1) {
+            router.back();
+            return;
+          }
+          const keep = ['regionId', 'lat', 'lng', 'label', 'checkin', 'checkout', 'adults', 'travelerId', 'guestName', 'eventId', 'eventName'];
+          const qs = new URLSearchParams();
+          keep.forEach((k) => {
+            const v = params.get(k);
+            if (v) qs.set(k, v);
+          });
+          router.push(qs.toString() ? `/app/hotels?${qs.toString()}` : '/app/book');
         }}
         className="text-sm font-medium text-brand-dark hover:underline"
       >

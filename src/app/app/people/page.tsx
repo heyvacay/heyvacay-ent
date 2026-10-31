@@ -16,11 +16,18 @@ import { money } from '@/lib/format';
 import type { Role } from '@/lib/types';
 
 export default function PeoplePage() {
-  const { state, inviteUser, updateUser, spentForScope } = useStore();
+  const { state, inviteUser, updateUser, spentForScope, fullAccess, userHasFullAccess, directReportIds } =
+    useStore();
   const [open, setOpen] = useState(false);
-  const [edit, setEdit] = useState<{ id: string; name: string; title: string; department: string } | null>(
-    null
-  );
+  const [edit, setEdit] = useState<{
+    id: string;
+    name: string;
+    title: string;
+    department: string;
+    managerId: string;
+    fullAccess: boolean;
+  } | null>(null);
+  const nameOf = (id?: string) => state.users.find((u) => u.id === id)?.name;
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -151,6 +158,24 @@ export default function PeoplePage() {
                   <td className="px-5 py-3 text-slate-600">
                     <div>{u.department}</div>
                     <div className="text-xs text-slate-400">{u.title}</div>
+                    <div className="mt-0.5 flex flex-wrap gap-1.5">
+                      {u.managerId && (
+                        <span className="text-[11px] text-slate-400">
+                          Reports to {nameOf(u.managerId) ?? '—'}
+                        </span>
+                      )}
+                      {directReportIds(u.id).length > 0 && (
+                        <span className="rounded-full bg-slate-100 px-1.5 text-[11px] font-medium text-slate-500">
+                          {directReportIds(u.id).length} report
+                          {directReportIds(u.id).length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {userHasFullAccess(u) && (
+                        <span className="rounded-full bg-brand/10 px-1.5 text-[11px] font-semibold text-brand-dark">
+                          Full access
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-3">
                     <span className="inline-block w-32">
@@ -184,7 +209,14 @@ export default function PeoplePage() {
                         size="sm"
                         variant="ghost"
                         onClick={() =>
-                          setEdit({ id: u.id, name: u.name, title: u.title, department: u.department })
+                          setEdit({
+                            id: u.id,
+                            name: u.name,
+                            title: u.title,
+                            department: u.department,
+                            managerId: u.managerId ?? '',
+                            fullAccess: !!u.fullAccess,
+                          })
                         }
                       >
                         Edit
@@ -234,7 +266,41 @@ export default function PeoplePage() {
               <Field label="Department">
                 <Input value={edit.department} onChange={(e) => setEdit({ ...edit, department: e.target.value })} />
               </Field>
+              <Field label="Reports to" hint="Their manager — sets up direct reports.">
+                <Select
+                  value={edit.managerId}
+                  onChange={(e) => setEdit({ ...edit, managerId: e.target.value })}
+                >
+                  <option value="">No manager</option>
+                  {state.users
+                    .filter((u) => u.id !== edit.id && u.status !== 'deactivated')
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} · {u.title}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
             </div>
+            {fullAccess && (
+              <div className="px-5 pb-1">
+                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 p-3">
+                  <input
+                    type="checkbox"
+                    checked={edit.fullAccess}
+                    onChange={(e) => setEdit({ ...edit, fullAccess: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-800">Full data access</span>
+                    <span className="block text-xs text-slate-400">
+                      See every team&apos;s trips, expenses, budgets and policies — company-wide, not
+                      just their own team. Use for finance and leadership.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
               <Button variant="ghost" onClick={() => setEdit(null)}>
                 Cancel
@@ -245,6 +311,8 @@ export default function PeoplePage() {
                     name: edit.name.trim(),
                     title: edit.title.trim(),
                     department: edit.department.trim(),
+                    managerId: edit.managerId || undefined,
+                    fullAccess: edit.fullAccess,
                   });
                   setEdit(null);
                 }}

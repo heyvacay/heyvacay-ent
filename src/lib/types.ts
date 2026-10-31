@@ -16,6 +16,19 @@ export type Role = 'admin' | 'booker' | 'employee';
  */
 export type BookingApprovalMode = 'open' | 'pre_approval' | 'event_required';
 
+/**
+ * Who can see ALL company data (every team, every user's trips, expenses,
+ * budgets and policies) vs. only their own team. The account owner always
+ * can; beyond that the company decides which roles and which departments get
+ * full visibility — e.g. Finance and the account owner.
+ */
+export interface AccessControl {
+  /** Roles whose members see all company data. */
+  fullAccessRoles: Role[];
+  /** Departments whose members see all company data (e.g. "Finance"). */
+  fullAccessDepartments: string[];
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -23,6 +36,8 @@ export interface Company {
   domain: string;
   /** Company-wide default booking approval mode (per-employee can override). */
   approvalMode?: BookingApprovalMode;
+  /** Which roles/departments get full company-wide data visibility. */
+  accessControl?: AccessControl;
 }
 
 export interface User {
@@ -34,6 +49,11 @@ export interface User {
   superAdmin?: boolean;
   department: string;
   title: string;
+  /** Who this person reports to (another user's id). */
+  managerId?: string;
+  /** Explicit per-person grant of full company-wide data visibility, on top
+   *  of whatever the company's accessControl roles/departments allow. */
+  fullAccess?: boolean;
   status: 'active' | 'invited' | 'deactivated';
   loyalty: { program: string; number: string }[];
   personalLinked: boolean;

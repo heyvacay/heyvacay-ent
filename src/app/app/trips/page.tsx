@@ -167,7 +167,7 @@ function Row({ k, v, tone }: { k: string; v: string; tone?: 'emerald' | 'brand' 
 }
 
 export default function TripsPage() {
-  const { state, role, activeUser, isSuperAdmin, userById, cancelTrip } = useStore();
+  const { state, role, activeUser, fullAccess, directReportIds, userById, cancelTrip } = useStore();
   const [details, setDetails] = useState<Booking | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const isAdmin = role === 'admin';
@@ -175,9 +175,13 @@ export default function TripsPage() {
   const [person, setPerson] = useState<'all' | string>('all');
   const [dept, setDept] = useState<'all' | string>('all');
 
-  // A team admin manages their department; a super admin manages everyone.
+  // Full-access viewers (owner, finance, anyone the company grants it) see the
+  // whole company; a team manager sees their department plus their reports.
+  const myReports = directReportIds(activeUser.id);
   const teamUsers = state.users.filter(
-    (u) => u.status === 'active' && (isSuperAdmin || u.department === activeUser.department)
+    (u) =>
+      u.status === 'active' &&
+      (fullAccess || u.department === activeUser.department || myReports.includes(u.id))
   );
   const teamDepartments = Array.from(new Set(teamUsers.map((u) => u.department).filter(Boolean))).sort();
   const nameOf = (id: string) => userById(id)?.name ?? '—';
@@ -218,7 +222,7 @@ export default function TripsPage() {
         title="Trips"
         subtitle={
           viewingTeam
-            ? `Bookings across ${isSuperAdmin ? 'the company' : 'your team'}.`
+            ? `Bookings across ${fullAccess ? 'the company' : 'your team'}.`
             : "Everything you've booked, past and upcoming."
         }
         actions={<Button href="/app/book">Book travel</Button>}
@@ -231,7 +235,7 @@ export default function TripsPage() {
             {(
               [
                 ['mine', 'My trips'],
-                ['team', isSuperAdmin ? "Company trips" : "My team's trips"],
+                ['team', fullAccess ? "Company trips" : "My team's trips"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -248,7 +252,7 @@ export default function TripsPage() {
           </div>
           {viewingTeam && (
             <div className="flex flex-wrap gap-2">
-              {isSuperAdmin && (
+              {fullAccess && (
                 <Select value={dept} onChange={(e) => setDept(e.target.value)} className="sm:w-44">
                   <option value="all">All sub-teams</option>
                   {teamDepartments.map((d) => (

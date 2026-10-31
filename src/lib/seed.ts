@@ -15,6 +15,12 @@ const company = {
   name: 'Northwind Robotics',
   currency: 'USD',
   domain: 'northwind.co',
+  // The owner always sees everything; Finance does too by default. Companies
+  // can add more roles/departments on the Access & visibility settings.
+  accessControl: {
+    fullAccessRoles: [] as ('admin' | 'booker' | 'employee')[],
+    fullAccessDepartments: ['Finance'],
+  },
 };
 
 const users = [
@@ -49,6 +55,7 @@ const users = [
     role: 'employee' as const,
     department: 'Sales',
     title: 'Account Executive',
+    managerId: 'u_dana',
     status: 'active' as const,
     loyalty: [{ program: 'Marriott Bonvoy', number: 'MB-882190' }],
     personalLinked: true,
@@ -71,6 +78,18 @@ const users = [
     role: 'employee' as const,
     department: 'Engineering',
     title: 'Product Designer',
+    managerId: 'u_priya',
+    status: 'active' as const,
+    loyalty: [],
+    personalLinked: true,
+  },
+  {
+    id: 'u_nadia',
+    name: 'Nadia Khan',
+    email: 'nadia@northwind.co',
+    role: 'admin' as const,
+    department: 'Finance',
+    title: 'VP Finance',
     status: 'active' as const,
     loyalty: [],
     personalLinked: true,

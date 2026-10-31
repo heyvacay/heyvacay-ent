@@ -42,7 +42,8 @@ export default function ExpensesPage() {
     role,
     activeUser,
     userById,
-    isSuperAdmin,
+    fullAccess,
+    directReportIds,
     submitExpense,
     setExpenseStatus,
     syncExpense,
@@ -99,9 +100,14 @@ export default function ExpensesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
-  // Admins can scope to their team and filter by sub-team / person.
+  // Admins can scope to their team and filter by sub-team / person. Full-access
+  // viewers (owner, finance) see the whole company; a manager sees their
+  // department plus their direct + indirect reports.
+  const myReports = directReportIds(activeUser.id);
   const teamUsers = state.users.filter(
-    (u) => u.status === 'active' && (isSuperAdmin || u.department === activeUser.department)
+    (u) =>
+      u.status === 'active' &&
+      (fullAccess || u.department === activeUser.department || myReports.includes(u.id))
   );
   const teamDepartments = Array.from(
     new Set(teamUsers.map((u) => u.department).filter(Boolean))
@@ -111,7 +117,7 @@ export default function ExpensesPage() {
   const visible = !isAdmin
     ? state.expenses.filter((e) => e.userId === activeUser.id)
     : state.expenses.filter((e) => {
-        if (!isSuperAdmin && !teamUsers.some((u) => u.id === e.userId)) return false;
+        if (!fullAccess && !teamUsers.some((u) => u.id === e.userId)) return false;
         if (expDept !== 'all' && userDept(e.userId) !== expDept) return false;
         if (expPerson !== 'all' && e.userId !== expPerson) return false;
         return true;
@@ -402,7 +408,7 @@ export default function ExpensesPage() {
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Filter
           </span>
-          {isSuperAdmin && (
+          {fullAccess && (
             <Select value={expDept} onChange={(e) => setExpDept(e.target.value)} className="sm:w-44">
               <option value="all">All sub-teams</option>
               {teamDepartments.map((d) => (

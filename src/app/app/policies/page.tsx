@@ -240,8 +240,17 @@ function FlightPreview({ tiers }: { tiers: FlightCabinTier[] }) {
 /* ---------------- page ---------------- */
 
 export default function PoliciesPage() {
-  const { state, isSuperAdmin, changePolicy, resolvePolicyChange, guestBookingMode, setGuestBookingMode } =
-    useStore();
+  const {
+    state,
+    isSuperAdmin,
+    fullAccess,
+    accessControl,
+    setAccessControl,
+    changePolicy,
+    resolvePolicyChange,
+    guestBookingMode,
+    setGuestBookingMode,
+  } = useStore();
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
   const companyMode = state.company.approvalMode ?? 'open';
 
@@ -360,6 +369,96 @@ export default function PoliciesPage() {
           <Check className="h-4 w-4" /> Change to {requestedNote} sent for approval.
         </div>
       )}
+
+      {/* Access & visibility — who can see ALL company data */}
+      <Card className="mb-6">
+        <h2 className="font-display text-lg font-bold text-slate-900">Access &amp; visibility</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Everyone sees their own trips, and team managers see their team. Pick which{' '}
+          <span className="font-medium">roles</span> and <span className="font-medium">departments</span>{' '}
+          can see <span className="font-medium">all</span> company data — every team&apos;s trips,
+          expenses, budgets and policies. The account owner always can.
+        </p>
+        {!fullAccess && (
+          <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Only the owner or someone with full data access can change these settings.
+          </p>
+        )}
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Roles</p>
+            <div className="space-y-1.5">
+              {(['admin', 'booker', 'employee'] as const).map((r) => {
+                const on = accessControl.fullAccessRoles.includes(r);
+                return (
+                  <label
+                    key={r}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-sm capitalize',
+                      on ? 'border-brand bg-brand/5 text-slate-900' : 'border-slate-200 text-slate-600',
+                      !fullAccess && 'cursor-not-allowed opacity-60'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={!fullAccess}
+                      onChange={() =>
+                        setAccessControl({
+                          fullAccessRoles: on
+                            ? accessControl.fullAccessRoles.filter((x) => x !== r)
+                            : [...accessControl.fullAccessRoles, r],
+                        })
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    />
+                    {r === 'admin' ? 'Admins' : r === 'booker' ? 'Bookers' : 'Employees'}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Departments
+            </p>
+            <div className="max-h-40 space-y-1.5 overflow-auto pr-1">
+              {departments.map((d) => {
+                const on = accessControl.fullAccessDepartments.includes(d);
+                return (
+                  <label
+                    key={d}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-sm',
+                      on ? 'border-brand bg-brand/5 text-slate-900' : 'border-slate-200 text-slate-600',
+                      !fullAccess && 'cursor-not-allowed opacity-60'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={!fullAccess}
+                      onChange={() =>
+                        setAccessControl({
+                          fullAccessDepartments: on
+                            ? accessControl.fullAccessDepartments.filter((x) => x !== d)
+                            : [...accessControl.fullAccessDepartments, d],
+                        })
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    />
+                    {d}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <p className="mt-4 text-xs text-slate-400">
+          Need one specific person to see everything? Give them full access on their profile in{' '}
+          <span className="font-medium">People</span>.
+        </p>
+      </Card>
 
       {/* Super-admin: pending policy-change approvals */}
       {isSuperAdmin && pendingPolicyReqs.length > 0 && (
