@@ -36,7 +36,7 @@ export function LiveFlightCheckout({
   amount: number;
   defaultPassenger: Partial<FlightPassenger>;
   defaultContact: FlightContact;
-  onConfirmed: (bookingRef: string) => void;
+  onConfirmed: (bookingRef: string, paymentIntentId?: string) => void;
   onUnavailable: (message: string) => void;
   onFallback: () => void;
 }) {
@@ -121,7 +121,7 @@ export function LiveFlightCheckout({
       setPhase('error');
       return;
     }
-    onConfirmed(res.bookingRef);
+    onConfirmed(res.bookingRef, paymentIntentId.current);
   };
 
   if (phase === 'starting' || phase === 'processing') {

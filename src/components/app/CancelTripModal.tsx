@@ -51,6 +51,8 @@ export function CancelTripModal({
   // The refund we actually show on the summary — the supplier's figure for a
   // live booking, else the quoted estimate.
   const [finalRefund, setFinalRefund] = useState(quote.refundable);
+  // When a live refund was actually issued on Stripe.
+  const [refundIssued, setRefundIssued] = useState(false);
 
   const submit = async () => {
     if (!isFlight && !reason) {
@@ -64,14 +66,16 @@ export function CancelTripModal({
         : tripCancelReasonLabel(reason);
 
     let refund = quote.refundable;
-    // Real supplier booking → cancel it for real. If live booking is off (501)
-    // we still record the cancellation locally.
+    // Real supplier booking → cancel it for real and issue the refund on Stripe.
+    // If live booking is off (501) we still record the cancellation locally.
     if (booking.supplierRef) {
       setBusy(true);
       const res = await cancelLiveTrip({
         type: booking.type,
         supplierRef: booking.supplierRef,
         comment,
+        paymentIntentId: booking.stripePaymentIntentId,
+        refundDue: quote.refundable,
       });
       setBusy(false);
       if (res.supportRequired) {
@@ -79,6 +83,7 @@ export function CancelTripModal({
         return;
       }
       if (typeof res.refundAmount === 'number') refund = res.refundAmount;
+      if ((res.refundId || res.refundSource) && refund > 0) setRefundIssued(true);
     }
 
     setFinalRefund(refund);
@@ -245,10 +250,15 @@ export function CancelTripModal({
                 {refundSummaryLine(
                   { refundable: finalRefund, refundMethod: quote.refundMethod },
                   booking.type,
-                  false,
+                  refundIssued,
                   money
                 )}
               </p>
+              {refundIssued && (
+                <p className="mx-auto mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                  <Check className="h-3 w-3" /> Refunded on Stripe
+                </p>
+              )}
               {finalRefund !== quote.refundable && (
                 <p className="mx-auto mt-2 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   Heads up: the estimate before cancelling was {money(quote.refundable)}, but the

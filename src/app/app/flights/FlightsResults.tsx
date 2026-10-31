@@ -295,7 +295,8 @@ export default function FlightsResults() {
     extra = 0,
     fareLabel = '',
     seat: string | null = null,
-    realRef?: string
+    realRef?: string,
+    stripePaymentIntentId?: string
   ) => {
     const finalOpt: InventoryOption = {
       ...opt,
@@ -312,6 +313,7 @@ export default function FlightsResults() {
       eventId,
       eventName,
       supplierRef: realRef,
+      stripePaymentIntentId,
     });
     setConfirmed({ opt: finalOpt, pending: needsApproval });
     setSelected(null);
@@ -436,7 +438,7 @@ export default function FlightsResults() {
           opt={selected}
           onClose={() => setSelected(null)}
           onConfirm={(extra, fareLabel, seat) => confirm(selected, extra, fareLabel, seat)}
-          onLiveConfirmed={(ref) => confirm(selected, 0, '', null, ref)}
+          onLiveConfirmed={(ref, piId) => confirm(selected, 0, '', null, ref, piId)}
           onLiveUnavailable={(msg) => {
             setSelected(null);
             setLiveError(msg);
@@ -570,7 +572,7 @@ function CheckoutPanel({
   opt: InventoryOption;
   onClose: () => void;
   onConfirm: (extra: number, fareLabel: string, seat: string | null) => void;
-  onLiveConfirmed: (ref: string) => void;
+  onLiveConfirmed: (ref: string, paymentIntentId?: string) => void;
   onLiveUnavailable: (msg: string) => void;
   onFallback: () => void;
   liveBooking: boolean;

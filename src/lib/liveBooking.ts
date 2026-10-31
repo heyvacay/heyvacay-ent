@@ -433,23 +433,46 @@ export function newIdempotencyKey(): string {
 export interface LiveCancelResult {
   /** The request reached the backend and the booking was cancelled. */
   ok: boolean;
-  /** Authoritative refund from the supplier, when returned. */
+  /** Refund actually issued on the card, when known. */
   refundAmount?: number;
+  /** The Stripe refund id, when a refund was issued. */
+  refundId?: string;
+  /** Where the refund was issued: the backend's cancel, or our direct Stripe. */
+  refundSource?: 'backend' | 'stripe';
   /** Backend says this booking can't be cancelled online — route to support. */
   supportRequired: boolean;
   /** Live booking isn't configured — caller falls back to a local cancel. */
   notLive: boolean;
 }
 
+function readRefundId(data: Record<string, unknown>): string | undefined {
+  if (typeof data.refundId === 'string') return data.refundId;
+  const refund = data.refund as Record<string, unknown> | undefined;
+  if (refund && typeof refund.id === 'string') return refund.id;
+  return undefined;
+}
+
 /**
  * Cancel a real supplier booking (hotel or flight) through the service-account
- * proxy. Returns notLive when the server has live booking off (501) so the
- * caller can still record the cancellation locally.
+ * proxy, then make sure the refund actually lands on Stripe.
+ *
+ * The backend's /bookings/cancel owns the order↔PaymentIntent mapping and
+ * normally issues the Stripe refund itself — we read that back. Only if it did
+ * NOT return a refund, a refund is due, and we hold the PaymentIntent do we
+ * issue the Stripe refund ourselves (full or partial). The refund route is
+ * idempotent per PaymentIntent, so this can never double-refund.
+ *
+ * Returns notLive when the server has live booking off (501) so the caller can
+ * still record the cancellation locally.
  */
 export async function cancelLiveTrip(args: {
   type: string;
   supplierRef: string;
   comment?: string;
+  /** Stripe PaymentIntent the booking was charged on (for a direct refund). */
+  paymentIntentId?: string;
+  /** Refund the traveler is owed per policy (so we can issue it if needed). */
+  refundDue?: number;
 }): Promise<LiveCancelResult> {
   try {
     const { ok, status, data } =
@@ -460,12 +483,39 @@ export async function cancelLiveTrip(args: {
             cancellationReason: 'user_request',
             cancellationComment: args.comment,
           });
-    return {
-      ok,
-      refundAmount: typeof data.refundAmount === 'number' ? data.refundAmount : undefined,
-      supportRequired: data.errorCode === 'CANCELLATION_REQUIRES_SUPPORT',
-      notLive: status === 501,
-    };
+
+    if (status === 501) return { ok: false, supportRequired: false, notLive: true };
+    if (data.errorCode === 'CANCELLATION_REQUIRES_SUPPORT') {
+      return { ok, supportRequired: true, notLive: false };
+    }
+
+    // Did the backend already refund on Stripe?
+    let refundAmount = typeof data.refundAmount === 'number' ? data.refundAmount : undefined;
+    let refundId = readRefundId(data);
+    let refundSource: 'backend' | 'stripe' | undefined = refundId != null ? 'backend' : undefined;
+
+    // It didn't, a refund is owed, and we hold the PaymentIntent → issue it on
+    // Stripe ourselves (idempotent, so safe even if the backend also tries).
+    if (
+      ok &&
+      refundAmount == null &&
+      args.refundDue &&
+      args.refundDue > 0 &&
+      args.paymentIntentId
+    ) {
+      const r = await postJson('/api/payments/refund', {
+        paymentIntentId: args.paymentIntentId,
+        amount: args.refundDue,
+        bookingRef: args.supplierRef,
+      });
+      if (r.ok && (r.data.refundId || r.data.status)) {
+        refundAmount = typeof r.data.amount === 'number' ? r.data.amount : args.refundDue;
+        refundId = r.data.refundId as string | undefined;
+        refundSource = 'stripe';
+      }
+    }
+
+    return { ok, refundAmount, refundId, refundSource, supportRequired: false, notLive: false };
   } catch {
     return { ok: false, supportRequired: false, notLive: false };
   }

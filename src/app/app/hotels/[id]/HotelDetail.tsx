@@ -217,7 +217,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
 
   // Commit the booking (after payment / approval decision). A realRef is passed
   // when a live supplier order was actually issued; otherwise we show a demo ref.
-  const commitBooking = (realRef?: string) => {
+  const commitBooking = (realRef?: string, stripePaymentIntentId?: string) => {
     book({
       opt,
       travelerId,
@@ -231,6 +231,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
       eventName,
       bypassPolicy: eventAllow,
       supplierRef: realRef,
+      stripePaymentIntentId,
     });
     setConfirmed({
       pending: needsApproval,
@@ -1070,9 +1071,9 @@ export default function HotelDetail({ hid }: { hid: string }) {
                         adults={adults}
                         guest={liveGuest}
                         amount={price}
-                        onConfirmed={(ref) => {
+                        onConfirmed={(ref, piId) => {
                           setPayStep(false);
-                          commitBooking(ref);
+                          commitBooking(ref, piId);
                         }}
                         onUnavailable={(msg) => {
                           setPayStep(false);

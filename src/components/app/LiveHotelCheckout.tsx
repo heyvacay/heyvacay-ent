@@ -49,7 +49,7 @@ export function LiveHotelCheckout({
   adults: number;
   guest: LiveGuest;
   amount: number;
-  onConfirmed: (bookingRef: string) => void;
+  onConfirmed: (bookingRef: string, paymentIntentId?: string) => void;
   onUnavailable: (message: string) => void;
   onFallback: () => void;
 }) {
@@ -172,7 +172,7 @@ export function LiveHotelCheckout({
     const ref = res.bookingRef || s.bookingRef;
     // Already terminal?
     if (res.status === 'confirmed') {
-      onConfirmed(ref);
+      onConfirmed(ref, s.orderId);
       return;
     }
     if (res.status && ['failed', 'error', 'cancelled'].includes(res.status)) {
@@ -185,7 +185,7 @@ export function LiveHotelCheckout({
     // "said booked but wasn't" trap).
     const poll = await pollStatus(ref);
     if (poll.ok) {
-      onConfirmed(ref);
+      onConfirmed(ref, s.orderId);
       return;
     }
     if (poll.failed) {

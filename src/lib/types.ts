@@ -226,6 +226,9 @@ export interface Booking {
   eventName?: string;
   /** The supplier/booking reference from a real (live) booking, when issued. */
   supplierRef?: string;
+  /** The Stripe PaymentIntent id the charge was made on, so a cancellation can
+   *  issue the refund against the right charge. */
+  stripePaymentIntentId?: string;
   /** Cancellation record (set when the trip is cancelled through the refund flow). */
   cancelledAt?: string;
   cancellationReason?: string;
