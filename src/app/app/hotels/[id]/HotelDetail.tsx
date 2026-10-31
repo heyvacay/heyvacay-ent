@@ -1041,6 +1041,14 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   ))}
                 </div>
 
+                {!liveBooking && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <span className="font-semibold">Demo checkout.</span> This records the trip but
+                    does <span className="font-semibold">not</span> book with the hotel or charge a
+                    card. Real reservations need live booking turned on (service account).
+                  </p>
+                )}
+
                 {liveBooking ? (
                   // Live booking is ON: a real supplier order must be created.
                   // Never fall through to the generic charge path — that would

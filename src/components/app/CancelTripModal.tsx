@@ -249,6 +249,12 @@ export function CancelTripModal({
                   money
                 )}
               </p>
+              {finalRefund !== quote.refundable && (
+                <p className="mx-auto mt-2 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Heads up: the estimate before cancelling was {money(quote.refundable)}, but the
+                  hotel&apos;s final cancellation terms set the actual refund at {money(finalRefund)}.
+                </p>
+              )}
             </div>
 
             <div className="mt-5 space-y-3 rounded-2xl border border-slate-200 p-4 text-sm">

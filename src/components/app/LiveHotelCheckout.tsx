@@ -53,10 +53,11 @@ export function LiveHotelCheckout({
   onUnavailable: (message: string) => void;
   onFallback: () => void;
 }) {
-  type Phase = 'prep' | 'pay' | 'processing' | 'error';
+  type Phase = 'prep' | 'pay' | 'processing' | 'error' | 'pending';
   const [phase, setPhase] = useState<Phase>('prep');
   const [prepMsg, setPrepMsg] = useState('Locking in your room…');
   const [error, setError] = useState('');
+  const [pendingRef, setPendingRef] = useState('');
   const [pk, setPk] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   // Carried from payment-init into confirm.
@@ -116,7 +117,13 @@ export function LiveHotelCheckout({
           currency: rate.currency || 'USD',
         });
         if (!init.clientSecret) {
-          setError('Payment could not be initialized. Please try again.');
+          const backendMsg =
+            (init.raw?.message as string) || (init.raw?.error as string) || '';
+          setError(
+            backendMsg
+              ? `Payment could not be initialized: ${backendMsg}`
+              : 'Payment could not be initialized. Please try again.'
+          );
           setPhase('error');
           return;
         }
@@ -173,7 +180,9 @@ export function LiveHotelCheckout({
       setPhase('error');
       return;
     }
-    // Poll until the supplier confirms.
+    // Poll until the supplier confirms. We only report a confirmed booking when
+    // the supplier actually confirms — never on a timeout (that's exactly the
+    // "said booked but wasn't" trap).
     const poll = await pollStatus(ref);
     if (poll.ok) {
       onConfirmed(ref);
@@ -184,9 +193,10 @@ export function LiveHotelCheckout({
       setPhase('error');
       return;
     }
-    // Pending past our window — treat as "under review" and let the trip record
-    // with the ref; it will reconcile server-side.
-    onConfirmed(ref);
+    // Still processing past our window: don't claim success. Surface the ref so
+    // it can be checked in Nova / the backend.
+    setPendingRef(ref);
+    setPhase('pending');
   };
 
   if (phase === 'prep' || phase === 'processing') {
@@ -206,6 +216,22 @@ export function LiveHotelCheckout({
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>
         <Button variant="outline" className="w-full" onClick={() => onUnavailable(error)}>
           Back to rooms
+        </Button>
+      </div>
+    );
+  }
+
+  if (phase === 'pending') {
+    return (
+      <div className="space-y-3">
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          Your payment went through and the hotel is still confirming this stay. It hasn&apos;t
+          confirmed yet, so we haven&apos;t marked it booked. Reference{' '}
+          <span className="font-mono font-semibold">{pendingRef}</span> — you can track it in Nova;
+          it&apos;ll confirm or auto-refund shortly.
+        </p>
+        <Button variant="outline" className="w-full" onClick={() => onUnavailable('')}>
+          Close
         </Button>
       </div>
     );
