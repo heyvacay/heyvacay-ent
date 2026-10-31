@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Logo } from '@/components/app/Logo';
+import { StoreProvider } from '@/lib/store';
 
 export const metadata: Metadata = {
   title: 'Nova — HeyVacay Internal',
@@ -19,6 +20,7 @@ export default function NovaLayout({
   children: React.ReactNode;
 }) {
   return (
+    <StoreProvider>
     <div className="min-h-screen bg-navy-deep text-mist">
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-line bg-navy px-5 py-6 lg:flex">
         <div className="flex items-center">
@@ -56,5 +58,6 @@ export default function NovaLayout({
         <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">{children}</main>
       </div>
     </div>
+    </StoreProvider>
   );
 }

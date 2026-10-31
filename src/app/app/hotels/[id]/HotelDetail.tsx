@@ -292,9 +292,6 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const savedCard = state.billing?.mode === 'card' && !!state.billing?.cardLast4;
   const personalCard = activeUser.personalCard;
 
-  // A real supplier order can be issued only when live booking is configured and
-  // we captured the untouched supplier rate on the selected room.
-  const liveReady = liveBooking && !!selected?.rateRaw && !!detail;
   const liveGuest: LiveGuest = (() => {
     const trav = state.users.find((u) => u.id === travelerId);
     const display = guestName?.trim() || trav?.name || activeUser.name;
@@ -1044,35 +1041,60 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   ))}
                 </div>
 
-                {liveReady && selected ? (
-                  <>
-                    <p className="rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-dark">
-                      {payMethod === 'personal'
-                        ? 'Paying personally — you’ll be reimbursed. This books a real room with the hotel.'
-                        : 'This books a real room with the hotel — your card is authorized now and charged when the hotel confirms.'}
-                    </p>
-                    <LiveHotelCheckout
-                      hid={hid}
-                      detail={detail!}
-                      rate={selected}
-                      checkin={checkin}
-                      checkout={checkout}
-                      adults={adults}
-                      guest={liveGuest}
-                      amount={price}
-                      onConfirmed={(ref) => {
-                        setPayStep(false);
-                        commitBooking(ref);
-                      }}
-                      onUnavailable={(msg) => {
-                        setPayStep(false);
-                        setLiveError(msg);
-                        setSelected(null);
-                        scrollToRooms();
-                      }}
-                      onFallback={() => setLiveBooking(false)}
-                    />
-                  </>
+                {liveBooking ? (
+                  // Live booking is ON: a real supplier order must be created.
+                  // Never fall through to the generic charge path — that would
+                  // take money without locking a room. If we don't have the
+                  // supplier rate for this room, block and ask them to reselect.
+                  selected?.rateRaw && detail ? (
+                    <>
+                      <p className="rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-dark">
+                        {payMethod === 'personal'
+                          ? 'Paying personally — you’ll be reimbursed. This books a real room with the hotel.'
+                          : 'This books a real room with the hotel — your card is authorized now and charged when the hotel confirms.'}
+                      </p>
+                      <LiveHotelCheckout
+                        hid={hid}
+                        detail={detail}
+                        rate={selected}
+                        checkin={checkin}
+                        checkout={checkout}
+                        adults={adults}
+                        guest={liveGuest}
+                        amount={price}
+                        onConfirmed={(ref) => {
+                          setPayStep(false);
+                          commitBooking(ref);
+                        }}
+                        onUnavailable={(msg) => {
+                          setPayStep(false);
+                          setLiveError(msg);
+                          setSelected(null);
+                          scrollToRooms();
+                        }}
+                        onFallback={() => setLiveBooking(false)}
+                      />
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                        We couldn&apos;t load this room&apos;s booking details, so we can&apos;t confirm
+                        it with the hotel. Please go back and pick the room again — your card won&apos;t
+                        be charged until a room is locked in.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setPayStep(false);
+                          setSelected(null);
+                          scrollToRooms();
+                        }}
+                      >
+                        Back to rooms
+                      </Button>
+                    </div>
+                  )
                 ) : payMethod === 'company' ? (
                   savedCard && !useDifferentCard ? (
                     <>

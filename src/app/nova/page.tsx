@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   useNovaBookings,
+  entBookingToNova,
   statusConfig,
   currencySymbol,
   CANCELLATION_REASONS,
@@ -10,6 +11,7 @@ import {
   type BookingStatus,
   type CancellationReason,
 } from '@/lib/novaBookings';
+import { useStore } from '@/lib/store';
 import { money, shortDate } from '@/lib/format';
 import { refundQuote, refundTimeline, type RefundQuote } from '@/lib/cancellation';
 
@@ -52,7 +54,40 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
 }
 
 export default function NovaSupport() {
-  const { bookings, cancelBooking, toggleRequestCompleted } = useNovaBookings();
+  const { bookings: novaLedger, cancelBooking: cancelNova, toggleRequestCompleted } = useNovaBookings();
+  const { state, userById, cancelTrip } = useStore();
+
+  // Real enterprise bookings (including live supplier orders) read straight
+  // from this company's workspace, newest first, ahead of the demo ledger.
+  const entRows = useMemo(
+    () =>
+      [...state.bookings]
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .map((b) => {
+          const u = userById(b.travelerId);
+          return entBookingToNova(b, {
+            companyName: state.company.name,
+            userName: b.guestName || u?.name || 'Traveler',
+            userEmail: u?.email || '',
+          });
+        }),
+    [state.bookings, state.company.name, userById]
+  );
+  const bookings = useMemo(() => [...entRows, ...novaLedger], [entRows, novaLedger]);
+
+  // Cancel routes to the right store: enterprise rows (ent_*) cancel the real
+  // workspace trip; demo ledger rows use Nova's own cancel.
+  const cancelBooking = useCallback(
+    (id: string, reason: CancellationReason, comment: string | undefined, refundAmount: number) => {
+      if (id.startsWith('ent_')) {
+        cancelTrip(id.slice(4), { reason, comment, refundAmount });
+      } else {
+        cancelNova(id, reason, comment, refundAmount);
+      }
+    },
+    [cancelTrip, cancelNova]
+  );
+
   const [view, setView] = useState<View>('bookings');
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'all' | BookingStatus>('all');

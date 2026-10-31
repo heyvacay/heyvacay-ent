@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import type { Booking, BookingStatus as EntBookingStatus } from './types';
 
 export type BookingStatus =
   | 'pending_prebook'
@@ -125,6 +126,58 @@ export function statusConfig(status: BookingStatus): StatusUIConfig {
 export function currencySymbol(currency?: string): string {
   if (!currency) return '';
   return currency.toUpperCase() === 'USD' ? '$' : currency.toUpperCase();
+}
+
+/** Map an enterprise workspace booking into a Nova ledger row, so real
+ *  bookings (including live supplier orders) show up in the Nova console. */
+export function entBookingToNova(
+  b: Booking,
+  ctx: { companyName: string; userName: string; userEmail: string }
+): NovaBooking {
+  const nights = (() => {
+    const a = new Date(`${b.startDate}T00:00:00`).getTime();
+    const z = new Date(`${b.endDate}T00:00:00`).getTime();
+    const n = Math.round((z - a) / 86400000);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  })();
+  const statusMap: Record<EntBookingStatus, BookingStatus> = {
+    confirmed: 'confirmed',
+    cancelled: 'cancelled',
+    pending_approval: 'pending_form',
+  };
+  const ref = b.supplierRef || b.id.toUpperCase();
+  return {
+    id: `ent_${b.id}`,
+    companyName: ctx.companyName,
+    userName: ctx.userName,
+    userEmail: ctx.userEmail,
+    partnerOrderId: b.supplierRef ?? '—',
+    bookingRef: ref,
+    hotelName: b.title,
+    regionName: b.destination ?? '',
+    checkinDate: b.startDate,
+    checkoutDate: b.endDate,
+    nights,
+    rooms: 1,
+    adults: 1,
+    children: 0,
+    netAmount: b.price,
+    commissionAmount: 0,
+    commissionPercent: 0,
+    totalAmount: b.price,
+    currency: 'USD',
+    status: statusMap[b.status] ?? 'processing',
+    cancelDeadline: b.cancelDeadline,
+    cancellationComment: b.cancellationComment,
+    cancelledAt: b.cancelledAt,
+    refundStatus: b.refundStatus === 'processed' ? 'processed' : b.refundStatus ? 'pending' : undefined,
+    refundAmount: b.refundAmount,
+    createdAt: b.createdAt,
+    ratehawkOrderId: b.supplierRef ?? '—',
+    contactEmail: ctx.userEmail,
+    contactPhone: '',
+    userRequest: b.travelerNote,
+  };
 }
 
 /* ---------------- deterministic seed ---------------- */

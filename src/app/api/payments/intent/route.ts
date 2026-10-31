@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { STRIPE, API_BASE_URL } from '@/lib/config.server';
+import { STRIPE } from '@/lib/config.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,24 +34,14 @@ export async function POST(req: Request) {
     ...(body.metadata ?? {}),
   };
 
-  // 1) Same backend / keys / tags as heyvacay.co.
-  try {
-    const res = await fetch(`${API_BASE_URL}/bookings/payment/init-stripe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ amount: amount * 100, currency, metadata }),
-      cache: 'no-store',
-    });
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      const clientSecret =
-        data?.clientSecret || data?.client_secret || data?.data?.clientSecret;
-      if (clientSecret) return NextResponse.json({ clientSecret, source: 'backend' });
-    }
-  } catch {
-    /* fall through to direct Stripe / demo */
-  }
-
+  // IMPORTANT: this generic intent must NEVER create a charge that isn't tied
+  // to a locked supplier order. A real hotel/flight booking goes through the
+  // order flow (prebook → /bookings/payment/init-stripe → confirm/capture) in
+  // liveBooking.ts, which mints the PaymentIntent against the prebooked order so
+  // money and the RateHawk/Duffel order are issued together. Here we only mint a
+  // PaymentIntent when THIS app has its own Stripe key (standalone), otherwise
+  // demo — so the "saved card" / no-order convenience path can't take real money
+  // without a booking.
   if (!STRIPE.live) return NextResponse.json({ demo: true });
 
   try {
