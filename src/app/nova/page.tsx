@@ -11,6 +11,7 @@ import {
   type CancellationReason,
 } from '@/lib/novaBookings';
 import { money, shortDate } from '@/lib/format';
+import { refundQuote, refundTimeline, type RefundQuote } from '@/lib/cancellation';
 
 /**
  * Nova — internal booking management. Full control over every enterprise
@@ -343,9 +344,8 @@ export default function NovaSupport() {
         <CancelDialog
           booking={cancelling}
           onClose={() => setCancelling(null)}
-          onConfirm={(reason, comment) => {
-            cancelBooking(cancelling.id, reason, comment);
-            setCancelling(null);
+          onConfirm={(reason, comment, refundAmount) => {
+            cancelBooking(cancelling.id, reason, comment, refundAmount);
           }}
         />
       )}
@@ -522,59 +522,153 @@ function CancelDialog({
 }: {
   booking: NovaBooking;
   onClose: () => void;
-  onConfirm: (reason: CancellationReason, comment?: string) => void;
+  onConfirm: (reason: CancellationReason, comment: string | undefined, refundAmount: number) => void;
 }) {
   const [reason, setReason] = useState<CancellationReason>('user_request');
   const [comment, setComment] = useState('');
+  const [phase, setPhase] = useState<'confirm' | 'done'>('confirm');
   const inputCls =
     'w-full rounded-lg border border-line bg-navy-deep px-3 py-2.5 text-sm text-white outline-none placeholder:text-muted focus:border-brand';
+
+  // Refund preview — shown clearly before the ops user confirms, like heyvacay.co.
+  const quote: RefundQuote = refundQuote({
+    type: 'hotel',
+    price: b.totalAmount,
+    currency: b.currency,
+    freeCancellation: Boolean(b.cancelDeadline),
+    freeUntil: b.cancelDeadline,
+    startDate: b.checkinDate,
+  });
+  const sym = currencySymbol(b.currency);
+  const amt = (n: number) => `${sym}${n.toLocaleString()}`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl border border-line bg-navy p-5 text-mist shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-lg font-bold text-white">Cancel booking</h2>
-        <p className="mt-1 text-sm text-muted">
-          Are you sure you want to cancel this booking? This action cannot be undone.
-        </p>
-        <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
-          <p className="text-sm font-medium text-amber-200">#{b.bookingRef}</p>
-          <p className="mt-0.5 text-sm text-amber-100/80">
-            {b.hotelName} — {b.userName}
-          </p>
-        </div>
-        <div className="mt-4">
-          <label className="mb-1.5 block text-sm font-medium text-mist">Cancellation reason *</label>
-          <select value={reason} onChange={(e) => setReason(e.target.value as CancellationReason)} className={inputCls}>
-            {CANCELLATION_REASONS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-3">
-          <label className="mb-1.5 block text-sm font-medium text-mist">Comment (optional)</label>
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            rows={3}
-            placeholder="Add additional details…"
-            className={inputCls}
-          />
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-white">
-            Keep booking
-          </button>
-          <button
-            onClick={() => onConfirm(reason, comment || undefined)}
-            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
-          >
-            Confirm cancellation
-          </button>
-        </div>
+        {phase === 'confirm' ? (
+          <>
+            <h2 className="font-display text-lg font-bold text-white">Cancel booking</h2>
+            <p className="mt-1 text-sm text-muted">
+              Review the refund, then confirm. This action cannot be undone.
+            </p>
+            <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
+              <p className="text-sm font-medium text-amber-200">#{b.bookingRef}</p>
+              <p className="mt-0.5 text-sm text-amber-100/80">
+                {b.hotelName} — {b.userName}
+              </p>
+            </div>
+
+            {/* refund preview */}
+            <div className="mt-4 rounded-lg border border-line bg-navy-deep p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted">Booking amount</span>
+                <span className="text-white">{amt(b.totalAmount)}</span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between">
+                <span className="text-muted">Cancellation fee</span>
+                {quote.penalty > 0 ? (
+                  <span className="text-white">−{amt(quote.penalty)}</span>
+                ) : (
+                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+                    Free cancellation
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2">
+                <span className="font-semibold text-mist">Refund amount</span>
+                <span
+                  className={`font-display text-lg font-bold ${
+                    quote.refundable > 0 ? 'text-emerald-300' : 'text-muted'
+                  }`}
+                >
+                  {amt(quote.refundable)}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted">{quote.note}</p>
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1.5 block text-sm font-medium text-mist">Cancellation reason *</label>
+              <select value={reason} onChange={(e) => setReason(e.target.value as CancellationReason)} className={inputCls}>
+                {CANCELLATION_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-3">
+              <label className="mb-1.5 block text-sm font-medium text-mist">Comment (optional)</label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={2}
+                placeholder="Add additional details…"
+                className={inputCls}
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-white">
+                Keep booking
+              </button>
+              <button
+                onClick={() => {
+                  onConfirm(reason, comment || undefined, quote.refundable);
+                  setPhase('done');
+                }}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+              >
+                Confirm cancellation
+              </button>
+            </div>
+          </>
+        ) : (
+          /* -------- post-cancel summary -------- */
+          <>
+            <h2 className="font-display text-lg font-bold text-white">Booking cancelled</h2>
+            <p className="mt-1 text-sm text-muted">
+              #{b.bookingRef} — {b.hotelName}
+            </p>
+            <div className="mt-4 space-y-2 rounded-lg border border-line bg-navy-deep p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted">Status</span>
+                <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-300">
+                  Cancelled
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Refund amount</span>
+                <span className="font-semibold text-white">{amt(quote.refundable)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Refund status</span>
+                <span className="text-amber-300">Pending</span>
+              </div>
+              {quote.refundable > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Expected</span>
+                  <span className="text-white">{refundTimeline('hotel')}</span>
+                </div>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-muted">
+              {quote.refundable > 0
+                ? `The refund is being processed to ${quote.refundMethod} and will settle within ${refundTimeline('hotel')}.`
+                : 'This booking was non-refundable, so no refund will be issued.'}
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={onClose}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-navy-deep hover:brightness-105"
+              >
+                Done
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -12,7 +12,8 @@ import {
 } from '@/components/app/ui';
 import { money, dateRange } from '@/lib/format';
 import { Plane, Receipt } from '@/components/icons';
-import type { BookingStatus } from '@/lib/types';
+import { CancelTripModal } from '@/components/app/CancelTripModal';
+import type { Booking, BookingStatus } from '@/lib/types';
 
 const FILTERS: { key: 'all' | BookingStatus; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -26,11 +27,12 @@ export default function BookingsPage() {
     state,
     userById,
     approveBooking,
-    cancelBooking,
+    cancelTrip,
     companySpend,
     companySavings,
   } = useStore();
   const [filter, setFilter] = useState<'all' | BookingStatus>('all');
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
 
   const rows = [...state.bookings]
     .filter((b) => (filter === 'all' ? true : b.status === filter))
@@ -113,7 +115,7 @@ export default function BookingsPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => cancelBooking(b.id)}
+                    onClick={() => setCancelTarget(b)}
                   >
                     Cancel
                   </Button>
@@ -122,6 +124,14 @@ export default function BookingsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {cancelTarget && (
+        <CancelTripModal
+          booking={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onConfirm={(d) => cancelTrip(cancelTarget.id, d)}
+        />
       )}
     </div>
   );

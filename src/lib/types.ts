@@ -206,6 +206,15 @@ export interface Booking {
   eventName?: string;
   /** The supplier/booking reference from a real (live) booking, when issued. */
   supplierRef?: string;
+  /** Cancellation record (set when the trip is cancelled through the refund flow). */
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancellationComment?: string;
+  /** Amount refunded to the payer, and where it's going back to. */
+  refundAmount?: number;
+  refundStatus?: 'pending' | 'processed';
+  /** Free-cancellation deadline captured at booking time (ISO date). */
+  cancelDeadline?: string;
 }
 
 export interface ChatMessage {

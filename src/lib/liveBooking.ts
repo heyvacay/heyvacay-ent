@@ -428,6 +428,49 @@ export function newIdempotencyKey(): string {
   return uuid();
 }
 
+/* ---------------- live cancellation ---------------- */
+
+export interface LiveCancelResult {
+  /** The request reached the backend and the booking was cancelled. */
+  ok: boolean;
+  /** Authoritative refund from the supplier, when returned. */
+  refundAmount?: number;
+  /** Backend says this booking can't be cancelled online — route to support. */
+  supportRequired: boolean;
+  /** Live booking isn't configured — caller falls back to a local cancel. */
+  notLive: boolean;
+}
+
+/**
+ * Cancel a real supplier booking (hotel or flight) through the service-account
+ * proxy. Returns notLive when the server has live booking off (501) so the
+ * caller can still record the cancellation locally.
+ */
+export async function cancelLiveTrip(args: {
+  type: string;
+  supplierRef: string;
+  comment?: string;
+}): Promise<LiveCancelResult> {
+  try {
+    const { ok, status, data } =
+      args.type === 'flight'
+        ? await postJson('/api/flights/cancel', { bookingRef: args.supplierRef })
+        : await postJson('/api/bookings/cancel', {
+            bookingRef: args.supplierRef,
+            cancellationReason: 'user_request',
+            cancellationComment: args.comment,
+          });
+    return {
+      ok,
+      refundAmount: typeof data.refundAmount === 'number' ? data.refundAmount : undefined,
+      supportRequired: data.errorCode === 'CANCELLATION_REQUIRES_SUPPORT',
+      notLive: status === 501,
+    };
+  } catch {
+    return { ok: false, supportRequired: false, notLive: false };
+  }
+}
+
 /** Split a display name into first/last for the supplier guest record. */
 export function splitName(full: string): { firstName: string; lastName: string } {
   const parts = full.trim().split(/\s+/);

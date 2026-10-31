@@ -308,7 +308,7 @@ export function useNovaBookings() {
   );
 
   const cancelBooking = useCallback(
-    (id: string, reason: CancellationReason, comment?: string) => {
+    (id: string, reason: CancellationReason, comment?: string, refundAmount?: number) => {
       const b = base.find((x) => x.id === id);
       persist({
         ...overrides,
@@ -319,7 +319,8 @@ export function useNovaBookings() {
           cancellationComment: comment,
           cancelledAt: new Date().toISOString().slice(0, 10),
           refundStatus: 'pending',
-          refundAmount: b ? Math.round(b.totalAmount * 0.9) : undefined,
+          refundAmount:
+            refundAmount != null ? refundAmount : b ? Math.round(b.totalAmount * 0.9) : undefined,
         },
       });
     },

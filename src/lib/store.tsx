@@ -130,6 +130,11 @@ export interface StoreApi {
   guestBookingMode: GuestBookingMode;
   setGuestBookingMode: (mode: GuestBookingMode) => void;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
+  /** Cancel a trip through the refund flow: records the reason + refund. */
+  cancelTrip: (
+    id: string,
+    details: { reason: string; comment?: string; refundAmount: number; cancelDeadline?: string }
+  ) => void;
   /** Tie an already-booked trip to an event (no rebooking needed). */
   attachBookingToEvent: (bookingId: string, eventId: string, eventName: string) => void;
 
@@ -861,6 +866,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const cancelTrip: StoreApi['cancelTrip'] = useCallback((id, details) => {
+    setState((s) => ({
+      ...s,
+      bookings: s.bookings.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              status: 'cancelled',
+              cancelledAt: new Date().toISOString().slice(0, 10),
+              cancellationReason: details.reason,
+              cancellationComment: details.comment,
+              refundAmount: details.refundAmount,
+              refundStatus: 'pending',
+              cancelDeadline: details.cancelDeadline ?? b.cancelDeadline,
+            }
+          : b
+      ),
+      // A cancelled trip no longer earns its points.
+      points: s.points.filter((p) => p.bookingId !== id),
+    }));
+  }, []);
+
   const attachBookingToEvent: StoreApi['attachBookingToEvent'] = useCallback(
     (bookingId, eventId, eventName) => {
       setState((s) => ({
@@ -1280,6 +1307,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     resolvePolicyChange,
     book,
     cancelBooking,
+    cancelTrip,
     attachBookingToEvent,
     savePlan,
     submitPlan,

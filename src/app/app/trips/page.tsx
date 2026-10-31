@@ -13,6 +13,7 @@ import {
 } from '@/components/app/ui';
 import { money, num, dateRange, daysUntil, todayISO } from '@/lib/format';
 import { BookingChat } from '@/components/app/BookingChat';
+import { CancelTripModal } from '@/components/app/CancelTripModal';
 import { Plane, Receipt, Sparkles, MapPin } from '@/components/icons';
 import type { Booking } from '@/lib/types';
 
@@ -23,7 +24,7 @@ function TripCard({
   travelerName,
 }: {
   b: Booking;
-  onCancel: (id: string) => void;
+  onCancel: (b: Booking) => void;
   onDetails: (b: Booking) => void;
   travelerName?: string;
 }) {
@@ -85,7 +86,7 @@ function TripCard({
             View details
           </Button>
           {b.status !== 'cancelled' && !past && (
-            <Button size="sm" variant="ghost" onClick={() => onCancel(b.id)}>
+            <Button size="sm" variant="ghost" onClick={() => onCancel(b)}>
               Cancel
             </Button>
           )}
@@ -166,8 +167,9 @@ function Row({ k, v, tone }: { k: string; v: string; tone?: 'emerald' | 'brand' 
 }
 
 export default function TripsPage() {
-  const { state, role, activeUser, isSuperAdmin, userById, cancelBooking } = useStore();
+  const { state, role, activeUser, isSuperAdmin, userById, cancelTrip } = useStore();
   const [details, setDetails] = useState<Booking | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const isAdmin = role === 'admin';
   const [scope, setScope] = useState<'mine' | 'team'>('mine');
   const [person, setPerson] = useState<'all' | string>('all');
@@ -340,7 +342,7 @@ export default function TripsPage() {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)} />
+                  <TripCard key={b.id} b={b} onCancel={setCancelTarget} onDetails={setDetails} travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)} />
                 ))}
               </div>
             )}
@@ -353,7 +355,7 @@ export default function TripsPage() {
               </h2>
               <div className="space-y-3">
                 {past.map((b) => (
-                  <TripCard key={b.id} b={b} onCancel={cancelBooking} onDetails={setDetails} travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)} />
+                  <TripCard key={b.id} b={b} onCancel={setCancelTarget} onDetails={setDetails} travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)} />
                 ))}
               </div>
             </section>
@@ -362,6 +364,14 @@ export default function TripsPage() {
       )}
 
       {details && <DetailsModal b={details} onClose={() => setDetails(null)} />}
+
+      {cancelTarget && (
+        <CancelTripModal
+          booking={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onConfirm={(d) => cancelTrip(cancelTarget.id, d)}
+        />
+      )}
     </div>
   );
 }
