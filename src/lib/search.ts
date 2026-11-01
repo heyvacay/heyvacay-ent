@@ -414,6 +414,8 @@ interface RawHotelDetail {
   };
   UIRooms?: unknown[];
   noAvailability?: boolean;
+  /** Enterprise net→customer markup factor stamped by the proxy (1 = none). */
+  entMarkup?: number;
 }
 
 export async function getHotelDetail(args: {
@@ -449,7 +451,7 @@ export async function getHotelDetail(args: {
       items: g.amenities ?? [],
     })),
     about: Array.isArray(h.about_property) ? h.about_property : [],
-    uiRooms: enrichUiRooms(data.UIRooms),
+    uiRooms: enrichUiRooms(data.UIRooms, Number(data.entMarkup) || 1),
     noAvailability: data.noAvailability,
     rawHotel: h as Record<string, unknown>,
     rawRooms: Array.isArray(data.UIRooms) ? data.UIRooms : [],

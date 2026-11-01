@@ -93,10 +93,21 @@ function roomImg(u: string, size = '640x400'): string {
   return u.replace('{size}', size).replace('{SIZE}', size);
 }
 
-function normRate(raw: Record<string, unknown> | null | undefined): RateRef | null {
+/**
+ * `markup` is the enterprise net→customer factor (e.g. 1.10 = net + 10%). It is
+ * applied ONLY to the display/charge fields (price, pricePerDay, competitive);
+ * `raw` is left at the supplier NET so prebook still sends net to RateHawk and
+ * RateHawk is paid net. 1 (default) = consumer behavior, unchanged.
+ */
+function normRate(
+  raw: Record<string, unknown> | null | undefined,
+  markup = 1
+): RateRef | null {
   if (!raw) return null;
   const price = num(raw.price);
   if (price == null) return null;
+  const mk = (n: number | undefined): number | undefined =>
+    n == null ? n : markup === 1 ? n : Math.ceil(n * markup);
   const book_hash = String(raw.book_hash ?? raw.match_hash ?? '');
   const competitivePrice =
     num(raw.competitivePrice) ?? num((raw as { competitive_price?: unknown }).competitive_price);
@@ -104,19 +115,21 @@ function normRate(raw: Record<string, unknown> | null | undefined): RateRef | nu
     num(raw.pricePerDay) ?? num((raw as { average_nightly_rate?: unknown }).average_nightly_rate);
   return {
     book_hash,
-    price,
-    pricePerDay,
-    competitivePrice,
+    price: mk(price) ?? price,
+    pricePerDay: mk(pricePerDay),
+    competitivePrice: mk(competitivePrice),
     currency: String(raw.currency ?? 'USD'),
     freeCancellationBefore:
       (raw.freeCancellationBefore as string | null | undefined) ?? null,
     taxes_fees: Array.isArray(raw.taxes_fees) ? (raw.taxes_fees as TaxFee[]) : undefined,
+    // NET supplier rate, untouched — prebook books against this.
     raw,
   };
 }
 
-/** Normalize the raw UIRooms matrix into UiRoom[] (prices as numbers, images flat). */
-export function enrichUiRooms(raw: unknown): UiRoom[] {
+/** Normalize the raw UIRooms matrix into UiRoom[] (prices as numbers, images flat).
+ *  `markup` applies the enterprise commission to display/charge prices (1 = none). */
+export function enrichUiRooms(raw: unknown, markup = 1): UiRoom[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((r): UiRoom | null => {
@@ -163,7 +176,7 @@ export function enrichUiRooms(raw: unknown): UiRoom[] {
                       isDisabled: Boolean(meal.isDisabled),
                       priceDelta: num(meal.priceDelta) ?? null,
                       isDefault: Boolean(meal.isDefault),
-                      rateRef: normRate(meal.rateRef as Record<string, unknown>),
+                      rateRef: normRate(meal.rateRef as Record<string, unknown>, markup),
                     };
                   }),
                 };
@@ -177,11 +190,14 @@ export function enrichUiRooms(raw: unknown): UiRoom[] {
         roomKey,
         roomTitle: String(room.roomTitle ?? 'Room'),
         from: {
-          amount: num(fromRaw.amount) ?? 0,
+          amount: markup === 1 ? (num(fromRaw.amount) ?? 0) : Math.ceil((num(fromRaw.amount) ?? 0) * markup),
           currency: String(fromRaw.currency ?? 'USD'),
-          competitivePrice:
-            num(fromRaw.competitivePrice) ??
-            num((fromRaw as { competitive_price?: unknown }).competitive_price),
+          competitivePrice: (() => {
+            const c =
+              num(fromRaw.competitivePrice) ??
+              num((fromRaw as { competitive_price?: unknown }).competitive_price);
+            return c == null || markup === 1 ? c : Math.ceil(c * markup);
+          })(),
         },
         images,
         amenities: Array.isArray(room.amenities)
