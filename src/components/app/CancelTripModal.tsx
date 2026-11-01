@@ -256,7 +256,7 @@ export function CancelTripModal({
               </p>
               {refundIssued && (
                 <p className="mx-auto mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                  <Check className="h-3 w-3" /> Refunded on Stripe
+                  <Check className="h-3 w-3" /> Refund Processed
                 </p>
               )}
               {finalRefund !== quote.refundable && (
