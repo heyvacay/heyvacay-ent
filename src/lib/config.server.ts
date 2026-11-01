@@ -33,9 +33,22 @@ export const BACKEND_AUTH = {
   password: process.env.ENT_BACKEND_PASSWORD || '',
 };
 
-/** True when real supplier booking is enabled (service account configured). */
+/**
+ * The backend's enterprise service token (matches ENTERPRISE_SERVICE_TOKEN on
+ * the HeyVacay backend). Presented as the bearer on every booking call — the
+ * backend authenticates it as the enterprise service account, no human OTP.
+ * This is how live booking is wired (the old email/password login never
+ * existed on the backend, which is email-OTP only).
+ */
+export const BACKEND_SERVICE_TOKEN = process.env.ENT_BACKEND_SERVICE_TOKEN || '';
+
+/** Enterprise commission applied on top of the supplier NET, as a percent of
+ *  net (e.g. 10 → customer pays net × 1.10). */
+export const ENT_COMMISSION_PERCENT = Number(process.env.ENT_COMMISSION_PERCENT || '10');
+
+/** True when real supplier booking is enabled (service token configured). */
 export function isLiveBooking(): boolean {
-  return Boolean(BACKEND_AUTH.email && BACKEND_AUTH.password);
+  return Boolean(BACKEND_SERVICE_TOKEN);
 }
 
 /* ---------------------------------------------------------------------------

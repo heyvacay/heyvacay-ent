@@ -20,7 +20,7 @@ export async function GET() {
       authOk: false,
       apiBase: API_BASE_URL,
       reason:
-        'Service account not configured — set ENT_BACKEND_EMAIL and ENT_BACKEND_PASSWORD on the ECS task (Secrets Manager). Until then real bookings cannot be issued.',
+        'Enterprise service token not configured — set ENT_BACKEND_SERVICE_TOKEN on the ECS task (Secrets Manager), matching ENTERPRISE_SERVICE_TOKEN on the backend. Until then real bookings cannot be issued.',
     });
   }
   try {
