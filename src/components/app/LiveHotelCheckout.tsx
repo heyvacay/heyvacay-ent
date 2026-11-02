@@ -64,6 +64,13 @@ export function LiveHotelCheckout({
   // Set once the background prep (prebook → form → payment init) has a usable
   // payment intent; this is what flips the button to "Complete booking".
   const [clientSecret, setClientSecret] = useState('');
+  // The amount we actually charge — starts at the quoted total, updated if the
+  // supplier's confirmed price changed during the room hold.
+  const [chargeAmount, setChargeAmount] = useState(amount);
+  // A price change surfaced during the hold: show it, then continue.
+  const [priceNote, setPriceNote] = useState<{ dropped: boolean; amount: number } | null>(
+    null
+  );
   // Carried from payment-init into confirm.
   const session = useRef<{
     bookingRef: string;
@@ -97,24 +104,30 @@ export function LiveHotelCheckout({
         }
         if (!pre.bookingRef) {
           onUnavailable(
-            pre.errorType === 'price_changed'
-              ? 'The room price just changed. Please re-select the room to see the new total.'
-              : pre.errorType === 'no_longer_available'
-                ? 'That rate just sold out. Please pick another room.'
-                : pre.message || 'We could not lock in that room. Please try another.'
+            pre.errorType === 'no_longer_available'
+              ? 'That rate just sold out. Please pick another room.'
+              : pre.message || 'We could not lock in that room. Please try another.'
           );
           return;
         }
-        if (pre.priceChanged) {
-          onUnavailable('The room price just changed. Please re-select the room to see the new total.');
-          return;
+
+        // Price changed during the hold? Don't abort — recompute our charge at
+        // the new price (the markup is linear, so scale by the net ratio) and
+        // tell the traveler, then keep going.
+        let chargeNow = amount;
+        if (pre.priceChanged && pre.priceChange && pre.priceChange.previousAmount > 0) {
+          const ratio = pre.priceChange.newAmount / pre.priceChange.previousAmount;
+          chargeNow = Math.max(1, Math.ceil(amount * ratio));
+          const dropped = pre.priceDropped === true || chargeNow < amount;
+          setChargeAmount(chargeNow);
+          setPriceNote({ dropped, amount: chargeNow });
         }
 
         await bookingForm(pre.bookingRef); // surfaces payment types; backend also sets the order up
 
         const init = await paymentInit({
           bookingRef: pre.bookingRef,
-          amount,
+          amount: chargeNow,
           currency: rate.currency || 'USD',
         });
         if (!init.clientSecret) {
@@ -162,7 +175,7 @@ export function LiveHotelCheckout({
       bookingRef: s.bookingRef,
       bookHash: rate.bookHash,
       guest,
-      amount,
+      amount: chargeAmount,
       payUuid: s.payUuid,
       initUuid: s.initUuid,
       paymentIntentId: s.orderId,
@@ -250,7 +263,7 @@ export function LiveHotelCheckout({
           appearance: { theme: 'stripe', variables: { colorPrimary: '#10c3d4' } },
         }}
       >
-        <LivePayForm amount={amount} onAuthorized={finalize} />
+        <LivePayForm amount={chargeAmount} priceNote={priceNote} onAuthorized={finalize} />
       </Elements>
     );
   }
@@ -258,7 +271,7 @@ export function LiveHotelCheckout({
   // While the room is being held in the background: show the checkout with a
   // card-shaped placeholder and a disabled "Holding your room…" button, instead
   // of a blocking full-screen spinner.
-  return <HoldingPlaceholder amount={amount} />;
+  return <HoldingPlaceholder amount={chargeAmount} />;
 }
 
 /** The checkout shell shown while the room hold + payment init run. */
@@ -285,9 +298,11 @@ function HoldingPlaceholder({ amount }: { amount: number }) {
 
 function LivePayForm({
   amount,
+  priceNote,
   onAuthorized,
 }: {
   amount: number;
+  priceNote: { dropped: boolean; amount: number } | null;
   onAuthorized: () => void | Promise<void>;
 }) {
   const stripe = useStripe();
@@ -317,6 +332,28 @@ function LivePayForm({
 
   return (
     <div className="space-y-4">
+      {priceNote && (
+        <div
+          className={`rounded-lg p-3 text-sm ${
+            priceNote.dropped
+              ? 'bg-emerald-50 text-emerald-800'
+              : 'bg-amber-50 text-amber-800'
+          }`}
+        >
+          {priceNote.dropped ? (
+            <>
+              <span className="font-semibold">Good news — the price dropped.</span> Your
+              new total is {money(priceNote.amount)}. Complete your booking below.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">Heads up — the price changed.</span> The
+              new total is {money(priceNote.amount)}. Complete your booking below to lock
+              it in.
+            </>
+          )}
+        </div>
+      )}
       <PaymentElement />
       {error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-600">{error}</p>}
       <Button className="w-full" onClick={pay} disabled={busy || !stripe}>

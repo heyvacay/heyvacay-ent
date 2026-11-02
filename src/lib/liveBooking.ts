@@ -148,9 +148,20 @@ async function postJson(
   return { ok: res.ok, status: res.status, data };
 }
 
+export interface PriceChange {
+  previousAmount: number;
+  newAmount: number;
+  difference: number;
+  currency: string;
+}
+
 export interface PrebookResult {
   bookingRef?: string;
   priceChanged?: boolean;
+  priceDropped?: boolean;
+  /** Supplier-confirmed price vs what the guest saw (backend amounts). Present
+   *  when priceChanged/priceDropped so the UI can show the new total. */
+  priceChange?: PriceChange | null;
   errorType?: string | null;
   message?: string;
   raw: Record<string, unknown>;
@@ -173,10 +184,24 @@ export async function prebook(payload: Record<string, unknown>): Promise<Prebook
       raw: data,
     };
   }
+  const pc = data.priceChange as PriceChange | null | undefined;
+  const changed = data.priceChanged === true || data.priceDropped === true;
   return {
     bookingRef: data.bookingRef as string | undefined,
-    priceChanged: data.priceChanged === true,
-    errorType: data.priceChanged === true ? 'price_changed' : null,
+    priceChanged: changed,
+    priceDropped: data.priceDropped === true,
+    priceChange:
+      pc && typeof pc === 'object'
+        ? {
+            previousAmount: Number(pc.previousAmount),
+            newAmount: Number(pc.newAmount),
+            difference: Number(pc.difference),
+            currency: String(pc.currency || 'USD'),
+          }
+        : null,
+    // A changed price is no longer a hard error — the UI continues at the new
+    // price — so only flag it when we DON'T have a bookingRef to proceed with.
+    errorType: changed && !data.bookingRef ? 'price_changed' : null,
     message: data.message as string | undefined,
     raw: data,
   };
