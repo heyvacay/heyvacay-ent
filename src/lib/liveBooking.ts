@@ -213,6 +213,10 @@ export function choosePaymentType(types: PaymentType[] | undefined): PaymentType
 
 export interface PaymentInit {
   clientSecret?: string;
+  /** The publishable key for the Stripe account that CREATED this intent (the
+   *  backend's). Must be used to confirm — the enterprise app's own key is a
+   *  different account, so confirming with it yields "No such payment_intent". */
+  publishableKey?: string;
   payUuid?: string;
   initUuid?: string;
   orderId?: string;
@@ -247,6 +251,9 @@ export async function paymentInit(args: {
   if (!ok) return { errorType: 'generic', raw: data };
   return {
     clientSecret: extractClientSecret(data),
+    publishableKey:
+      (data.publishableKey as string | undefined) ??
+      (data.publishable_key as string | undefined),
     payUuid: data.payUuid as string | undefined,
     initUuid: data.initUuid as string | undefined,
     orderId: data.orderId as string | undefined,

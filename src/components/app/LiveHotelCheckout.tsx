@@ -78,17 +78,16 @@ export function LiveHotelCheckout({
     started.current = true;
     (async () => {
       try {
-        // Need the publishable key to mount Stripe at all — fetch it first so
-        // the card form can render right away (this is quick, unlike prebook).
+        // Gate: is live booking configured at all?
         const cfg = await fetch('/api/payments/config').then((r) => r.json());
-        if (!cfg?.liveBooking || !cfg?.publishableKey) {
+        if (!cfg?.liveBooking) {
           onFallback();
           return;
         }
-        setPk(cfg.publishableKey); // card form mounts now, in deferred mode
 
         // --- Background: hold the room and set up the payment intent while the
-        // traveler enters their card. None of this blocks the form. ---
+        // traveler sees the checkout. The card form mounts once we know which
+        // Stripe account minted the intent (see below). ---
         const pre = await prebook(
           buildPrebookPayload({ hid, detail, rate, checkin, checkout, adults })
         );
@@ -136,6 +135,11 @@ export function LiveHotelCheckout({
           initUuid: init.initUuid,
           orderId: init.orderId,
         };
+        // Mount Stripe with the key for the account that CREATED the intent —
+        // the backend's. Confirming with the enterprise app's own key fails with
+        // "No such payment_intent". Fall back to the local key only if the
+        // backend didn't return one.
+        setPk(init.publishableKey || cfg.publishableKey || '');
         setClientSecret(init.clientSecret); // room held → button enables
       } catch {
         setError('Something went wrong starting checkout. Please try again.');
@@ -235,46 +239,55 @@ export function LiveHotelCheckout({
     );
   }
 
-  // Card form renders as soon as we have the publishable key, using Stripe's
-  // deferred-intent mode (mode/amount/currency instead of a clientSecret), so it
-  // no longer waits on the background room hold. The button stays in a holding
-  // state until clientSecret arrives.
-  if (stripePromise) {
+  // Once the room is held and the intent exists, mount the real card form on the
+  // Stripe account that minted the intent (the backend's key, set above).
+  if (stripePromise && clientSecret) {
     return (
       <Elements
         stripe={stripePromise}
         options={{
-          mode: 'payment',
-          amount: Math.max(50, Math.round(amount * 100)),
-          currency: (rate.currency || 'USD').toLowerCase(),
+          clientSecret,
           appearance: { theme: 'stripe', variables: { colorPrimary: '#10c3d4' } },
         }}
       >
-        <LivePayForm
-          amount={amount}
-          clientSecret={clientSecret}
-          onAuthorized={finalize}
-        />
+        <LivePayForm amount={amount} onAuthorized={finalize} />
       </Elements>
     );
   }
 
-  // Brief: only while fetching the publishable key (fast), not the room hold.
+  // While the room is being held in the background: show the checkout with a
+  // card-shaped placeholder and a disabled "Holding your room…" button, instead
+  // of a blocking full-screen spinner.
+  return <HoldingPlaceholder amount={amount} />;
+}
+
+/** The checkout shell shown while the room hold + payment init run. */
+function HoldingPlaceholder({ amount }: { amount: number }) {
   return (
-    <div className="grid place-items-center gap-3 py-10 text-slate-500">
-      <span className="h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
-      <p className="text-sm">Starting secure checkout…</p>
+    <div className="space-y-4">
+      <div className="space-y-3 rounded-xl border border-slate-200/60 p-3">
+        <div className="h-10 animate-pulse rounded-lg bg-slate-200/60" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="h-10 animate-pulse rounded-lg bg-slate-200/60" />
+          <div className="h-10 animate-pulse rounded-lg bg-slate-200/60" />
+        </div>
+      </div>
+      <Button className="w-full" disabled>
+        <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white align-[-2px]" />
+        Holding your room…
+      </Button>
+      <p className="text-center text-[11px] text-slate-400">
+        We’re holding your room — your card details load in a moment. Total {money(amount)}.
+      </p>
     </div>
   );
 }
 
 function LivePayForm({
   amount,
-  clientSecret,
   onAuthorized,
 }: {
   amount: number;
-  clientSecret: string;
   onAuthorized: () => void | Promise<void>;
 }) {
   const stripe = useStripe();
@@ -282,23 +295,14 @@ function LivePayForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // The background room hold is done once we have a payment-intent secret.
-  const ready = Boolean(clientSecret);
-
   const pay = async () => {
-    if (!stripe || !elements || !clientSecret) return;
+    if (!stripe || !elements) return;
     setBusy(true);
     setError('');
-    // Validate + collect the card details (deferred-intent flow).
-    const submit = await elements.submit();
-    if (submit.error) {
-      setError(submit.error.message || 'Please check your card details.');
-      setBusy(false);
-      return;
-    }
+    // clientSecret is supplied via the Elements provider, so confirmPayment
+    // reads it from there — no elements.submit() needed in this mode.
     const { error: err } = await stripe.confirmPayment({
       elements,
-      clientSecret,
       confirmParams: { return_url: window.location.href },
       redirect: 'if_required',
     });
@@ -311,30 +315,18 @@ function LivePayForm({
     await onAuthorized();
   };
 
-  const label = busy
-    ? 'Completing…'
-    : ready
-      ? `Complete booking · ${money(amount)}`
-      : 'Holding your room…';
-
   return (
     <div className="space-y-4">
       <PaymentElement />
       {error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-600">{error}</p>}
-      <Button
-        className="w-full"
-        onClick={pay}
-        disabled={busy || !ready || !stripe}
-      >
-        {(busy || !ready) && (
+      <Button className="w-full" onClick={pay} disabled={busy || !stripe}>
+        {busy && (
           <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white align-[-2px]" />
         )}
-        {label}
+        {busy ? 'Completing…' : `Complete booking · ${money(amount)}`}
       </Button>
       <p className="text-center text-[11px] text-slate-400">
-        {ready
-          ? 'Secured by Stripe. Your card is authorized now and charged when the hotel confirms.'
-          : 'We’re holding your room while you enter your details — this takes a moment.'}
+        Secured by Stripe. Your card is authorized now and charged when the hotel confirms.
       </p>
     </div>
   );
