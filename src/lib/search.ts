@@ -8,6 +8,7 @@
  */
 import type { InventoryOption } from './types';
 import { enrichUiRooms, type UiRoom } from './hotelRooms';
+import { entMarkupFactor } from './entCommission';
 
 /* ---------------- typeahead ---------------- */
 
@@ -414,8 +415,13 @@ interface RawHotelDetail {
   };
   UIRooms?: unknown[];
   noAvailability?: boolean;
-  /** Enterprise net→customer markup factor stamped by the proxy (1 = none). */
+  /** Enterprise net→customer markup factor stamped by the proxy (1 = none).
+   *  Legacy: the markup is now resolved client-side from the CRM; kept so an
+   *  older proxy response is still honored. */
   entMarkup?: number;
+  /** True when the proxy authenticated as the enterprise channel, so these are
+   *  NET (0-commission) prices and the client must apply the CRM markup. */
+  entLive?: boolean;
 }
 
 export async function getHotelDetail(args: {
@@ -432,6 +438,16 @@ export async function getHotelDetail(args: {
   const data: RawHotelDetail | null = await res.json().catch(() => null);
   if (!res.ok || !data?.hotel) throw new Error('Could not load this hotel.');
   const h = data.hotel;
+
+  // Enterprise net→customer markup. When the proxy served NET (enterprise) prices
+  // we apply HeyVacay's commission from the CRM (per-star, with region/hotel and
+  // per-company overrides) — never a flat number. Demo/retail responses already
+  // include commission, so leave them untouched. A legacy proxy that still
+  // stamps entMarkup is honored as a fallback.
+  const regionId = num((h.region as { id?: unknown } | undefined)?.id);
+  const markup = data.entLive
+    ? entMarkupFactor({ star: h.star_rating, hid: Number(args.hid), regionId })
+    : Number(data.entMarkup) || 1;
   const images = (h.images ?? [])
     .map((i) => (typeof i === 'string' ? i : i?.url))
     .filter((u): u is string => Boolean(u))
@@ -451,7 +467,7 @@ export async function getHotelDetail(args: {
       items: g.amenities ?? [],
     })),
     about: Array.isArray(h.about_property) ? h.about_property : [],
-    uiRooms: enrichUiRooms(data.UIRooms, Number(data.entMarkup) || 1),
+    uiRooms: enrichUiRooms(data.UIRooms, markup),
     noAvailability: data.noAvailability,
     rawHotel: h as Record<string, unknown>,
     rawRooms: Array.isArray(data.UIRooms) ? data.UIRooms : [],

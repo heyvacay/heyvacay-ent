@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import {
   API_BASE_URL,
   BACKEND_SERVICE_TOKEN,
-  ENT_COMMISSION_PERCENT,
   isLiveBooking,
 } from '@/lib/config.server';
 
@@ -41,9 +40,11 @@ export async function POST(req: Request) {
   };
 
   // Enterprise channel: present the service token so the backend returns NET
-  // (0-commission) prices; the client then marks them up by our commission.
+  // (0-commission) prices; the client then marks them up by HeyVacay's CRM
+  // commission (per-star, with region/hotel and per-company overrides). We only
+  // signal entLive here — the percent is resolved client-side from the CRM, not
+  // fixed server-side, so each company's own schedule is honored.
   const live = isLiveBooking();
-  const entMarkup = live ? 1 + ENT_COMMISSION_PERCENT / 100 : 1;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
         (d?.error && d.error !== 'invalid_params') ||
         typeof d?.hotel?.name !== 'string' ||
         !d.hotel.name.trim();
-      if (!transient) return NextResponse.json({ ...d, entMarkup });
+      if (!transient) return NextResponse.json({ ...d, entLive: live });
       if (last.res.status === 404 || d?.error === 'invalid_params') break;
       if (i < 3) await sleep(400 * (i + 1));
     }

@@ -331,6 +331,55 @@ export const DEFAULT_COMMISSION: CommissionState = {
   history: [],
 };
 
+/**
+ * The single source of truth for "what commission does HeyVacay take on THIS
+ * booking". Mirrors the Nova commission panel's precedence exactly:
+ *   hotel override  >  region override  >  star-tier rate
+ * and, for the star tier, a company's own custom rate (when customCommission is
+ * on) beats the global rate. Returns a percent (e.g. 12 = 12%). Used both by
+ * the Nova dashboard and by the booking markup so the price a traveler pays is
+ * driven by the CRM, never a hard-coded number.
+ */
+export function resolveCommissionPercent(
+  commission: CommissionState,
+  opts: {
+    star?: number | null;
+    hid?: number | null;
+    regionId?: number | null;
+    company?: SalesCompany | null;
+  }
+): number {
+  const { star, hid, regionId, company } = opts;
+
+  // 1. Hotel-level override is the most specific and wins outright.
+  if (hid != null) {
+    const o = commission.overrides.find(
+      (ov) => ov.scope === 'hotel' && Number(ov.hotelHid) === Number(hid)
+    );
+    if (o) return o.commissionPercent;
+  }
+
+  // 2. Region-level override.
+  if (regionId != null) {
+    const o = commission.overrides.find(
+      (ov) => ov.scope === 'region' && Number(ov.regionId) === Number(regionId)
+    );
+    if (o) return o.commissionPercent;
+  }
+
+  // 3. Star tier. 0–5, clamped; unknown/unrated collapses to 0 (its own rule).
+  const tier = Math.max(0, Math.min(5, Math.round(Number(star) || 0)));
+
+  // A company on its own commission schedule overrides the global star rate.
+  if (company?.customCommission && company.commissionStars) {
+    const pc = company.commissionStars[String(tier)];
+    if (pc != null && Number.isFinite(Number(pc))) return Number(pc);
+  }
+
+  const rule = commission.starRules.find((r) => r.starRating === tier);
+  return rule?.commissionPercent ?? 0;
+}
+
 export interface SalesCompany {
   id: string;
   name: string;
