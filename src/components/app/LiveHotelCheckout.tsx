@@ -123,7 +123,20 @@ export function LiveHotelCheckout({
           setPriceNote({ dropped, amount: chargeNow });
         }
 
-        await bookingForm(pre.bookingRef); // surfaces payment types; backend also sets the order up
+        // The form step is what actually registers the order with the supplier.
+        // If it fails (e.g. the supplier rejects the rate, or a sandbox key can't
+        // book a real hotel), STOP here — never charge a card for a booking that
+        // can't be fulfilled, and show the supplier's real reason.
+        const form = await bookingForm(pre.bookingRef);
+        if (form.errorType) {
+          const msg = (form.raw?.message as string) || '';
+          setError(
+            msg ||
+              'This room can’t be booked right now. Please pick another room or try again.'
+          );
+          setPhase('error');
+          return;
+        }
 
         const init = await paymentInit({
           bookingRef: pre.bookingRef,
