@@ -53,12 +53,16 @@ export function LiveHotelCheckout({
   onUnavailable: (message: string) => void;
   onFallback: () => void;
 }) {
-  type Phase = 'prep' | 'pay' | 'processing' | 'error' | 'pending';
-  const [phase, setPhase] = useState<Phase>('prep');
-  const [prepMsg, setPrepMsg] = useState('Locking in your room…');
+  // The card form is shown immediately; the room hold + payment init run in the
+  // background while the traveler fills in their card. 'collect' is the normal
+  // state (form visible, button gated on background readiness).
+  type Phase = 'collect' | 'processing' | 'error' | 'pending';
+  const [phase, setPhase] = useState<Phase>('collect');
   const [error, setError] = useState('');
   const [pendingRef, setPendingRef] = useState('');
   const [pk, setPk] = useState('');
+  // Set once the background prep (prebook → form → payment init) has a usable
+  // payment intent; this is what flips the button to "Complete booking".
   const [clientSecret, setClientSecret] = useState('');
   // Carried from payment-init into confirm.
   const session = useRef<{
@@ -74,18 +78,17 @@ export function LiveHotelCheckout({
     started.current = true;
     (async () => {
       try {
-        // Need the publishable key to mount Stripe at all.
+        // Need the publishable key to mount Stripe at all — fetch it first so
+        // the card form can render right away (this is quick, unlike prebook).
         const cfg = await fetch('/api/payments/config').then((r) => r.json());
-        if (!cfg?.liveBooking) {
+        if (!cfg?.liveBooking || !cfg?.publishableKey) {
           onFallback();
           return;
         }
-        if (!cfg?.publishableKey) {
-          onFallback();
-          return;
-        }
+        setPk(cfg.publishableKey); // card form mounts now, in deferred mode
 
-        setPrepMsg('Locking in your room…');
+        // --- Background: hold the room and set up the payment intent while the
+        // traveler enters their card. None of this blocks the form. ---
         const pre = await prebook(
           buildPrebookPayload({ hid, detail, rate, checkin, checkout, adults })
         );
@@ -108,7 +111,6 @@ export function LiveHotelCheckout({
           return;
         }
 
-        setPrepMsg('Preparing payment…');
         await bookingForm(pre.bookingRef); // surfaces payment types; backend also sets the order up
 
         const init = await paymentInit({
@@ -134,9 +136,7 @@ export function LiveHotelCheckout({
           initUuid: init.initUuid,
           orderId: init.orderId,
         };
-        setPk(cfg.publishableKey);
-        setClientSecret(init.clientSecret);
-        setPhase('pay');
+        setClientSecret(init.clientSecret); // room held → button enables
       } catch {
         setError('Something went wrong starting checkout. Please try again.');
         setPhase('error');
@@ -199,13 +199,11 @@ export function LiveHotelCheckout({
     setPhase('pending');
   };
 
-  if (phase === 'prep' || phase === 'processing') {
+  if (phase === 'processing') {
     return (
       <div className="grid place-items-center gap-3 py-10 text-slate-500">
         <span className="h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
-        <p className="text-sm">
-          {phase === 'processing' ? 'Confirming your stay with the hotel…' : prepMsg}
-        </p>
+        <p className="text-sm">Confirming your stay with the hotel…</p>
       </div>
     );
   }
@@ -237,21 +235,37 @@ export function LiveHotelCheckout({
     );
   }
 
-  if (stripePromise && clientSecret) {
+  // Card form renders as soon as we have the publishable key, using Stripe's
+  // deferred-intent mode (mode/amount/currency instead of a clientSecret), so it
+  // no longer waits on the background room hold. The button stays in a holding
+  // state until clientSecret arrives.
+  if (stripePromise) {
     return (
       <Elements
         stripe={stripePromise}
         options={{
-          clientSecret,
+          mode: 'payment',
+          amount: Math.max(50, Math.round(amount * 100)),
+          currency: (rate.currency || 'USD').toLowerCase(),
           appearance: { theme: 'stripe', variables: { colorPrimary: '#10c3d4' } },
         }}
       >
-        <LivePayForm amount={amount} clientSecret={clientSecret} onAuthorized={finalize} />
+        <LivePayForm
+          amount={amount}
+          clientSecret={clientSecret}
+          onAuthorized={finalize}
+        />
       </Elements>
     );
   }
 
-  return null;
+  // Brief: only while fetching the publishable key (fast), not the room hold.
+  return (
+    <div className="grid place-items-center gap-3 py-10 text-slate-500">
+      <span className="h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
+      <p className="text-sm">Starting secure checkout…</p>
+    </div>
+  );
 }
 
 function LivePayForm({
@@ -268,10 +282,14 @@ function LivePayForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // The background room hold is done once we have a payment-intent secret.
+  const ready = Boolean(clientSecret);
+
   const pay = async () => {
-    if (!stripe || !elements) return;
+    if (!stripe || !elements || !clientSecret) return;
     setBusy(true);
     setError('');
+    // Validate + collect the card details (deferred-intent flow).
     const submit = await elements.submit();
     if (submit.error) {
       setError(submit.error.message || 'Please check your card details.');
@@ -293,15 +311,30 @@ function LivePayForm({
     await onAuthorized();
   };
 
+  const label = busy
+    ? 'Completing…'
+    : ready
+      ? `Complete booking · ${money(amount)}`
+      : 'Holding your room…';
+
   return (
     <div className="space-y-4">
       <PaymentElement />
       {error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-600">{error}</p>}
-      <Button className="w-full" onClick={pay} disabled={busy || !stripe}>
-        {busy ? 'Processing…' : `Pay ${money(amount)}`}
+      <Button
+        className="w-full"
+        onClick={pay}
+        disabled={busy || !ready || !stripe}
+      >
+        {(busy || !ready) && (
+          <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white align-[-2px]" />
+        )}
+        {label}
       </Button>
       <p className="text-center text-[11px] text-slate-400">
-        Secured by Stripe. Your card is authorized now and charged when the hotel confirms.
+        {ready
+          ? 'Secured by Stripe. Your card is authorized now and charged when the hotel confirms.'
+          : 'We’re holding your room while you enter your details — this takes a moment.'}
       </p>
     </div>
   );
