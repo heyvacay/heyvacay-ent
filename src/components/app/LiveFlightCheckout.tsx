@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { formatUSPhone } from '@/lib/validate';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Button, Field, Input, Select } from '@/components/app/ui';
@@ -203,9 +204,10 @@ export function LiveFlightCheckout({
         <Field label="Phone">
           <Input
             type="tel"
+            inputMode="tel"
             value={contact.phone}
-            onChange={(e) => setContact({ ...contact, phone: e.target.value })}
-            placeholder="+1 555 123 4567"
+            onChange={(e) => setContact({ ...contact, phone: formatUSPhone(e.target.value) })}
+            placeholder="(555) 123-4567"
           />
         </Field>
       </div>
