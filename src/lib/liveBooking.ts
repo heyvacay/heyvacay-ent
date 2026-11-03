@@ -365,6 +365,7 @@ export interface FlightPassenger {
   title: string; // 'mr' | 'ms' | 'mrs' | 'miss' | 'dr'
   gender: string; // 'm' | 'f'
   givenName: string;
+  middleName?: string; // optional, matches government ID
   familyName: string;
   bornOn: string; // YYYY-MM-DD
 }
@@ -418,6 +419,7 @@ export function buildFlightOrder(args: {
   contact: FlightContact;
   passengers: FlightPassenger[];
   outServiceIds?: string[];
+  seatPreference?: string;
 }): Record<string, unknown> {
   return {
     outOfferId: args.outOfferId,
@@ -428,12 +430,14 @@ export function buildFlightOrder(args: {
       title: p.title,
       gender: p.gender,
       givenName: p.givenName,
+      ...(p.middleName && p.middleName.trim() ? { middleName: p.middleName.trim() } : {}),
       familyName: p.familyName,
       bornOn: p.bornOn,
     })),
     ...(args.outServiceIds && args.outServiceIds.length
       ? { outServiceIds: args.outServiceIds }
       : {}),
+    ...(args.seatPreference ? { seatPreference: args.seatPreference } : {}),
   };
 }
 

@@ -51,6 +51,7 @@ export function LiveFlightCheckout({
     title: defaultPassenger.title || 'mr',
     gender: defaultPassenger.gender || 'm',
     givenName: defaultPassenger.givenName || '',
+    middleName: defaultPassenger.middleName || '',
     familyName: defaultPassenger.familyName || '',
     bornOn: defaultPassenger.bornOn || '',
   });
@@ -58,6 +59,7 @@ export function LiveFlightCheckout({
     email: defaultContact.email || '',
     phone: defaultContact.phone || '',
   });
+  const [seat, setSeat] = useState('');
 
   const idempotencyKey = useRef(newIdempotencyKey());
   const paymentIntentId = useRef<string | undefined>(undefined);
@@ -110,6 +112,7 @@ export function LiveFlightCheckout({
       idempotencyKey: idempotencyKey.current,
       contact,
       passengers: [pax],
+      ...(seat ? { seatPreference: seat } : {}),
     });
     const res = await flightOrder(payload);
     if (res.errorType || !res.bookingRef) {
@@ -190,9 +193,24 @@ export function LiveFlightCheckout({
           <Input value={pax.familyName} onChange={(e) => setPax({ ...pax, familyName: e.target.value })} />
         </Field>
       </div>
+      <Field label="Middle name (optional)">
+        <Input
+          value={pax.middleName ?? ''}
+          onChange={(e) => setPax({ ...pax, middleName: e.target.value })}
+          placeholder="As printed on government ID"
+        />
+      </Field>
       <Field label="Date of birth">
         <Input type="date" value={pax.bornOn} onChange={(e) => setPax({ ...pax, bornOn: e.target.value })} />
       </Field>
+
+      <div className="rounded-xl border border-slate-200 p-3 dark:border-white/10">
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Seat</p>
+        <p className="mt-0.5 text-xs text-slate-400">
+          Pick a seat preference. We&apos;ll request it with the airline at check-in.
+        </p>
+        <SeatMap selected={seat} onSelect={setSeat} />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Email">
           <Input
@@ -214,6 +232,67 @@ export function LiveFlightCheckout({
       <Button className="w-full" disabled={!formValid} onClick={startPayment}>
         Continue to payment · {money(amount)}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * A compact cabin seat picker. This is a seat-preference UX (the enterprise app
+ * doesn't carry the airline's live seat map), so a few seats are shown taken and
+ * the choice is sent along as a request the airline honors at check-in.
+ */
+function SeatMap({ selected, onSelect }: { selected: string; onSelect: (s: string) => void }) {
+  const rows = [10, 11, 12, 13, 14, 15];
+  const cols = ['A', 'B', 'C', 'D', 'E', 'F'];
+  // Deterministic "already taken" seats so the map looks real and stable.
+  const taken = new Set(['10B', '11E', '12A', '12F', '13C', '14D', '15B', '15E']);
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex justify-between px-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+        <span>Window</span>
+        <span>Aisle</span>
+        <span>Aisle</span>
+        <span>Window</span>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r} className="flex items-center justify-center gap-1.5">
+            <span className="w-5 text-right text-[10px] text-slate-400">{r}</span>
+            {cols.map((c, i) => {
+              const id = `${r}${c}`;
+              const isTaken = taken.has(id);
+              const isSel = selected === id;
+              return (
+                <span key={c} className="flex items-center">
+                  <button
+                    type="button"
+                    disabled={isTaken}
+                    onClick={() => onSelect(isSel ? '' : id)}
+                    title={isTaken ? 'Taken' : `Seat ${id}`}
+                    className={`h-7 w-7 rounded-md border text-[10px] font-semibold transition ${
+                      isTaken
+                        ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-300 dark:border-white/5 dark:bg-white/5'
+                        : isSel
+                          ? 'border-brand bg-brand text-navy-deep'
+                          : 'border-slate-300 bg-white text-slate-600 hover:border-brand dark:border-white/15 dark:bg-white/5 dark:text-slate-300'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                  {i === 2 && <span className="w-3" />}
+                </span>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
+        {selected ? (
+          <>Selected seat <span className="font-semibold text-brand-dark">{selected}</span></>
+        ) : (
+          'No seat selected — the airline will assign one.'
+        )}
+      </p>
     </div>
   );
 }

@@ -165,6 +165,12 @@ export default function SignupPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Form>(INITIAL);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+
+  const pwLongEnough = password.length >= 8;
+  const pwMatch = password.length > 0 && password === password2;
+  const passwordReady = pwLongEnough && pwMatch;
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -182,7 +188,7 @@ export default function SignupPage() {
         form.companyName.trim().length > 1 &&
         isWorkEmail(form.workEmail)
       );
-    if (STEPS[step].key === 'verify') return emailVerified;
+    if (STEPS[step].key === 'verify') return emailVerified && passwordReady;
     if (STEPS[step].key === 'travel') return form.annualSpend > 0;
     return true;
   };
@@ -395,8 +401,49 @@ export default function SignupPage() {
               blurb="We sent a code to make sure we're setting up the right account — this becomes the owner login for your company."
             >
               {emailVerified ? (
-                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                  <Check className="h-4 w-4" /> {form.workEmail} verified — you&apos;re good to go.
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                    <Check className="h-4 w-4" /> {form.workEmail} verified.
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Create your password</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      This secures the owner login for {form.companyName || 'your company'}. At
+                      least 8 characters.
+                    </p>
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <Field label="Password">
+                        <Input
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          autoFocus
+                        />
+                        {password.length > 0 && !pwLongEnough && (
+                          <p className="mt-1 text-xs text-red-600">
+                            Use at least 8 characters.
+                          </p>
+                        )}
+                      </Field>
+                      <Field label="Confirm password">
+                        <Input
+                          type="password"
+                          value={password2}
+                          onChange={(e) => setPassword2(e.target.value)}
+                          placeholder="••••••••"
+                        />
+                        {password2.length > 0 && !pwMatch && (
+                          <p className="mt-1 text-xs text-red-600">Passwords don&apos;t match.</p>
+                        )}
+                      </Field>
+                    </div>
+                    {passwordReady && (
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                        <Check className="h-3.5 w-3.5" /> Password set — continue.
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <EmailVerify
