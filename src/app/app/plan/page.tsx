@@ -39,6 +39,12 @@ export default function PlanTripPage() {
 
   const [pickFlight, setPickFlight] = useState<InventoryOption | null>(null);
   const [pickHotel, setPickHotel] = useState<InventoryOption | null>(null);
+  // Optional ground legs the traveler wants us to arrange alongside the trip.
+  const [addTrain, setAddTrain] = useState(false);
+  const [addCar, setAddCar] = useState(false);
+
+  const firstName = (activeUser.name ?? '').trim().split(' ')[0] || 'there';
+  const draftKey = `hv_ent_plan_draft_${state.company.id}`;
 
   const dStart = start ? parseISO(start) : undefined;
   const dEnd = end ? parseISO(end) : undefined;
@@ -123,7 +129,36 @@ export default function PlanTripPage() {
     const pOrigin = params.get('origin');
     const pStart = params.get('start');
     const pEnd = params.get('end');
-    if (!pDest && !pOrigin) return;
+    if (!pDest && !pOrigin) {
+      // No deep-link — restore the saved draft so a half-planned trip survives
+      // navigating away and coming back.
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const d = JSON.parse(raw) as {
+            origin?: FlightPlace | null;
+            originText?: string;
+            dest?: HotelPlace | null;
+            destText?: string;
+            start?: string;
+            end?: string;
+            addTrain?: boolean;
+            addCar?: boolean;
+          };
+          if (d.origin) setOrigin(d.origin);
+          if (d.originText) setOriginText(d.originText);
+          if (d.dest) setDest(d.dest);
+          if (d.destText) setDestText(d.destText);
+          if (d.start) setStart(d.start);
+          if (d.end) setEnd(d.end);
+          if (d.addTrain) setAddTrain(true);
+          if (d.addCar) setAddCar(true);
+        }
+      } catch {
+        /* ignore corrupt draft */
+      }
+      return;
+    }
     if (pStart) setStart(pStart);
     if (pEnd) setEnd(pEnd);
     (async () => {
@@ -155,6 +190,18 @@ export default function PlanTripPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist the composer as a lightweight draft so choices are saved.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({ origin, originText, dest, destText, start, end, addTrain, addCar })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [draftKey, origin, originText, dest, destText, start, end, addTrain, addCar]);
 
   const plannedFlight: PlannedItem | null = pickFlight
     ? { opt: pickFlight, startDate: start, endDate: end, ...assess(pickFlight) }
@@ -189,11 +236,18 @@ export default function PlanTripPage() {
     };
     savePlan(plan);
     submitPlan(plan.id);
-    // Reset composer.
+    // Reset composer and clear the saved draft.
     setPickFlight(null);
     setPickHotel(null);
     setFlights(null);
     setHotels(null);
+    setAddTrain(false);
+    setAddCar(false);
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* ignore */
+    }
   };
 
   const myPlans = (state.tripPlans ?? []).filter((p) => p.travelerId === activeUser.id);
@@ -252,6 +306,38 @@ export default function PlanTripPage() {
             </Button>
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">Also need ground travel?</span>
+          <button
+            type="button"
+            onClick={() => setAddTrain((v) => !v)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+              addTrain
+                ? 'bg-brand text-navy'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
+            )}
+          >
+            🚆 Add a train
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddCar((v) => !v)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+              addCar
+                ? 'bg-brand text-navy'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
+            )}
+          >
+            🚗 Add a rental car
+          </button>
+          {(addTrain || addCar) && (
+            <span className="text-xs text-slate-400">
+              We&apos;ll arrange this with the trip and add it to the approval.
+            </span>
+          )}
+        </div>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </Card>
 
@@ -278,7 +364,9 @@ export default function PlanTripPage() {
 
       {/* results — same cards as the single-booking flow */}
       {loading && (
-        <p className="mt-6 text-center text-sm text-slate-400">Searching live flights &amp; hotels…</p>
+        <p className="mt-6 text-center text-sm text-slate-400">
+          Putting your trip together, {firstName}… searching live flights &amp; hotels.
+        </p>
       )}
 
       {!loading && flights && (
@@ -354,6 +442,8 @@ export default function PlanTripPage() {
           <div className="space-y-2">
             {plannedFlight && <ReviewLeg label="Flight" item={plannedFlight} />}
             {plannedHotel && <ReviewLeg label="Hotel" item={plannedHotel} />}
+            {addTrain && <ExtraLeg label="Train" note="We'll arrange rail — added to your approval." />}
+            {addCar && <ExtraLeg label="Rental car" note="We'll arrange a rental — added to your approval." />}
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-brand/20 pt-3">
             <span className="text-sm font-semibold text-slate-700">Trip total</span>
@@ -536,6 +626,18 @@ function ReviewLeg({ label, item }: { label: string; item: PlannedItem }) {
         </div>
       </div>
       <span className="font-semibold text-slate-900">{money(item.opt.price)}</span>
+    </div>
+  );
+}
+
+function ExtraLeg({ label, note }: { label: string; note: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-3 dark:border-white/15 dark:bg-white/5">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+        <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{note}</p>
+      </div>
+      <Badge color="amber">To arrange</Badge>
     </div>
   );
 }
