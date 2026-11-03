@@ -1254,6 +1254,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             loyalty: [],
             personalLinked: false,
           }));
+        const ownerName = [profile.firstName, profile.lastName]
+          .map((x) => (x ?? '').trim())
+          .filter(Boolean)
+          .join(' ');
         return {
           ...s,
           company: {
@@ -1262,7 +1266,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             currency: profile.currency || s.company.currency,
           },
           onboarding: profile,
-          users: [...s.users, ...newInvites],
+          users: [
+            // Name + email the signed-up owner (the admin account) from signup.
+            ...s.users.map((u) =>
+              u.id === 'u_admin'
+                ? {
+                    ...u,
+                    name: ownerName || u.name,
+                    email: profile.workEmail || u.email,
+                  }
+                : u
+            ),
+            ...newInvites,
+          ],
           integrations: s.integrations.map((i) =>
             profile.integrations.includes(i.id)
               ? { ...i, status: 'requested' as const }

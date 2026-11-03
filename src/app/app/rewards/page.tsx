@@ -32,12 +32,6 @@ const REWARDS = [
     cost: 1200,
     detail: 'Bump to premium economy on your next personal trip.',
   },
-  {
-    id: 'r_lounge',
-    title: 'Airport lounge day pass',
-    cost: 800,
-    detail: 'One-day lounge access, anywhere you fly.',
-  },
 ];
 
 export default function RewardsPage() {
@@ -67,6 +61,16 @@ export default function RewardsPage() {
         title="Rewards"
         subtitle="You saved the company money — these points are your cut. Spend them on you."
       />
+
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
+        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
+        <p>
+          <span className="font-semibold">Coming soon:</span> your rewards will link to{' '}
+          <span className="font-semibold">heyvacay.co</span> for personal travel. Use your work
+          email, or add a personal email, and your points transfer there automatically — redeem
+          them on real personal flights and stays.
+        </p>
+      </div>
 
       {flash && (
         <div className="mb-6 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">

@@ -397,6 +397,8 @@ export interface Integration {
 
 /** Captured by the guided sign-up flow and used to personalize the program. */
 export interface OnboardingProfile {
+  firstName?: string;
+  lastName?: string;
   companyName: string;
   workEmail: string;
   teamSize: string;

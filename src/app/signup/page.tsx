@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Logo } from '@/components/app/Logo';
 import { Button, Field, Input, cn } from '@/components/app/ui';
+import { isWorkEmail, workEmailError } from '@/lib/validate';
 import { money, num, todayISO } from '@/lib/format';
 import type { OnboardingProfile } from '@/lib/types';
 import { pushSignupToCrm } from '@/lib/crmBridge';
@@ -23,6 +24,8 @@ import {
 } from '@/components/icons';
 
 type Form = {
+  firstName: string;
+  lastName: string;
   companyName: string;
   workEmail: string;
   teamSize: string;
@@ -32,6 +35,8 @@ type Form = {
 };
 
 const INITIAL: Form = {
+  firstName: '',
+  lastName: '',
   companyName: '',
   workEmail: '',
   teamSize: '11–50',
@@ -171,7 +176,12 @@ export default function SignupPage() {
 
   const canContinue = () => {
     if (STEPS[step].key === 'company')
-      return form.companyName.trim().length > 1 && /\S+@\S+\.\S+/.test(form.workEmail);
+      return (
+        form.firstName.trim().length > 0 &&
+        form.lastName.trim().length > 0 &&
+        form.companyName.trim().length > 1 &&
+        isWorkEmail(form.workEmail)
+      );
     if (STEPS[step].key === 'verify') return emailVerified;
     if (STEPS[step].key === 'travel') return form.annualSpend > 0;
     return true;
@@ -184,6 +194,8 @@ export default function SignupPage() {
     // Sensible defaults for everything we didn't ask up front — all editable in
     // the app (Policies, Integrations, People) right after sign-up.
     const profile: OnboardingProfile = {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
       companyName: form.companyName.trim(),
       workEmail: form.workEmail.trim(),
       teamSize: form.teamSize,
@@ -332,12 +344,26 @@ export default function SignupPage() {
               blurb="Just the essentials — everything else has a smart default you can change later."
             >
               <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="First name">
+                  <Input
+                    value={form.firstName}
+                    onChange={(e) => set('firstName', e.target.value)}
+                    placeholder="Danil"
+                    autoFocus
+                  />
+                </Field>
+                <Field label="Last name">
+                  <Input
+                    value={form.lastName}
+                    onChange={(e) => set('lastName', e.target.value)}
+                    placeholder="Babadjanov"
+                  />
+                </Field>
                 <Field label="Company name">
                   <Input
                     value={form.companyName}
                     onChange={(e) => set('companyName', e.target.value)}
                     placeholder="Northwind Robotics"
-                    autoFocus
                   />
                 </Field>
                 <Field label="Your work email">
@@ -347,6 +373,9 @@ export default function SignupPage() {
                     onChange={(e) => set('workEmail', e.target.value)}
                     placeholder="you@company.com"
                   />
+                  {workEmailError(form.workEmail) && (
+                    <p className="mt-1 text-xs text-red-600">{workEmailError(form.workEmail)}</p>
+                  )}
                 </Field>
               </div>
               <p className="mb-2 mt-6 text-sm font-medium text-slate-700">Team size</p>
