@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
+import { companyLogoFromCrm } from '@/lib/crmBridge';
 import { Avatar, cn } from './ui';
 import { ThemeToggle } from './ThemeToggle';
 import { Logo } from './Logo';
@@ -111,6 +112,14 @@ const EMPLOYEE_NAV: NavSection[] = [
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const { state, activeUser, role, isSuperAdmin, setActiveUser, setRole, reset } = useStore();
+
+  // Company logo uploaded in the CRM (matched by id/domain). Read once on mount.
+  const [companyLogo, setCompanyLogo] = useState('');
+  useEffect(() => {
+    setCompanyLogo(
+      companyLogoFromCrm({ id: state.company.id, domain: state.company.domain })
+    );
+  }, [state.company.id, state.company.domain]);
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -172,9 +181,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <div className="mx-4 mb-3 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-900 text-white">
-          <Building className="h-4 w-4" />
-        </span>
+        {companyLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={companyLogo}
+            alt={`${state.company.name} logo`}
+            className="h-8 w-8 shrink-0 rounded-lg object-contain"
+          />
+        ) : (
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-900 text-white">
+            <Building className="h-4 w-4" />
+          </span>
+        )}
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-800">
             {state.company.name}

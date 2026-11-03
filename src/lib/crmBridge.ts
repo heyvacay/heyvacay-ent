@@ -75,3 +75,23 @@ export function pushSignupToCrm(p: {
     /* ignore */
   }
 }
+
+/**
+ * Read the CRM-uploaded logo for a company (matched by id, then domain) from
+ * the CRM store. Lets the traveler workspace show the logo a rep set in Nova.
+ * Returns '' when none / unavailable.
+ */
+export function companyLogoFromCrm(opts: { id?: string; domain?: string }): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem(KEY);
+    const companies: SalesCompany[] = raw ? JSON.parse(raw) : [];
+    const byId = opts.id ? companies.find((c) => c.id === opts.id) : undefined;
+    const byDomain = opts.domain
+      ? companies.find((c) => c.domain?.toLowerCase() === opts.domain!.toLowerCase())
+      : undefined;
+    return (byId ?? byDomain)?.logoUrl ?? '';
+  } catch {
+    return '';
+  }
+}
