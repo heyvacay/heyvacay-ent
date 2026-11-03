@@ -114,6 +114,30 @@ export interface OnboardingStep {
   done: boolean;
 }
 
+/** Intake captured when a rep provisions a lead into a live account. */
+export interface AccountIntake {
+  championName?: string;
+  championTitle?: string;
+  championEmail?: string;
+  championPhone?: string;
+  /** Integration keys to queue (quickbooks, bamboohr, workday, …). */
+  integrations?: string[];
+  /** Target go-live date (YYYY-MM-DD). */
+  goLive?: string;
+  /** Free-text kickoff notes. */
+  notes?: string;
+}
+
+/** The integrations a rep can queue during account provisioning. */
+export const PROVISION_INTEGRATIONS: { key: string; label: string }[] = [
+  { key: 'quickbooks', label: 'QuickBooks' },
+  { key: 'netsuite', label: 'NetSuite' },
+  { key: 'bamboohr', label: 'BambooHR' },
+  { key: 'workday', label: 'Workday' },
+  { key: 'expensify', label: 'Expensify' },
+  { key: 'okta', label: 'Okta SSO (SAML)' },
+];
+
 export const ONBOARDING_TEMPLATE: Omit<OnboardingStep, 'done'>[] = [
   { key: 'kickoff', label: 'Kickoff call' },
   { key: 'policy', label: 'Travel policy set' },

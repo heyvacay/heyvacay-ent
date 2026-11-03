@@ -31,6 +31,7 @@ import {
   healthColor,
   nextBestAction,
   onboardingPct,
+  PROVISION_INTEGRATIONS,
   REP_COMMISSION_DOWN,
   REP_COMMISSION_UP,
   type AccountStatus,
@@ -87,6 +88,15 @@ export default function CompanyDetail({ id }: { id: string }) {
   const router = useRouter();
   const logoInput = useRef<HTMLInputElement>(null);
   const [provisionPrompt, setProvisionPrompt] = useState(false);
+  const [intake, setIntake] = useState({
+    championName: '',
+    championTitle: '',
+    championEmail: '',
+    championPhone: '',
+    integrations: ['quickbooks', 'bamboohr'] as string[],
+    goLive: '',
+    notes: '',
+  });
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
@@ -135,17 +145,46 @@ export default function CompanyDetail({ id }: { id: string }) {
   // past "lead" already has a workspace, so enter it directly.
   const enterAccount = () => {
     if (c.status === 'lead') {
+      // Prefill the intake from an existing champion contact if there is one.
+      const champ = c.contacts.find((ct) => ct.champion) ?? c.contacts[0];
+      if (champ) {
+        setIntake((s) => ({
+          ...s,
+          championName: champ.name,
+          championTitle: champ.title ?? '',
+          championEmail: champ.email ?? '',
+          championPhone: champ.phone ?? '',
+        }));
+      }
       setProvisionPrompt(true);
       return;
     }
     openWorkspace();
   };
 
+  const toggleIntakeIntegration = (key: string) =>
+    setIntake((s) => ({
+      ...s,
+      integrations: s.integrations.includes(key)
+        ? s.integrations.filter((k) => k !== key)
+        : [...s.integrations, key],
+    }));
+
   const createAccountAndEnter = () => {
-    provisionAccount(c.id);
+    provisionAccount(c.id, {
+      championName: intake.championName.trim() || undefined,
+      championTitle: intake.championTitle.trim() || undefined,
+      championEmail: intake.championEmail.trim() || undefined,
+      championPhone: intake.championPhone.trim() || undefined,
+      integrations: intake.integrations,
+      goLive: intake.goLive || undefined,
+      notes: intake.notes.trim() || undefined,
+    });
     setProvisionPrompt(false);
     openWorkspace();
   };
+
+  const intakeValid = intake.championName.trim().length > 0;
 
   const pct = onboardingPct(c);
 
@@ -624,27 +663,118 @@ export default function CompanyDetail({ id }: { id: string }) {
           onClick={() => setProvisionPrompt(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-display text-lg font-bold text-slate-900">Create account?</h2>
+            <h2 className="font-display text-lg font-bold text-slate-900">
+              Set up {c.name}
+            </h2>
             <p className="mt-1.5 text-sm text-slate-500">
-              <span className="font-semibold text-slate-700">{c.name}</span> is still a lead, so no
-              workspace has been created yet. Creating the account will move it into onboarding and
-              open a fresh workspace you can set up on their behalf.
+              This moves the lead into onboarding and opens a fresh, isolated workspace you&apos;ll
+              configure on their behalf. A few details so we start the account right.
             </p>
-            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-              Account manager will be set to{' '}
-              <span className="font-semibold text-slate-700">{c.accountManager ?? 'you'}</span>. You
-              can invite their team and configure policies once inside.
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Champion / primary contact
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <Field label="Full name">
+                    <Input
+                      value={intake.championName}
+                      onChange={(e) => setIntake({ ...intake, championName: e.target.value })}
+                      placeholder="Dana Okoro"
+                    />
+                  </Field>
+                  <Field label="Title">
+                    <Input
+                      value={intake.championTitle}
+                      onChange={(e) => setIntake({ ...intake, championTitle: e.target.value })}
+                      placeholder="VP Finance"
+                    />
+                  </Field>
+                  <Field label="Work email">
+                    <Input
+                      type="email"
+                      value={intake.championEmail}
+                      onChange={(e) => setIntake({ ...intake, championEmail: e.target.value })}
+                      placeholder={`name@${c.domain}`}
+                    />
+                  </Field>
+                  <Field label="Phone (optional)">
+                    <Input
+                      value={intake.championPhone}
+                      onChange={(e) => setIntake({ ...intake, championPhone: e.target.value })}
+                      placeholder="+1 415 555 0192"
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Integrations to queue
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {PROVISION_INTEGRATIONS.map((i) => {
+                    const on = intake.integrations.includes(i.key);
+                    return (
+                      <button
+                        key={i.key}
+                        type="button"
+                        onClick={() => toggleIntakeIntegration(i.key)}
+                        className={cn(
+                          'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                          on
+                            ? 'bg-brand text-navy-deep'
+                            : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+                        )}
+                      >
+                        {on && <Check className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />}
+                        {i.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Target go-live (optional)">
+                  <Input
+                    type="date"
+                    value={intake.goLive}
+                    onChange={(e) => setIntake({ ...intake, goLive: e.target.value })}
+                  />
+                </Field>
+                <Field label="Account manager">
+                  <Input value={c.accountManager ?? ME} disabled />
+                </Field>
+              </div>
+
+              <Field label="Kickoff notes (optional)">
+                <textarea
+                  value={intake.notes}
+                  onChange={(e) => setIntake({ ...intake, notes: e.target.value })}
+                  rows={2}
+                  placeholder="Goals, who needs access, policy quirks…"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                />
+              </Field>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setProvisionPrompt(false)}>
-                Cancel
-              </Button>
-              <Button onClick={createAccountAndEnter}>
-                Create account &amp; enter <ArrowRight className="h-4 w-4" />
-              </Button>
+
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <p className="text-xs text-slate-400">
+                {intakeValid ? 'Ready to create.' : 'Add a champion name to continue.'}
+              </p>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setProvisionPrompt(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={createAccountAndEnter} disabled={!intakeValid}>
+                  Create account &amp; enter <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -12,12 +12,14 @@ import {
   SEED_COMPANIES,
   SEED_REPS,
   ONBOARDING_TEMPLATE,
+  PROVISION_INTEGRATIONS,
   STAGE_PROBABILITY,
   DEFAULT_COMMISSION,
   REP_COMMISSION_DOWN,
   REP_COMMISSION_UP,
   ME,
   type AccountStatus,
+  type AccountIntake,
   type CommissionState,
   type CommissionHistoryEntry,
   type CommissionApproval,
@@ -115,8 +117,10 @@ interface CrmApi {
   setCurrentRep: (name: string) => void;
   /** The signed-in rep's role — gates commission management (C-Suite only globally). */
   viewerRole: RepRole;
-  /** Provision a lead into a real account (creates the workspace). */
-  provisionAccount: (id: string) => void;
+  /** Provision a lead into a real account (creates the workspace). An optional
+   *  intake captures the champion, the integrations to queue, a go-live target
+   *  and kickoff notes — all recorded on the account. */
+  provisionAccount: (id: string, intake?: AccountIntake) => void;
   /** Effective global star-rate for a rating. */
   globalStarRate: (starRating: number) => number;
   /** Turn a company's own commission on/off (seeds from global on enable). */
@@ -288,21 +292,85 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   );
 
   const provisionAccount: CrmApi['provisionAccount'] = useCallback(
-    (id) =>
-      patch(id, (c) =>
+    (id, intake) =>
+      patch(id, (c) => {
         // Only a lead needs provisioning; anything further along already has an
         // account. Moving to "onboarding" creates the workspace the rep enters.
-        c.status === 'lead'
-          ? log(
+        if (c.status !== 'lead') return c;
+
+        // Fold the champion into contacts (flag an existing match, or add one).
+        let contacts = c.contacts;
+        if (intake?.championEmail || intake?.championName) {
+          const email = (intake.championEmail ?? '').trim().toLowerCase();
+          const existing = contacts.find(
+            (ct) => email && ct.email.trim().toLowerCase() === email
+          );
+          if (existing) {
+            contacts = contacts.map((ct) =>
+              ct === existing ? { ...ct, champion: true } : { ...ct, champion: false }
+            );
+          } else if (intake.championName) {
+            contacts = [
+              ...contacts.map((ct) => ({ ...ct, champion: false })),
               {
-                ...c,
-                status: 'onboarding',
-                accountManager: c.accountManager ?? currentRep,
+                name: intake.championName,
+                title: intake.championTitle ?? '',
+                email: intake.championEmail ?? '',
+                phone: intake.championPhone,
+                champion: true,
               },
-              `Account created by ${currentRep}`
-            )
-          : c
-      ),
+            ];
+          }
+        }
+
+        // Queue integrations: mark the kickoff step done, and the integrations
+        // step done only once the rep has picked at least one to connect.
+        const queued = intake?.integrations ?? [];
+        const onboarding = c.onboarding.map((s) =>
+          s.key === 'kickoff'
+            ? { ...s, done: true }
+            : s.key === 'integrations' && queued.length > 0
+              ? { ...s, done: false }
+              : s
+        );
+
+        const intakeLines: string[] = [];
+        if (intake?.championName)
+          intakeLines.push(`Champion: ${intake.championName}${intake.championTitle ? ` (${intake.championTitle})` : ''}`);
+        if (queued.length)
+          intakeLines.push(
+            `Integrations queued: ${queued
+              .map((k) => PROVISION_INTEGRATIONS.find((i) => i.key === k)?.label ?? k)
+              .join(', ')}`
+          );
+        if (intake?.goLive) intakeLines.push(`Target go-live: ${intake.goLive}`);
+        if (intake?.notes) intakeLines.push(intake.notes);
+
+        const notes = intakeLines.length
+          ? [
+              { id: uid('n'), text: intakeLines.join(' · '), author: ME, date: todayISO() },
+              ...c.notes,
+            ]
+          : c.notes;
+
+        return log(
+          {
+            ...c,
+            status: 'onboarding',
+            accountManager: c.accountManager ?? currentRep,
+            contacts,
+            onboarding,
+            notes,
+            nextStep:
+              intake?.championName
+                ? `Kickoff with ${intake.championName}`
+                : 'Kickoff call + policy setup',
+          },
+          `Account created by ${currentRep}${
+            intake?.championName ? ` · champion ${intake.championName}` : ''
+          }`
+        );
+      }),
     [patch, currentRep]
   );
 
