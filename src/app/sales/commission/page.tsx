@@ -92,8 +92,8 @@ function InlineEditablePercent({
         }}
         onBlur={commit}
         className={cn(
-          'w-16 rounded border px-2 py-1 text-sm outline-none focus:ring-2',
-          err ? 'border-red-500 focus:ring-red-200' : 'border-slate-300 focus:ring-slate-300'
+          'w-16 rounded border bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:ring-2 dark:bg-white/10 dark:text-white',
+          err ? 'border-red-500 focus:ring-red-200' : 'border-slate-300 focus:ring-slate-300 dark:border-white/15'
         )}
       />
       <span className="text-slate-400">%</span>
@@ -208,7 +208,7 @@ function OverrideAdder({ scope }: { scope: 'hotel' | 'region' }) {
           }}
           onFocus={() => setOpen(true)}
           placeholder={isRegion ? 'Search a city or region…' : 'Search a hotel…'}
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           autoComplete="off"
         />
         {open && items.length > 0 && (
@@ -262,7 +262,7 @@ function OverrideAdder({ scope }: { scope: 'hotel' | 'region' }) {
                 value={pct}
                 onChange={(e) => setPct(e.target.value)}
                 placeholder="e.g. 15"
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
               {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
             </div>
@@ -272,7 +272,7 @@ function OverrideAdder({ scope }: { scope: 'hotel' | 'region' }) {
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. negotiated rate"
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
             </div>
           </div>
@@ -729,7 +729,7 @@ function AddStarDialog({
             value={pct}
             onChange={(e) => setPct(e.target.value)}
             placeholder="e.g. 15"
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           />
           {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
         </div>
@@ -738,7 +738,7 @@ function AddStarDialog({
           <input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           />
         </div>
       </div>

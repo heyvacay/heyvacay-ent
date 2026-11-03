@@ -88,7 +88,7 @@ export default function TeamPage() {
                         value={r.quota}
                         onChange={(e) => updateRep(r.name, { quota: Number(e.target.value) })}
                         onFocus={(e) => e.currentTarget.select()}
-                        className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                        className="w-32 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 dark:border-white/15 dark:bg-white/10 dark:text-white"
                       />
                     </span>
                     {r.name !== ME && (
