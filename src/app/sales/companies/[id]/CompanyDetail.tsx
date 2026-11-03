@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCrm } from '@/lib/crmStore';
@@ -85,6 +85,7 @@ export default function CompanyDetail({ id }: { id: string }) {
     commissionApprovals,
   } = useCrm();
   const router = useRouter();
+  const logoInput = useRef<HTMLInputElement>(null);
   const [provisionPrompt, setProvisionPrompt] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactForm, setContactForm] = useState({
@@ -153,6 +154,53 @@ export default function CompanyDetail({ id }: { id: string }) {
       <Link href="/sales/companies" className="text-sm font-medium text-brand-dark hover:underline">
         ← All companies
       </Link>
+
+      <div className="mt-3 flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => logoInput.current?.click()}
+          title="Upload company logo"
+          className="group relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5"
+        >
+          {c.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={c.logoUrl} alt={`${c.name} logo`} className="h-full w-full object-contain" />
+          ) : (
+            <span className="text-lg font-semibold text-slate-400">
+              {c.name.slice(0, 2).toUpperCase()}
+            </span>
+          )}
+          <span className="absolute inset-0 hidden items-center justify-center bg-black/50 text-[10px] font-medium text-white group-hover:flex">
+            {c.logoUrl ? 'Change' : 'Add logo'}
+          </span>
+        </button>
+        {c.logoUrl && (
+          <button
+            type="button"
+            onClick={() => updateCompany(c.id, { logoUrl: undefined })}
+            className="text-xs font-medium text-slate-400 hover:text-red-500"
+          >
+            Remove logo
+          </button>
+        )}
+        <input
+          ref={logoInput}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            try {
+              const dataUrl = await readLogoAsDataUrl(file);
+              updateCompany(c.id, { logoUrl: dataUrl });
+            } catch {
+              /* ignore unreadable files */
+            }
+          }}
+        />
+      </div>
 
       <PageHeader
         title={c.name}
@@ -1094,4 +1142,39 @@ function StarRateInput({
       </div>
     </div>
   );
+}
+
+/**
+ * Read an uploaded image and return a small data URL. Downscales to a 256px box
+ * so the logo stays tiny in localStorage (the CRM persists companies there).
+ */
+async function readLogoAsDataUrl(file: File): Promise<string> {
+  const raw = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('decode failed'));
+      i.src = raw;
+    });
+    const max = 256;
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return raw;
+    ctx.drawImage(img, 0, 0, w, h);
+    // PNG preserves transparency for most logos.
+    return canvas.toDataURL('image/png');
+  } catch {
+    return raw; // fall back to the original if the browser can't decode it
+  }
 }

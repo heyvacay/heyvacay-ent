@@ -385,6 +385,9 @@ export interface SalesCompany {
   name: string;
   domain: string;
   website?: string;
+  /** Company logo as a data URL (uploaded in the CRM). Shown on the account
+   *  header and carried onto the customer's workspace. */
+  logoUrl?: string;
   status: AccountStatus;
   industry: string;
   tier: Tier;

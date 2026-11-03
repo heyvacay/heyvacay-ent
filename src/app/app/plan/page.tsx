@@ -255,6 +255,27 @@ export default function PlanTripPage() {
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </Card>
 
+      {/* pre-search guide */}
+      {!loading && flights === null && hotels === null && !error && (
+        <div className="mt-8 grid gap-3 sm:grid-cols-3">
+          {[
+            { icon: <Plane className="h-5 w-5 text-brand-dark" />, t: 'Flight', d: 'Pick the outbound you want.' },
+            { icon: <Building className="h-5 w-5 text-brand-dark" />, t: 'Hotel', d: 'Choose a stay for the same dates.' },
+            { icon: <Shield className="h-5 w-5 text-brand-dark" />, t: 'One approval', d: 'Submit both legs together.' },
+          ].map((s, i) => (
+            <Card key={s.t} className="flex items-start gap-3">
+              <StepDot n={i + 1} done={false} />
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-white">
+                  {s.icon} {s.t}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">{s.d}</p>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* results — same cards as the single-booking flow */}
       {loading && (
         <p className="mt-6 text-center text-sm text-slate-400">Searching live flights &amp; hotels…</p>
@@ -262,7 +283,8 @@ export default function PlanTripPage() {
 
       {!loading && flights && (
         <section className="mt-8">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
+            <StepDot n={1} done={!!pickFlight} />
             <Plane className="h-5 w-5 text-brand-dark" /> Pick your flight
             {pickFlight && <Badge color="green">Selected</Badge>}
           </h2>
@@ -291,7 +313,8 @@ export default function PlanTripPage() {
 
       {!loading && hotels && (
         <section className="mt-8">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
+            <StepDot n={2} done={!!pickHotel} />
             <Building className="h-5 w-5 text-brand-dark" /> Pick your hotel
             {pickHotel && <Badge color="green">Selected</Badge>}
           </h2>
@@ -321,7 +344,10 @@ export default function PlanTripPage() {
       {/* review — a sticky summary rail once anything is picked */}
       {anyPicked && (
         <Card className="mt-8 border-brand/30 bg-brand/5">
-          <h2 className="mb-1 font-display text-lg font-bold text-slate-900">Review your trip</h2>
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
+            <StepDot n={3} done={!!(plannedFlight && plannedHotel)} />
+            Review your trip
+          </h2>
           <p className="mb-3 text-xs text-slate-500">
             {dest?.label} · {dateRange(start, end)}
           </p>
@@ -400,6 +426,22 @@ export default function PlanTripPage() {
 /* ---------------- bits ---------------- */
 
 type Sug = { key: string; label: string; sub: string; data: unknown };
+
+/** A small numbered step indicator — filled brand once that step is done. */
+function StepDot({ n, done }: { n: number; done: boolean }) {
+  return (
+    <span
+      className={cn(
+        'grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold transition-colors',
+        done
+          ? 'bg-brand text-navy'
+          : 'bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-300'
+      )}
+    >
+      {n}
+    </span>
+  );
+}
 
 function Typeahead({
   label,
