@@ -169,6 +169,19 @@ export default function ApprovalDetail({ id }: { id: string }) {
   const cheaperSaving = cheapest && b.price - cheapest.price >= 25 ? b.price - cheapest.price : 0;
   const showCheaperPopup = pending && !done && !offerMode && cheaperSaving > 0 && !popupDismissed;
 
+  // Rate refresh on open: for a live hotel we re-check the current rate the
+  // moment this approval is opened, while still showing the originally
+  // requested price. Match the traveler's room by title, else fall back to the
+  // cheapest live room so the manager always sees a current number.
+  const rateRefreshing = pending && b.type === 'hotel' && !!b.hid && loadingRooms;
+  const matchedCurrent = (() => {
+    if (b.type !== 'hotel' || roomInfos.length === 0) return null;
+    const want = (b.roomType ?? '').trim().toLowerCase();
+    const m = (want && roomInfos.find((r) => r.title.toLowerCase() === want)) || cheapest;
+    return m ? m.price : null;
+  })();
+  const rateDelta = matchedCurrent != null ? matchedCurrent - b.price : 0;
+
   const useCheaperRoom = () => {
     if (!cheapest) return;
     setOffer({
@@ -317,6 +330,54 @@ export default function ApprovalDetail({ id }: { id: string }) {
                 </p>
               </div>
             </div>
+
+            {/* Live rate check on open */}
+            {(rateRefreshing || (pending && b.type === 'hotel' && matchedCurrent != null)) && (
+              <div
+                className={cn(
+                  'mt-4 flex items-start gap-2 rounded-xl p-3 text-sm',
+                  rateRefreshing
+                    ? 'bg-slate-50 text-slate-600'
+                    : rateDelta > 0
+                      ? 'bg-amber-50 text-amber-800'
+                      : rateDelta < 0
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-slate-50 text-slate-600'
+                )}
+              >
+                {rateRefreshing ? (
+                  <>
+                    <span className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
+                    <span>
+                      Re-checking the current rate with the hotel… showing the requested price{' '}
+                      <span className="font-semibold">{money(b.price)}</span> until it&apos;s back.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Shield className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      Current live rate <span className="font-semibold">{money(matchedCurrent!)}</span>{' '}
+                      vs requested {money(b.price)} ·{' '}
+                      {rateDelta === 0 ? (
+                        'unchanged since the traveler booked.'
+                      ) : rateDelta > 0 ? (
+                        <>
+                          up <span className="font-semibold">{money(rateDelta)}</span> — approving at
+                          the requested price may bounce back to the traveler if it has moved
+                          materially.
+                        </>
+                      ) : (
+                        <>
+                          down <span className="font-semibold">{money(-rateDelta)}</span> — you can use
+                          “Approve if changed” to pass the lower rate on.
+                        </>
+                      )}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* policy breakdown */}
