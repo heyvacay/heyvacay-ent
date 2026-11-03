@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { RECEIPT_OCR } from '@/lib/config.server';
+import { RECEIPT_OCR, VERYFI } from '@/lib/config.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,7 +45,45 @@ export async function POST(req: Request) {
   const image = body.image || '';
   if (!image) return NextResponse.json({ error: 'image required' }, { status: 400 });
 
-  // Live provider path.
+  // Veryfi provider path (our standard receipt-OCR provider). Veryfi accepts a
+  // base64 payload with the data-URL prefix stripped; map its response to the
+  // fields the expense form autopopulates.
+  if (VERYFI.live) {
+    try {
+      const base64 = image.includes(',') ? image.slice(image.indexOf(',') + 1) : image;
+      const res = await fetch(`${VERYFI.base}/documents/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CLIENT-ID': VERYFI.clientId,
+          AUTHORIZATION: `apikey ${VERYFI.username}:${VERYFI.apiKey}`,
+        },
+        body: JSON.stringify({
+          file_data: base64,
+          file_name: body.filename || 'receipt.jpg',
+        }),
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const d = await res.json().catch(() => null);
+        const merchant = d?.vendor?.name ?? d?.vendor?.raw_name ?? '';
+        const amount = Number(d?.total) || 0;
+        if (merchant || amount) {
+          return NextResponse.json({
+            merchant,
+            amount,
+            date: (d?.date ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+            category: d?.category ?? 'Other',
+            source: 'veryfi',
+          });
+        }
+      }
+    } catch {
+      /* fall through to the generic / deterministic path */
+    }
+  }
+
+  // Generic provider path (RECEIPT_OCR_*).
   if (RECEIPT_OCR.live) {
     try {
       const res = await fetch(`${RECEIPT_OCR.base}/scan`, {

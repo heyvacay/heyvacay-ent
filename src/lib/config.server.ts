@@ -113,6 +113,25 @@ export const RECEIPT_OCR = {
 };
 
 /**
+ * Veryfi — receipt OCR provider we're standardizing on. Set these three in the
+ * backend secret / environment to turn on live scanning (the keys never reach
+ * the browser):
+ *   VERYFI_CLIENT_ID     — your Veryfi Client ID
+ *   VERYFI_USERNAME      — your Veryfi username
+ *   VERYFI_API_KEY       — your Veryfi API key
+ * Optional: VERYFI_API_BASE (defaults to Veryfi's v8 partner endpoint host).
+ */
+export const VERYFI = {
+  clientId: process.env.VERYFI_CLIENT_ID || '',
+  username: process.env.VERYFI_USERNAME || '',
+  apiKey: process.env.VERYFI_API_KEY || '',
+  base: (process.env.VERYFI_API_BASE || 'https://api.veryfi.com/api/v8/partner').replace(/\/+$/, ''),
+  get live() {
+    return Boolean(this.clientId && this.username && this.apiKey);
+  },
+};
+
+/**
  * Stripe — card payments at checkout. Integrated the same way as RateHawk:
  * the booking total's PaymentIntent is created by the shared HeyVacay backend
  * (/bookings/payment/init-stripe), so charges run on the same Stripe account,
