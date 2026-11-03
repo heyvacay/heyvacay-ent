@@ -26,6 +26,10 @@ import {
 
 const GET_STARTED_URL = '/signup';
 const SIGN_IN_URL = '/app';
+// Book-a-demo scheduling link. Point this at your Cal.com event once the
+// HeyVacay demo account is set up (e.g. https://cal.com/heyvacay/demo).
+const DEMO_URL =
+  process.env.NEXT_PUBLIC_DEMO_URL || 'https://cal.com/heyvacay/demo';
 
 /* --------------------------- small building blocks --------------------------- */
 
@@ -149,10 +153,12 @@ export default function Home() {
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </a>
                 <a
-                  href="#value"
+                  href={DEMO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-line bg-white/5 px-7 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
                 >
-                  See how it works
+                  Get a demo
                 </a>
               </div>
 
@@ -751,12 +757,29 @@ export default function Home() {
                   Get started free <ArrowRight className="h-4 w-4" />
                 </a>
                 <a
-                  href={SIGN_IN_URL}
+                  href={DEMO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex w-full items-center justify-center rounded-full border border-line bg-white/5 px-8 py-4 text-base font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
                 >
-                  Sign in
+                  Get a demo
                 </a>
               </div>
+              <p className="mt-4 text-sm text-muted">
+                Prefer to talk first?{' '}
+                <a
+                  href={DEMO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-brand hover:underline"
+                >
+                  Book a 20-minute demo
+                </a>{' '}
+                · already set up?{' '}
+                <a href={SIGN_IN_URL} className="font-semibold text-white hover:underline">
+                  Sign in
+                </a>
+              </p>
             </div>
           </Reveal>
         </div>
@@ -780,6 +803,9 @@ export default function Home() {
           <div className="flex items-center gap-5 text-sm text-muted">
             <a href="#travel" className="hover:text-white">Platform</a>
             <a href="#pricing" className="hover:text-white">Pricing</a>
+            <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="hover:text-white">
+              Get a demo
+            </a>
             <a href={SIGN_IN_URL} className="hover:text-white">Sign in</a>
           </div>
         </div>
