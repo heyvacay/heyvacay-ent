@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -38,6 +39,44 @@ import { rewardsFor } from './rewards';
 import { sendEmail } from './email';
 
 const STORAGE_KEY = 'hv_ent_demo_v2';
+
+/**
+ * Each company a rep enters gets its OWN persisted workspace, keyed by company
+ * id, so accounts are genuinely separate — bookings, expenses, people and
+ * settings made inside one account never leak into another (or into the demo
+ * owner workspace). The default key is the owner's own login.
+ */
+const acctKey = (id?: string | null): string =>
+  id ? `hv_ent_acct_${id}` : STORAGE_KEY;
+
+/** Back-fill slices added after a browser last saved its workspace. */
+function mergeLoaded(s: AppState): AppState {
+  return {
+    ...SEED,
+    ...s,
+    integrations: s.integrations ?? SEED.integrations,
+    billing: s.billing ?? SEED.billing,
+    accountingMap: s.accountingMap ?? SEED.accountingMap,
+    history: s.history ?? SEED.history,
+  };
+}
+
+/** A clean workspace for a newly-entered company: seed structure (users,
+ *  policies, access rules) with the company's own identity and zero activity. */
+function seedAccount(ctx: { id?: string; name: string; domain: string }): AppState {
+  return {
+    ...SEED,
+    company: {
+      ...SEED.company,
+      id: ctx.id ?? SEED.company.id,
+      name: ctx.name,
+      domain: ctx.domain || SEED.company.domain,
+    },
+    bookings: [],
+    expenses: [],
+    points: [],
+  };
+}
 
 /** Order flight cabins so we can compare "is this above the allowed cabin?". */
 function cabinRank(cabin: string): number {
@@ -228,43 +267,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     domain: string;
   } | null>(null);
 
-  // Load persisted state on the client only (avoids SSR hydration mismatch).
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as {
-          state: AppState;
-          role: Role;
-        };
-        if (parsed.state)
-          setState({
-            ...SEED,
-            ...parsed.state,
-            // back-fill slices added after this browser last saved
-            integrations: parsed.state.integrations ?? SEED.integrations,
-            billing: parsed.state.billing ?? SEED.billing,
-            accountingMap: parsed.state.accountingMap ?? SEED.accountingMap,
-            history: parsed.state.history ?? SEED.history,
-          });
-        if (parsed.role) setRole(parsed.role);
-      }
-    } catch {
-      /* ignore corrupt storage */
-    }
-    setHydrated(true);
-  }, []);
+  // The storage key that's currently loaded into `state`, so the persist
+  // effect never writes one account's data under another's key mid-switch.
+  const loadedKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, role }));
-    } catch {
-      /* ignore */
-    }
-  }, [state, role, hydrated]);
-
-  // Read the "view as company" overlay set by the Sales console.
+  // Read the "view as company" overlay set by the Sales console. This runs
+  // before the load effect so the correct account is chosen on first paint.
   useEffect(() => {
     const read = () => {
       try {
@@ -283,14 +291,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // The state exposed to the app, with the impersonated company's identity
-  // overlaid on top. Never persisted — raw `state` stays clean.
-  // When entering a company OTHER than the seed account, the workspace starts
-  // clean — no prior bookings/expenses/points — so a rep sets it up from zero.
-  const freshAccount =
-    impersonation != null &&
-    impersonation.id != null &&
-    impersonation.id !== state.company.id;
+  // Load the active account's workspace whenever the active company changes.
+  // Each company id maps to its own localStorage key (acctKey), so entering a
+  // different account swaps the entire workspace in and out — truly separate.
+  useEffect(() => {
+    const key = acctKey(impersonation?.id);
+    if (loadedKeyRef.current === key) return; // already loaded this account
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { state?: AppState; role?: Role };
+        setState(
+          parsed.state
+            ? mergeLoaded(parsed.state)
+            : impersonation?.id
+              ? seedAccount(impersonation)
+              : SEED
+        );
+        setRole(parsed.role ?? 'admin');
+      } else {
+        // First time entering this account — start from a clean seed carrying
+        // the company's own identity (the owner's default login uses SEED).
+        setState(impersonation?.id ? seedAccount(impersonation) : SEED);
+        setRole('admin');
+      }
+    } catch {
+      setState(impersonation?.id ? seedAccount(impersonation) : SEED);
+      setRole('admin');
+    }
+    loadedKeyRef.current = key;
+    setHydrated(true);
+  }, [impersonation]);
+
+  // Persist to the CURRENTLY loaded account's key only.
+  useEffect(() => {
+    if (!hydrated) return;
+    const key = acctKey(impersonation?.id);
+    if (loadedKeyRef.current !== key) return; // mid-switch; skip
+    try {
+      localStorage.setItem(key, JSON.stringify({ state, role }));
+    } catch {
+      /* ignore */
+    }
+  }, [state, role, hydrated, impersonation]);
+
+  // The state exposed to the app. The persisted workspace already carries the
+  // right company identity; we re-overlay name/domain so live CRM edits (a
+  // rename, a domain change) show immediately without reloading the account.
   const effectiveState: AppState = impersonation
     ? {
         ...state,
@@ -299,9 +346,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           name: impersonation.name,
           domain: impersonation.domain || state.company.domain,
         },
-        ...(freshAccount
-          ? { bookings: [], expenses: [], points: [] }
-          : {}),
       }
     : state;
 
