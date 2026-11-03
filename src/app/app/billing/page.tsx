@@ -1,10 +1,64 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Field, Input, PageHeader, cn } from '@/components/app/ui';
 import { Check, Wallet, Shield } from '@/components/icons';
-import type { BillingMode, Net30KycFields } from '@/lib/types';
+import type { BillingMode, KycStatus, Net30Kyc, Net30KycFields } from '@/lib/types';
+
+const KYC_LABEL: Record<KycStatus, string> = {
+  sent: 'Sent',
+  received: 'Received',
+  in_review: 'In review',
+  needs_attention: 'Needs attention',
+  approved: 'Approved',
+  denied: 'Denied',
+};
+
+const KYC_COLOR: Record<KycStatus, 'slate' | 'amber' | 'green' | 'red' | 'brand'> = {
+  sent: 'slate',
+  received: 'brand',
+  in_review: 'amber',
+  needs_attention: 'amber',
+  approved: 'green',
+  denied: 'red',
+};
+
+function KycBadge({ status }: { status: KycStatus }) {
+  return <Badge color={KYC_COLOR[status]}>{KYC_LABEL[status]}</Badge>;
+}
+
+/** Read-only view of the KYC the account submitted, for the reviewer. */
+function KycSummary({ kyc }: { kyc: Net30Kyc }) {
+  const f = kyc.fields;
+  if (!f) return null;
+  const rows: [string, string][] = [
+    ['Legal entity', f.legalName],
+    ['Tax ID / EIN', f.taxId],
+    ['Owner SSN', f.ssn ? `•••-••-${f.ssn.replace(/\D/g, '').slice(-4)}` : '—'],
+    ['Billing email', f.billingEmail],
+    ['Billing address', f.billingAddress],
+    ['Est. monthly spend', f.estMonthlySpend || '—'],
+    ['Signer', `${f.signerName}${f.signerTitle ? `, ${f.signerTitle}` : ''}`],
+    ['Signature', f.signatureName ? `✍ ${f.signatureName}` : '—'],
+  ];
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 dark:border-white/10">
+      <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+        Submitted {kyc.submittedAt} by {kyc.ownerName}
+      </p>
+      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-2 text-xs">
+            <dt className="text-slate-400">{k}</dt>
+            <dd className="text-right font-medium text-slate-700 dark:text-slate-200">{v || '—'}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
 
 const METHODS = ['Credit card', 'Debit card', 'Apple Pay'];
 
@@ -18,11 +72,15 @@ export default function BillingPage() {
     requestNet30,
     startNet30Kyc,
     submitNet30Kyc,
+    setKycStatus,
+    respondKyc,
     setPersonalCard,
   } = useStore();
   const billing = state.billing ?? { mode: 'employee' as BillingMode };
   const [card, setCard] = useState({ brand: 'Visa', last4: '' });
   const [pcard, setPcard] = useState({ brand: 'Visa', last4: '' });
+  const [reviewNote, setReviewNote] = useState('');
+  const [ownerReply, setOwnerReply] = useState('');
 
   const linkedCard = billing.cardLast4;
   const personalCard = activeUser.personalCard;
@@ -156,45 +214,103 @@ export default function BillingPage() {
           <Shield className="h-5 w-5 text-brand-dark" /> Net 30 invoicing
         </h2>
 
-        {net30Approved ? (
-          <div className="rounded-xl bg-emerald-50 p-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-              <Check className="h-4 w-4" /> Net 30 is approved and active.
-            </p>
-            {kyc?.fields && (
-              <p className="mt-1 text-xs text-emerald-700/80">
-                Invoices go to {kyc.fields.billingEmail || kyc.ownerEmail} · signed by{' '}
-                {kyc.fields.signerName}
-                {kyc.fields.signerTitle ? `, ${kyc.fields.signerTitle}` : ''}.
-              </p>
+        {/* Status chip + audit trail, shown once a KYC exists */}
+        {kyc && kyc.status !== 'sent' && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <KycBadge status={kyc.status} />
+            {kyc.reviewer && kyc.status !== 'received' && (
+              <span className="text-xs text-slate-400">reviewed by {kyc.reviewer}</span>
             )}
           </div>
-        ) : viewingAs ? (
-          // Sales rep, viewing this account from the CRM — only they can start Net 30.
-          kyc?.status === 'submitted' || kyc?.status === 'sent' ? (
-            <div className="rounded-xl bg-brand/5 p-3">
-              <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <Check className="h-4 w-4 text-brand-dark" /> KYC form sent to {kyc.ownerName} (
-                {kyc.ownerEmail}) on {kyc.sentAt}.
+        )}
+
+        {net30Approved ? (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-500/10">
+              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                <Check className="h-4 w-4" /> KYC approved — Net 30 is active.
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Net 30 switches on automatically once the account owner completes and submits it.
-              </p>
+              {kyc?.fields && (
+                <p className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">
+                  Invoices go to {kyc.fields.billingEmail || kyc.ownerEmail} · signed by{' '}
+                  {kyc.fields.signerName}
+                  {kyc.fields.signerTitle ? `, ${kyc.fields.signerTitle}` : ''}.
+                </p>
+              )}
             </div>
+            <Link
+              href="/app/invoices"
+              className="flex items-center justify-between rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand/10"
+            >
+              <span className="flex items-center gap-2">
+                <Shield className="h-4 w-4" /> Open your Invoice Center
+              </span>
+              <span>→</span>
+            </Link>
+          </div>
+        ) : viewingAs ? (
+          // HeyVacay rep viewing the account from Nova — start KYC and review it.
+          !kyc || kyc.status === 'sent' ? (
+            !kyc ? (
+              <>
+                <p className="mb-3 text-sm text-slate-500">
+                  As the rep on this account, you can turn on Net 30. We&apos;ll send a KYC form to
+                  the account owner; once they submit it, you review and approve it here.
+                </p>
+                <Button onClick={startNet30Kyc}>
+                  <Shield className="h-4 w-4" /> Set up Net 30 — send KYC to account owner
+                </Button>
+              </>
+            ) : (
+              <div className="rounded-xl bg-brand/5 p-3 text-sm text-slate-600 dark:text-slate-300">
+                KYC form sent to {kyc.ownerName} ({kyc.ownerEmail}) on {kyc.sentAt}. You&apos;ll
+                review it here once they submit.
+              </div>
+            )
           ) : (
-            <>
-              <p className="mb-3 text-sm text-slate-500">
-                As the sales rep on this account, you can turn on Net 30 terms. We&apos;ll send a
-                short KYC (Know Your Customer) form to the account owner; once they complete it,
-                Net 30 goes live.
-              </p>
-              <Button onClick={startNet30Kyc}>
-                <Shield className="h-4 w-4" /> Set up Net 30 — send KYC to account owner
-              </Button>
-            </>
+            // Reviewer workspace: see what they submitted + move the status.
+            <div className="space-y-3">
+              {kyc.fields && <KycSummary kyc={kyc} />}
+              {kyc.ownerResponse && (
+                <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-white/5 dark:text-slate-300">
+                  <span className="font-semibold">Owner reply:</span> {kyc.ownerResponse}
+                </p>
+              )}
+              <div>
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Note to the account (required for “Needs attention”)
+                </label>
+                <Input
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
+                  placeholder="e.g. The SSN doesn’t match the signer — please re-check."
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {kyc.status !== 'in_review' && (
+                  <Button variant="outline" onClick={() => setKycStatus('in_review')}>
+                    Mark in review
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => reviewNote.trim() && setKycStatus('needs_attention', reviewNote.trim())}
+                  disabled={!reviewNote.trim()}
+                >
+                  Needs attention
+                </Button>
+                <Button variant="outline" onClick={() => setKycStatus('denied', reviewNote.trim() || undefined)}>
+                  Deny
+                </Button>
+                <Button onClick={() => setKycStatus('approved')}>
+                  <Check className="h-4 w-4" /> Approve &amp; activate Net 30
+                </Button>
+              </div>
+            </div>
           )
-        ) : kyc?.status === 'sent' || kyc?.status === 'submitted' ? (
-          // Account owner — fill in the KYC form that the rep sent.
+        ) : kyc?.status === 'sent' ? (
+          // Account owner — fill in the KYC form.
           <KycForm
             ownerName={kyc.ownerName}
             rep={kyc.rep}
@@ -206,8 +322,42 @@ export default function BillingPage() {
               signerTitle: activeUser.title,
             }}
           />
+        ) : kyc?.status === 'needs_attention' ? (
+          // Owner must respond to the reviewer's note.
+          <div className="space-y-3">
+            <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+              <p className="font-semibold">Your KYC needs attention.</p>
+              <p className="mt-1">{kyc.reviewComment}</p>
+            </div>
+            <Input
+              value={ownerReply}
+              onChange={(e) => setOwnerReply(e.target.value)}
+              placeholder="Reply to the HeyVacay team…"
+            />
+            <Button
+              onClick={() => {
+                if (ownerReply.trim()) {
+                  respondKyc(ownerReply.trim());
+                  setOwnerReply('');
+                }
+              }}
+              disabled={!ownerReply.trim()}
+            >
+              Send reply
+            </Button>
+          </div>
+        ) : kyc?.status === 'received' || kyc?.status === 'in_review' ? (
+          <div className="rounded-xl bg-brand/5 p-3 text-sm text-slate-600 dark:text-slate-300">
+            Thanks — your KYC is with the HeyVacay team for review. We&apos;ll email you the moment
+            Net 30 is approved and your Invoice Center opens.
+          </div>
+        ) : kyc?.status === 'denied' ? (
+          <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
+            Your Net 30 application was declined{kyc.reviewComment ? `: ${kyc.reviewComment}` : '.'}{' '}
+            Contact your account manager to discuss options.
+          </div>
         ) : billing.netRequested ? (
-          <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
+          <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
             <Check className="h-4 w-4" /> Request received — your sales rep will set up Net 30 and
             send a KYC form to the account owner.
           </p>
@@ -221,6 +371,26 @@ export default function BillingPage() {
               <Shield className="h-4 w-4" /> Request Net 30 — have a rep set it up
             </Button>
           </>
+        )}
+
+        {/* Audit trail */}
+        {kyc?.history && kyc.history.length > 0 && (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-medium text-slate-400">
+              Review history ({kyc.history.length})
+            </summary>
+            <ul className="mt-2 space-y-1">
+              {kyc.history
+                .slice()
+                .reverse()
+                .map((h, i) => (
+                  <li key={i} className="text-xs text-slate-500">
+                    <span className="font-medium">{KYC_LABEL[h.status]}</span> · {h.by} · {h.at}
+                    {h.comment ? ` — ${h.comment}` : ''}
+                  </li>
+                ))}
+            </ul>
+          </details>
         )}
       </Card>
     </div>
@@ -241,22 +411,33 @@ function KycForm({
   const [f, setF] = useState<Net30KycFields>({
     legalName: defaults.legalName ?? '',
     taxId: '',
+    ssn: '',
     billingEmail: defaults.billingEmail ?? '',
     billingAddress: '',
     estMonthlySpend: '',
     signerName: defaults.signerName ?? '',
     signerTitle: defaults.signerTitle ?? '',
+    signatureName: '',
   });
   const set = (k: keyof Net30KycFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
+  const signed =
+    f.signatureName.trim().length > 1 &&
+    f.signatureName.trim().toLowerCase() === f.signerName.trim().toLowerCase();
   const ready =
-    f.legalName.trim() && f.taxId.trim() && f.billingEmail.trim() && f.signerName.trim();
+    f.legalName.trim() &&
+    f.taxId.trim() &&
+    f.ssn.replace(/\D/g, '').length === 9 &&
+    f.billingEmail.trim() &&
+    f.billingAddress.trim() &&
+    f.signerName.trim() &&
+    signed;
 
   return (
     <div>
       <p className="mb-3 text-sm text-slate-500">
-        Hi {ownerName} — {rep} started Net 30 setup. Complete this KYC form to turn on invoiced
-        billing. As the account owner, your details authorize the invoicing relationship.
+        Hi {ownerName} — {rep} started Net 30 setup. Complete this KYC (Know Your Customer) form.
+        It&apos;s reviewed and approved by the HeyVacay team before invoiced billing turns on.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Legal entity name">
@@ -265,15 +446,22 @@ function KycForm({
         <Field label="Tax ID / EIN">
           <Input value={f.taxId} onChange={set('taxId')} placeholder="12-3456789" />
         </Field>
+        <Field label="Owner / guarantor SSN">
+          <Input
+            value={f.ssn}
+            onChange={(e) => setF((p) => ({ ...p, ssn: ssnMask(e.target.value) }))}
+            placeholder="123-45-6789"
+            inputMode="numeric"
+          />
+        </Field>
+        <Field label="Est. monthly travel spend">
+          <Input value={f.estMonthlySpend} onChange={set('estMonthlySpend')} placeholder="$25,000" />
+        </Field>
         <Field label="Billing email">
           <Input value={f.billingEmail} onChange={set('billingEmail')} placeholder="ap@acme.com" />
         </Field>
-        <Field label="Est. monthly travel spend">
-          <Input
-            value={f.estMonthlySpend}
-            onChange={set('estMonthlySpend')}
-            placeholder="$25,000"
-          />
+        <Field label="Est. monthly spend currency">
+          <Input value="USD" disabled onChange={() => {}} />
         </Field>
         <div className="sm:col-span-2">
           <Field label="Billing address">
@@ -291,14 +479,46 @@ function KycForm({
           <Input value={f.signerTitle} onChange={set('signerTitle')} placeholder="CFO" />
         </Field>
       </div>
+
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
+        <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+          Signature — type your full legal name exactly as the authorized signer to sign this
+          agreement and personal guarantee.
+        </p>
+        <Input
+          value={f.signatureName}
+          onChange={set('signatureName')}
+          placeholder={f.signerName || 'Type your full legal name'}
+          className="mt-2 font-[cursive] text-lg"
+        />
+        {f.signatureName.trim() && !signed && (
+          <p className="mt-1 text-xs text-amber-600">
+            Signature must match the authorized signer name exactly.
+          </p>
+        )}
+      </div>
+
       <div className="mt-4 flex items-center gap-3">
-        <Button onClick={() => ready && onSubmit(f)} disabled={!ready}>
-          <Shield className="h-4 w-4" /> Submit KYC & enable Net 30
+        <Button
+          onClick={() => ready && onSubmit({ ...f, signedAt: new Date().toISOString() })}
+          disabled={!ready}
+        >
+          <Shield className="h-4 w-4" /> Submit KYC for review
         </Button>
-        <span className="text-xs text-slate-400">Reviewed and approved on submit for this demo.</span>
+        <span className="text-xs text-slate-400">
+          Submitting sends this to the HeyVacay team to review and approve.
+        </span>
       </div>
     </div>
   );
+}
+
+/** Progressive SSN mask: 123-45-6789. */
+function ssnMask(v: string): string {
+  const d = v.replace(/\D/g, '').slice(0, 9);
+  if (d.length < 4) return d;
+  if (d.length < 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
 }
 
 function Option({

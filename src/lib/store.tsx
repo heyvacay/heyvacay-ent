@@ -14,6 +14,7 @@ import type {
   AppState,
   Billing,
   Net30KycFields,
+  KycStatus,
   Booking,
   BookingApprovalMode,
   BudgetScope,
@@ -111,8 +112,12 @@ export interface StoreApi {
   requestNet30: () => void;
   /** Sales-rep only: start Net 30 by sending a KYC form to the account owner. */
   startNet30Kyc: () => void;
-  /** Account owner: submit the KYC form; approves and switches billing to Net 30. */
+  /** Account owner: submit the KYC form → 'received' (waits for HeyVacay review). */
   submitNet30Kyc: (fields: Net30KycFields) => void;
+  /** HeyVacay reviewer: set the KYC status (approve unlocks Net 30 + invoicing). */
+  setKycStatus: (status: KycStatus, comment?: string) => void;
+  /** Account owner: reply to a needs_attention note → back to in_review. */
+  respondKyc: (text: string) => void;
   updateBudgetLimit: (id: string, limit: number) => void;
   setScopedBudget: (
     scope: BudgetScope,
@@ -621,24 +626,84 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Account owner submits the KYC form. For the demo this auto-approves and
-  // switches billing to Net 30 so the flow is visible end-to-end.
+  // Account owner submits the KYC form. This does NOT auto-approve: it goes to
+  // 'received' (= we have it) and waits for the HeyVacay team to review.
   const submitNet30Kyc: StoreApi['submitNet30Kyc'] = useCallback((fields: Net30KycFields) => {
     setState((s) => {
       const prev = s.billing?.netKyc;
       if (!prev) return s;
+      const now = todayISO();
       return {
         ...s,
         billing: {
-          ...(s.billing ?? { mode: 'net30' as Billing['mode'] }),
-          mode: 'net30',
+          ...(s.billing ?? { mode: 'employee' as Billing['mode'] }),
           netRequested: true,
           netKyc: {
             ...prev,
-            status: 'approved',
-            submittedAt: todayISO(),
-            approvedAt: todayISO(),
+            status: 'received',
+            submittedAt: now,
             fields,
+            history: [
+              ...(prev.history ?? []),
+              { status: 'received', at: now, by: prev.ownerName },
+            ],
+          },
+        },
+      };
+    });
+  }, []);
+
+  // HeyVacay reviewer moves the KYC through its lifecycle. On 'approved' Net 30
+  // goes live (unlocking the Invoice Center). 'needs_attention' carries a note
+  // telling the account what to fix.
+  const setKycStatus: StoreApi['setKycStatus'] = useCallback((status, comment) => {
+    let reviewer = 'HeyVacay team';
+    try {
+      reviewer = localStorage.getItem('hv_crm_me_v1') || reviewer;
+    } catch {
+      /* ignore */
+    }
+    setState((s) => {
+      const prev = s.billing?.netKyc;
+      if (!prev) return s;
+      const now = todayISO();
+      const approved = status === 'approved';
+      return {
+        ...s,
+        billing: {
+          ...(s.billing ?? { mode: 'employee' as Billing['mode'] }),
+          ...(approved ? { mode: 'net30' as Billing['mode'] } : {}),
+          netKyc: {
+            ...prev,
+            status,
+            reviewer,
+            reviewComment: status === 'needs_attention' ? comment : undefined,
+            ...(approved ? { approvedAt: now } : {}),
+            history: [...(prev.history ?? []), { status, at: now, by: reviewer, comment }],
+          },
+        },
+      };
+    });
+  }, []);
+
+  // Account owner replies to a needs_attention note → back to in_review.
+  const respondKyc: StoreApi['respondKyc'] = useCallback((text) => {
+    setState((s) => {
+      const prev = s.billing?.netKyc;
+      if (!prev) return s;
+      const now = todayISO();
+      return {
+        ...s,
+        billing: {
+          ...(s.billing ?? { mode: 'employee' as Billing['mode'] }),
+          netKyc: {
+            ...prev,
+            status: 'in_review',
+            ownerResponse: text,
+            history: [
+              ...(prev.history ?? []),
+              { status: 'in_review', at: now, by: prev.ownerName, comment: text },
+            ],
           },
         },
       };
@@ -1385,6 +1450,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setBillingMode,
     startNet30Kyc,
     submitNet30Kyc,
+    setKycStatus,
+    respondKyc,
     linkCard,
     requestNet30,
     updateBudgetLimit,

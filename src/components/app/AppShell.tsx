@@ -81,6 +81,7 @@ const ADMIN_NAV: NavSection[] = [
       { href: '/app/budgets', label: 'Budgets', icon: Wallet },
       { href: '/app/expenses', label: 'Expenses', icon: Receipt },
       { href: '/app/billing', label: 'Billing', icon: Lock },
+      { href: '/app/invoices', label: 'Invoices', icon: Receipt },
     ],
   },
   {

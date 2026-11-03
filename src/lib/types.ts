@@ -438,16 +438,40 @@ export interface Billing {
 export interface Net30KycFields {
   legalName: string;
   taxId: string;
+  /** Official SSN (owner/guarantor) — personal-guarantee underwriting. */
+  ssn: string;
   billingEmail: string;
   billingAddress: string;
   estMonthlySpend: string;
   signerName: string;
   signerTitle: string;
+  /** Signature: typed full legal name + a drawn signature data URL. */
+  signatureName: string;
+  signatureImage?: string;
+  signedAt?: string;
+}
+
+/**
+ * KYC review status. Received is auto-set when the owner submits (= we have it);
+ * our team then moves it In review → Approved / Needs attention / Denied.
+ */
+export type KycStatus =
+  | 'sent'
+  | 'received'
+  | 'in_review'
+  | 'needs_attention'
+  | 'approved'
+  | 'denied';
+
+export interface KycStatusEntry {
+  status: KycStatus;
+  at: string;
+  by: string;
+  comment?: string;
 }
 
 export interface Net30Kyc {
-  /** sent = waiting on the owner; submitted = owner returned it; approved = Net 30 live. */
-  status: 'sent' | 'submitted' | 'approved';
+  status: KycStatus;
   /** Sales rep who started the Net-30 setup. */
   rep: string;
   /** Account owner the form was sent to. */
@@ -457,6 +481,14 @@ export interface Net30Kyc {
   submittedAt?: string;
   approvedAt?: string;
   fields?: Net30KycFields;
+  /** Who on our team is reviewing. */
+  reviewer?: string;
+  /** Reviewer's note when status is needs_attention (what the account must fix). */
+  reviewComment?: string;
+  /** The account owner's reply to a needs_attention note. */
+  ownerResponse?: string;
+  /** Full audit trail of status changes. */
+  history?: KycStatusEntry[];
 }
 
 export interface AppState {
