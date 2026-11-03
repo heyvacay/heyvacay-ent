@@ -229,7 +229,8 @@ function DetailsModal({ opt, onClose }: { opt: InventoryOption; onClose: () => v
 
 export default function FlightsResults() {
   const params = useSearchParams();
-  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor } = useStore();
+  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor, dunning } = useStore();
+  const bookingsPaused = dunning.level === 'paused';
   const canBookForOthers = role === 'admin' || role === 'booker';
 
   const origin = params.get('origin') || '';
@@ -455,6 +456,8 @@ export default function FlightsResults() {
           users={state.users}
           spent={spentForScope('employee', travelerId)}
           budget={state.budgets.find((b) => b.scope === 'employee' && b.refId === travelerId)?.limit}
+          bookingsPaused={bookingsPaused}
+          dunningBalance={dunning.balance}
         />
       )}
     </div>
@@ -568,6 +571,8 @@ function CheckoutPanel({
   users,
   spent,
   budget,
+  bookingsPaused,
+  dunningBalance,
 }: {
   opt: InventoryOption;
   onClose: () => void;
@@ -586,6 +591,8 @@ function CheckoutPanel({
   users: User[];
   spent: number;
   budget?: number;
+  bookingsPaused: boolean;
+  dunningBalance: number;
 }) {
   const { flags, points, needsApproval } = sig(opt);
   // A real Duffel order books the base offer at its live price; the demo fare
@@ -635,7 +642,20 @@ function CheckoutPanel({
             />
           </Field>
 
-          {liveReady ? (
+          {bookingsPaused ? (
+            <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+              <p className="font-semibold">New bookings are paused</p>
+              <p className="mt-1">
+                Your account is more than 4 weeks past due on an invoice
+                {dunningBalance > 0 ? ` (${money(dunningBalance)} outstanding)` : ''}. Clear the
+                balance in the{' '}
+                <Link href="/app/invoices" className="font-semibold underline">
+                  Invoice Center
+                </Link>{' '}
+                to resume booking.
+              </p>
+            </div>
+          ) : liveReady ? (
             <>
               <div className="rounded-xl bg-slate-50 p-3 text-sm">
                 <div className="flex justify-between">

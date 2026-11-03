@@ -46,8 +46,9 @@ function Stars({ n = 0 }: { n?: number }) {
 export default function HotelDetail({ hid }: { hid: string }) {
   const params = useSearchParams();
   const router = useRouter();
-  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor, submitExpense } =
+  const { state, role, activeUser, evaluatePolicies, book, spentForScope, approvalModeFor, submitExpense, dunning } =
     useStore();
+  const bookingsPaused = dunning.level === 'paused';
   const canBookForOthers = role === 'admin' || role === 'booker';
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
   const [guestName, setGuestName] = useState<string | null>(params.get('guestName') || null);
@@ -973,6 +974,25 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 ✕
               </button>
             </div>
+            {bookingsPaused ? (
+              <div className="p-6">
+                <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+                  <p className="font-semibold">New bookings are paused</p>
+                  <p className="mt-1">
+                    Your account is more than 4 weeks past due on an invoice
+                    {dunning.balance > 0 ? ` (${money(dunning.balance)} outstanding)` : ''}. Clear
+                    the balance in the{' '}
+                    <Link href="/app/invoices" className="font-semibold underline">
+                      Invoice Center
+                    </Link>{' '}
+                    to resume booking. Your account manager can lift this once payment is arranged.
+                  </p>
+                </div>
+                <Button variant="outline" className="mt-4 w-full" onClick={() => setPayStep(false)}>
+                  Close
+                </Button>
+              </div>
+            ) : (
             <div className="grid gap-0 sm:grid-cols-[1fr_1.1fr]">
               {/* order summary */}
               <div className="space-y-3 border-b border-slate-100 bg-slate-50 p-5 sm:border-b-0 sm:border-r">
@@ -1171,6 +1191,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 )}
               </div>
             </div>
+            )}
           </div>
         </div>
       )}

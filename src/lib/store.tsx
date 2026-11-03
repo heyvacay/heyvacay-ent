@@ -37,6 +37,7 @@ import { SEED } from './seed';
 import { uid, todayISO } from './format';
 import { rewardsFor } from './rewards';
 import { sendEmail } from './email';
+import { computeDunning, invoicePeriodPaid, type DunningState } from './dunning';
 
 const STORAGE_KEY = 'hv_ent_demo_v2';
 
@@ -117,6 +118,9 @@ export interface StoreApi {
   spentForScope: (scope: BudgetScope, refId: string | null) => number;
   companySpend: number;
   companySavings: number;
+  /** Invoiced-billing collections state — drives late fees and the hard
+   *  booking shut-off (card-only at 3 weeks, paused at 4+). */
+  dunning: DunningState;
   pointsBalance: (userId: string) => number;
 
   evaluatePolicies: (opt: InventoryOption, startDate: string) => PolicyFlag[];
@@ -436,6 +440,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .reduce((s, b) => s + b.savings, 0),
     [state.bookings]
   );
+
+  // Collections state for invoiced (Net 30) companies. Only meaningful once
+  // hydrated (reads per-viewer "paid" flags from localStorage); 'ok' before.
+  const net30Active =
+    state.billing?.mode === 'net30' && state.billing?.netKyc?.status === 'approved';
+  const dunning = useMemo<DunningState>(() => {
+    if (!hydrated || !net30Active) return { level: 'ok', weeksLate: 0, balance: 0 };
+    return computeDunning(state.bookings, invoicePeriodPaid);
+  }, [hydrated, net30Active, state.bookings]);
 
   const pointsBalance = useCallback(
     (userId: string) =>
@@ -1480,6 +1493,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     spentForScope,
     companySpend,
     companySavings,
+    dunning,
     pointsBalance,
     evaluatePolicies,
     inviteUser,
