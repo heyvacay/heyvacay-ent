@@ -78,19 +78,6 @@ export default function NewEventPage() {
     }
   }, [dinnerMode, dinnerOptions, dinnerWhen]);
 
-  if (role !== 'admin' && role !== 'booker') {
-    return (
-      <div>
-        <Link href="/app/events" className="text-sm font-medium text-brand-dark hover:underline">
-          ← All events
-        </Link>
-        <Card className="mt-4">
-          <p className="text-sm text-slate-500">Only admins and bookers can create events.</p>
-        </Card>
-      </div>
-    );
-  }
-
   const dStart = start ? parseISO(start) : undefined;
   const dEnd = end ? parseISO(end) : undefined;
   const basicsValid = name.trim().length > 0 && city.trim().length > 0 && !!start && !!end;
@@ -193,6 +180,20 @@ export default function NewEventPage() {
   const guidance = budgetOn ? budgetGuidance(estimate, estInput, budgetAmt) : null;
   // Smart planning chooses among room tiers, so it uses the indicative tier rates.
   const smart = budgetOn && smartPlanning ? smartPick(baseInput, budgetAmt) : null;
+
+  // Access guard — after all hooks so hook order stays stable.
+  if (role !== 'admin' && role !== 'booker') {
+    return (
+      <div>
+        <Link href="/app/events" className="text-sm font-medium text-brand-dark hover:underline">
+          ← All events
+        </Link>
+        <Card className="mt-4">
+          <p className="text-sm text-slate-500">Only admins and bookers can create events.</p>
+        </Card>
+      </div>
+    );
+  }
   // Distinct job titles among attendees, for per-position allowances.
   const positions = Array.from(
     new Set(selectedAttendees.map((u) => u.title).filter(Boolean))

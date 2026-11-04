@@ -21,6 +21,7 @@ const NAV = [
   { href: '/sales/pipeline', label: 'Pipeline', icon: TrendUp },
   { href: '/sales/companies', label: 'Companies', icon: Building },
   { href: '/sales/commission', label: 'Commission', icon: Wallet },
+  { href: '/sales/invoicing', label: 'Invoicing', icon: Receipt },
   { href: '/sales/tasks', label: 'Tasks', icon: Calendar },
   { href: '/sales/contracts', label: 'Contracts', icon: Receipt },
   { href: '/sales/team', label: 'Team', icon: Users },
