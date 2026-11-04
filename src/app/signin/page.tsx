@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/app/Logo';
 import { useStore } from '@/lib/store';
 
@@ -12,8 +11,7 @@ import { useStore } from '@/lib/store';
  * domain-based auto-join) against ent.nova when that backend is stood up.
  */
 export default function SignInPage() {
-  const router = useRouter();
-  const { state, setActiveUser, setRole } = useStore();
+  const { state } = useStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,6 +20,28 @@ export default function SignInPage() {
   const freeMail = /^(gmail|yahoo|outlook|hotmail|icloud|proton)\./i.test(domain ?? '');
   const showDomainJoin = !!domain && domain.includes('.') && !freeMail;
 
+  // Commit the signed-in identity straight to the default workspace's storage,
+  // clear any stale "view as company" overlay from an earlier CRM session, then
+  // hard-navigate so /app re-reads fresh state in its own StoreProvider. (A
+  // client-side push can land on /app before this provider persists, and a
+  // leftover view-as overlay would otherwise drop you into an empty account.)
+  const commitLogin = (userId: string, roleValue: string) => {
+    try {
+      const raw = localStorage.getItem('hv_ent_demo_v2');
+      const parsed = raw ? (JSON.parse(raw) as { state?: Record<string, unknown>; role?: string }) : null;
+      const baseState = parsed?.state ?? {};
+      localStorage.setItem(
+        'hv_ent_demo_v2',
+        JSON.stringify({ state: { ...baseState, activeUserId: userId }, role: roleValue })
+      );
+      sessionStorage.removeItem('hv_view_as');
+      sessionStorage.removeItem('hv_view_as_ctx');
+    } catch {
+      /* ignore storage errors — /app still loads a usable workspace */
+    }
+    window.location.href = '/app';
+  };
+
   // Demo auth: demo@demo.com/demo = full access; firstname@demo.com/demo views
   // that specific user. Real SSO/work-email auth replaces this with the backend.
   const enterFullAccess = () => {
@@ -29,9 +49,7 @@ export default function SignInPage() {
       state.users.find((u) => u.id === 'u_admin') ??
       state.users.find((u) => u.role === 'admin') ??
       state.users[0];
-    if (owner) setActiveUser(owner.id);
-    setRole('admin');
-    router.push('/app');
+    commitLogin(owner?.id ?? 'u_admin', 'admin');
   };
 
   const signIn = (e: React.FormEvent) => {
@@ -53,9 +71,7 @@ export default function SignInPage() {
         (u) => (u.name ?? '').trim().toLowerCase().split(' ')[0] === first
       );
       if (match) {
-        setActiveUser(match.id);
-        setRole(match.role);
-        router.push('/app');
+        commitLogin(match.id, match.role);
         return;
       }
       setError(`No demo user named "${first}". Try demo@demo.com for full access.`);

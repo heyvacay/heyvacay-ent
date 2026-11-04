@@ -262,9 +262,24 @@ export default function BillingPage() {
                 </Button>
               </>
             ) : (
-              <div className="rounded-xl bg-brand/5 p-3 text-sm text-slate-600 dark:text-slate-300">
-                KYC form sent to {kyc.ownerName} ({kyc.ownerEmail}) on {kyc.sentAt}. You&apos;ll
-                review it here once they submit.
+              <div className="space-y-3">
+                <div className="rounded-xl bg-brand/5 p-3 text-sm text-slate-600 dark:text-slate-300">
+                  KYC form sent to {kyc.ownerName} ({kyc.ownerEmail}) on {kyc.sentAt}. They can
+                  complete it from their login — or you can fill it on their behalf below to finish
+                  setting the account up.
+                </div>
+                <KycForm
+                  ownerName={kyc.ownerName}
+                  rep={kyc.rep}
+                  onBehalf
+                  onSubmit={submitNet30Kyc}
+                  defaults={{
+                    legalName: state.company.name,
+                    billingEmail: kyc.ownerEmail,
+                    signerName: kyc.ownerName,
+                    signerTitle: '',
+                  }}
+                />
               </div>
             )
           ) : (
@@ -402,11 +417,14 @@ function KycForm({
   rep,
   onSubmit,
   defaults,
+  onBehalf = false,
 }: {
   ownerName: string;
   rep: string;
   onSubmit: (f: Net30KycFields) => void;
   defaults: Partial<Net30KycFields>;
+  /** True when a rep is completing the form on the owner's behalf. */
+  onBehalf?: boolean;
 }) {
   const [f, setF] = useState<Net30KycFields>({
     legalName: defaults.legalName ?? '',
@@ -436,8 +454,17 @@ function KycForm({
   return (
     <div>
       <p className="mb-3 text-sm text-slate-500">
-        Hi {ownerName} — {rep} started Net 30 setup. Complete this KYC (Know Your Customer) form.
-        It&apos;s reviewed and approved by the HeyVacay team before invoiced billing turns on.
+        {onBehalf ? (
+          <>
+            Completing this KYC on behalf of {ownerName}. Fill in the company&apos;s details and have
+            the authorized signer sign — it goes to the HeyVacay team to review and approve.
+          </>
+        ) : (
+          <>
+            Hi {ownerName} — {rep} started Net 30 setup. Complete this KYC (Know Your Customer) form.
+            It&apos;s reviewed and approved by the HeyVacay team before invoiced billing turns on.
+          </>
+        )}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Legal entity name">
