@@ -414,6 +414,8 @@ export interface OnboardingProfile {
   invites: string[];
   estimatedSavings: number;
   completedAt: string;
+  /** Optional prior-year travel summary captured at signup. */
+  travelHistory?: import('./travelHistory').TravelHistory;
 }
 
 /** How bookings made for a custom (non-employee) traveler name are handled. */

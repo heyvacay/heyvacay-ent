@@ -11,6 +11,8 @@ import { money, num, todayISO } from '@/lib/format';
 import type { OnboardingProfile } from '@/lib/types';
 import { pushSignupToCrm } from '@/lib/crmBridge';
 import { EmailVerify } from '@/components/app/EmailVerify';
+import { TravelHistoryForm } from '@/components/app/TravelHistoryForm';
+import type { TravelHistory } from '@/lib/travelHistory';
 import {
   ArrowRight,
   Building,
@@ -49,6 +51,7 @@ const STEPS = [
   { key: 'company', label: 'Company', icon: Building },
   { key: 'verify', label: 'Verify email', icon: Lock },
   { key: 'travel', label: 'How you travel', icon: Plane },
+  { key: 'history', label: 'Last year', icon: Receipt },
   { key: 'summary', label: 'Your savings', icon: Sparkles },
 ] as const;
 
@@ -167,6 +170,8 @@ export default function SignupPage() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+  const [history, setHistory] = useState<TravelHistory>({});
+  const [historyDetails, setHistoryDetails] = useState(false);
 
   const pwLongEnough = password.length >= 8;
   const pwMatch = password.length > 0 && password === password2;
@@ -217,6 +222,10 @@ export default function SignupPage() {
       invites: [],
       estimatedSavings: estimate,
       completedAt: todayISO(),
+      travelHistory:
+        history.lastYearSpend || history.dominantCategory || history.quarters?.some((q) => q.spend > 0)
+          ? history
+          : undefined,
     };
     completeOnboarding(profile);
     // Notify the CRM: add the company + a welcome task for the account manager.
@@ -536,6 +545,29 @@ export default function SignupPage() {
                   with HeyVacay.
                 </p>
               </div>
+            </StepShell>
+          )}
+
+          {/* STEP: last year's travel (optional) */}
+          {STEPS[step].key === 'history' && (
+            <StepShell
+              eyebrow="A little history (optional)"
+              title="What did last year's travel look like?"
+              blurb="Totally optional — but a rough picture helps us tune your savings estimate and set smart defaults. Skip it and you can add it later."
+            >
+              <TravelHistoryForm
+                value={history}
+                onChange={setHistory}
+                details={historyDetails}
+                onToggleDetails={setHistoryDetails}
+              />
+              <button
+                type="button"
+                onClick={next}
+                className="mt-6 text-sm font-medium text-slate-400 hover:text-slate-600"
+              >
+                Skip for now →
+              </button>
             </StepShell>
           )}
 

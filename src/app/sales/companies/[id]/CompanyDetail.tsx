@@ -45,6 +45,8 @@ import {
 import { accountOnePagerPdf, contractPdf } from '@/lib/pdf';
 import { useAppLink } from '@/lib/appLink';
 import { ContractWizard } from '@/components/sales/ContractWizard';
+import { TravelHistoryForm } from '@/components/app/TravelHistoryForm';
+import { summarizeTravelHistory, type TravelHistory } from '@/lib/travelHistory';
 import {
   Check,
   Building,
@@ -97,6 +99,8 @@ export default function CompanyDetail({ id }: { id: string }) {
     goLive: '',
     notes: '',
   });
+  const [intakeHistory, setIntakeHistory] = useState<TravelHistory>({});
+  const [intakeHistoryDetails, setIntakeHistoryDetails] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
@@ -171,6 +175,10 @@ export default function CompanyDetail({ id }: { id: string }) {
     }));
 
   const createAccountAndEnter = () => {
+    const historyLine = summarizeTravelHistory(intakeHistory);
+    const notes = [intake.notes.trim(), historyLine ? `Last year: ${historyLine}` : '']
+      .filter(Boolean)
+      .join(' · ');
     provisionAccount(c.id, {
       championName: intake.championName.trim() || undefined,
       championTitle: intake.championTitle.trim() || undefined,
@@ -178,7 +186,7 @@ export default function CompanyDetail({ id }: { id: string }) {
       championPhone: intake.championPhone.trim() || undefined,
       integrations: intake.integrations,
       goLive: intake.goLive || undefined,
-      notes: intake.notes.trim() || undefined,
+      notes: notes || undefined,
     });
     setProvisionPrompt(false);
     openWorkspace();
@@ -761,6 +769,22 @@ export default function CompanyDetail({ id }: { id: string }) {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 />
               </Field>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Last year&apos;s travel (optional)
+                </p>
+                <p className="mt-0.5 mb-2 text-xs text-slate-400">
+                  Helps tune their savings estimate — fill in what the customer tells you.
+                </p>
+                <TravelHistoryForm
+                  value={intakeHistory}
+                  onChange={setIntakeHistory}
+                  details={intakeHistoryDetails}
+                  onToggleDetails={setIntakeHistoryDetails}
+                  compact
+                />
+              </div>
             </div>
 
             <div className="mt-5 flex items-center justify-between gap-2">
