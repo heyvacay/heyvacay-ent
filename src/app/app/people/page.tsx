@@ -16,7 +16,7 @@ import { money } from '@/lib/format';
 import type { Role } from '@/lib/types';
 
 export default function PeoplePage() {
-  const { state, inviteUser, updateUser, spentForScope, fullAccess, userHasFullAccess, directReportIds } =
+  const { state, inviteUser, updateUser, spentForScope, fullAccess, userHasFullAccess, directReportIds, isSuperAdmin } =
     useStore();
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<{
@@ -26,6 +26,7 @@ export default function PeoplePage() {
     department: string;
     managerId: string;
     fullAccess: boolean;
+    superAdmin: boolean;
   } | null>(null);
   const nameOf = (id?: string) => state.users.find((u) => u.id === id)?.name;
   const [form, setForm] = useState({
@@ -170,10 +171,16 @@ export default function PeoplePage() {
                           {directReportIds(u.id).length === 1 ? '' : 's'}
                         </span>
                       )}
-                      {userHasFullAccess(u) && (
-                        <span className="rounded-full bg-brand/10 px-1.5 text-[11px] font-semibold text-brand-dark">
-                          Full access
+                      {u.superAdmin ? (
+                        <span className="rounded-full bg-brand/20 px-1.5 text-[11px] font-semibold text-brand-dark">
+                          Super admin
                         </span>
+                      ) : (
+                        userHasFullAccess(u) && (
+                          <span className="rounded-full bg-brand/10 px-1.5 text-[11px] font-semibold text-brand-dark">
+                            Full access
+                          </span>
+                        )
                       )}
                     </div>
                   </td>
@@ -216,6 +223,7 @@ export default function PeoplePage() {
                             department: u.department,
                             managerId: u.managerId ?? '',
                             fullAccess: !!u.fullAccess,
+                            superAdmin: !!u.superAdmin,
                           })
                         }
                       >
@@ -301,6 +309,36 @@ export default function PeoplePage() {
                 </label>
               </div>
             )}
+            {/* Only an existing super admin (incl. the owner) can promote one. */}
+            {isSuperAdmin && (
+              <div className="px-5 pb-1 pt-2">
+                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-brand/30 bg-brand/5 p-3">
+                  <input
+                    type="checkbox"
+                    checked={edit.superAdmin}
+                    onChange={(e) =>
+                      setEdit({
+                        ...edit,
+                        superAdmin: e.target.checked,
+                        // A super admin is always a full-access admin.
+                        fullAccess: e.target.checked ? true : edit.fullAccess,
+                      })
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-800">
+                      Super admin (company-wide control)
+                    </span>
+                    <span className="block text-xs text-slate-400">
+                      Can manage everyone, change policies without approval, approve other admins&apos;
+                      policy changes, and set access &amp; visibility. Makes this person an admin with
+                      full data access.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
               <Button variant="ghost" onClick={() => setEdit(null)}>
                 Cancel
@@ -312,7 +350,10 @@ export default function PeoplePage() {
                     title: edit.title.trim(),
                     department: edit.department.trim(),
                     managerId: edit.managerId || undefined,
-                    fullAccess: edit.fullAccess,
+                    fullAccess: edit.superAdmin ? true : edit.fullAccess,
+                    superAdmin: edit.superAdmin,
+                    // Promoting to super admin implies the admin role.
+                    ...(edit.superAdmin ? { role: 'admin' as Role } : {}),
                   });
                   setEdit(null);
                 }}

@@ -31,6 +31,12 @@ export interface EventEstimateInput {
   nights: number;
   /** The baseline room tier travelers may book. */
   tier: RoomTier;
+  /**
+   * Live nightly rate (USD) to use instead of the indicative tier rate — the
+   * real market rate for the city/dates, or the average of the allow-listed
+   * hotels when the event is restricted to specific properties.
+   */
+  nightlyOverride?: number;
 }
 
 export interface EventEstimate {
@@ -42,7 +48,8 @@ export interface EventEstimate {
 }
 
 export function estimateEventSpend(i: EventEstimateInput): EventEstimate {
-  const nightly = TIER_NIGHTLY[i.tier];
+  const nightly =
+    i.nightlyOverride != null && i.nightlyOverride > 0 ? i.nightlyOverride : TIER_NIGHTLY[i.tier];
   const hotel = Math.round(nightly * Math.max(0, i.nights) * Math.max(0, i.hotelHeadcount));
   const flights = Math.round(FLIGHT_PER_PERSON * Math.max(0, i.flightHeadcount));
   const total = hotel + flights;

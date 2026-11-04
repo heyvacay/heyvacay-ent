@@ -7,7 +7,8 @@ import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
 import { Button, Card, Field, Input, cn } from '@/components/app/ui';
 import { HotelAllowPicker, type AllowHotel } from '@/components/app/HotelAllowPicker';
-import { placesHotels, type HotelPlace } from '@/lib/search';
+import { placesHotels, startHotels, getHotelDetail, type HotelPlace } from '@/lib/search';
+import { defaultSelection, resolveLeaf, sumPayAtProperty } from '@/lib/hotelRooms';
 import { HvRangeField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
 import { addDays, todayISO, shortDate, dateRange, milesBetween, money } from '@/lib/format';
@@ -108,10 +109,90 @@ export default function NewEventPage() {
     return milesBetween(u.homeLat, u.homeLng, evLat, evLng) > 50;
   }).length;
   const flightHeadcount = hotelHeadcount; // flying in ≈ needing a hotel
-  const estInput = { hotelHeadcount, flightHeadcount, nights, tier: roomTierBase };
+
+  // Live nightly rate for the estimate: the real market rate for the city/dates,
+  // or — when the event is restricted to specific hotels — the average of just
+  // those pinned properties, so the budget reflects only where people can book.
+  const [liveNightly, setLiveNightly] = useState<number | null>(null);
+  const [liveSource, setLiveSource] = useState<'city' | 'allowlist' | null>(null);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const allowKey = allowHotelList.map((h) => h.hid).join(',');
+
+  useEffect(() => {
+    if (!cityPlace || !start || !end || hotelHeadcount === 0) {
+      setLiveNightly(null);
+      setLiveSource(null);
+      return;
+    }
+    let live = true;
+    setRatesLoading(true);
+    const nightsSafe = Math.max(1, nights);
+    const avg = (xs: number[]) =>
+      xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null;
+    (async () => {
+      try {
+        // Nightly for one specific hotel: cheapest in-policy room, all-in, / nights.
+        const hotelNightly = async (hid: string): Promise<number | null> => {
+          const d = await getHotelDetail({ hid, checkin: start, checkout: end, adults: 1 });
+          const prices = (d.uiRooms ?? [])
+            .map((room) => {
+              const leaf = resolveLeaf(room, defaultSelection(room));
+              const rate = leaf?.meal.rateRef;
+              if (!rate) return null;
+              return (rate.price || 0) + sumPayAtProperty(rate.taxes_fees);
+            })
+            .filter((p): p is number => p != null && p > 0);
+          return prices.length ? Math.min(...prices) / nightsSafe : null;
+        };
+
+        if (allowHotelList.length > 0) {
+          const vals: number[] = [];
+          for (const h of allowHotelList.slice(0, 6)) {
+            const n = await hotelNightly(h.hid);
+            if (n) vals.push(n);
+          }
+          if (!live) return;
+          setLiveNightly(avg(vals));
+          setLiveSource(vals.length ? 'allowlist' : null);
+        } else {
+          const page = await startHotels({
+            regionId: cityPlace.regionId,
+            lat: cityPlace.lat,
+            lng: cityPlace.lng,
+            checkin: start,
+            checkout: end,
+            adults: 1,
+            pageSize: 12,
+          });
+          const nts = (page.options ?? [])
+            .map((o) => o.price / (o.nights || nightsSafe))
+            .filter((n) => n > 0);
+          if (!live) return;
+          setLiveNightly(avg(nts));
+          setLiveSource(nts.length ? 'city' : null);
+        }
+      } catch {
+        if (live) {
+          setLiveNightly(null);
+          setLiveSource(null);
+        }
+      } finally {
+        if (live) setRatesLoading(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityPlace?.regionId, cityPlace?.lat, cityPlace?.lng, start, end, allowKey, hotelHeadcount, nights]);
+
+  const baseInput = { hotelHeadcount, flightHeadcount, nights, tier: roomTierBase };
+  // The main estimate + budget guidance use the live nightly when we have it.
+  const estInput = { ...baseInput, nightlyOverride: liveNightly ?? undefined };
   const estimate = estimateEventSpend(estInput);
   const guidance = budgetOn ? budgetGuidance(estimate, estInput, budgetAmt) : null;
-  const smart = budgetOn && smartPlanning ? smartPick(estInput, budgetAmt) : null;
+  // Smart planning chooses among room tiers, so it uses the indicative tier rates.
+  const smart = budgetOn && smartPlanning ? smartPick(baseInput, budgetAmt) : null;
   // Distinct job titles among attendees, for per-position allowances.
   const positions = Array.from(
     new Set(selectedAttendees.map((u) => u.title).filter(Boolean))
@@ -488,8 +569,21 @@ export default function NewEventPage() {
                 <p className="mt-2 text-xs text-slate-500">
                   {hotelHeadcount} traveler{hotelHeadcount === 1 ? '' : 's'} needing a hotel ·{' '}
                   {nights} night{nights === 1 ? '' : 's'} · {roomTierBase} ·{' '}
-                  {money(estimate.nightly)}/night. Reflects live market rates for the city once the
-                  rates API is connected.
+                  {money(estimate.nightly)}/night.{' '}
+                  {ratesLoading ? (
+                    <span className="text-brand-dark">Checking live rates…</span>
+                  ) : liveSource === 'allowlist' ? (
+                    <span className="font-medium text-brand-dark">
+                      Budgeted from your {allowHotelList.length} pinned hotel
+                      {allowHotelList.length === 1 ? '' : 's'}&apos; live rates for these dates.
+                    </span>
+                  ) : liveSource === 'city' ? (
+                    <span className="font-medium text-brand-dark">
+                      Live market rates for {city || 'the city'} on these dates.
+                    </span>
+                  ) : (
+                    <span>Indicative market rates — pick a city and dates for live pricing.</span>
+                  )}
                 </p>
 
                 <label className="mt-3 flex cursor-pointer items-center gap-2 border-t border-brand/20 pt-3 text-sm text-slate-700">
