@@ -13,6 +13,7 @@ import { pushSignupToCrm } from '@/lib/crmBridge';
 import { EmailVerify } from '@/components/app/EmailVerify';
 import { TravelHistoryForm } from '@/components/app/TravelHistoryForm';
 import type { TravelHistory } from '@/lib/travelHistory';
+import { CelebrationOverlay } from '@/components/app/CelebrationOverlay';
 import {
   ArrowRight,
   Building,
@@ -172,6 +173,7 @@ export default function SignupPage() {
   const [password2, setPassword2] = useState('');
   const [history, setHistory] = useState<TravelHistory>({});
   const [historyDetails, setHistoryDetails] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
 
   const pwLongEnough = password.length >= 8;
   const pwMatch = password.length > 0 && password === password2;
@@ -237,8 +239,36 @@ export default function SignupPage() {
     });
     setActiveUser('u_admin');
     setRole('admin');
-    router.push('/app/dashboard');
+    // The owner just went through signup — don't also show them the
+    // first-login welcome flow inside the app.
+    try {
+      localStorage.setItem('hv_ent_welcomed_hv_ent_demo_v2_u_admin', '1');
+    } catch {
+      /* ignore */
+    }
+    setCelebrate(true);
   };
+
+  /* ----- signup celebration ----- */
+  if (celebrate) {
+    const firstName = form.firstName.trim() || 'there';
+    const company = form.companyName.trim() || 'Your company';
+    return (
+      <CelebrationOverlay
+        headline={
+          <>
+            {company} is about to travel smart
+            <br />
+            and <span className="text-brand">save a serious amount.</span>
+          </>
+        }
+        sub={`Thanks for signing up, ${firstName}! Your travel program is live — below-market fares, spend on budget, and rewards on every trip.`}
+        cta="Enter your dashboard →"
+        onCta={() => router.push('/app/dashboard')}
+        footnote="Set up policies, invite your team and connect integrations anytime."
+      />
+    );
+  }
 
   /* ----- welcome gate ----- */
   if (!started) {

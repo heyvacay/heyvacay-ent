@@ -9,6 +9,7 @@ import { Avatar, cn } from './ui';
 import { ThemeToggle } from './ThemeToggle';
 import { Logo } from './Logo';
 import { DinnerRsvpPrompt } from './DinnerRsvpPrompt';
+import { WelcomeFlow } from './WelcomeFlow';
 import {
   ChartBar,
   Users,
@@ -112,7 +113,7 @@ const EMPLOYEE_NAV: NavSection[] = [
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { state, activeUser, role, isSuperAdmin, setActiveUser, setRole, reset } = useStore();
+  const { state, activeUser, role, isSuperAdmin, viewingAs, setActiveUser, setRole, reset } = useStore();
 
   // Company logo uploaded in the CRM (matched by id/domain). Read once on mount.
   const [companyLogo, setCompanyLogo] = useState('');
@@ -134,6 +135,40 @@ export default function AppShell({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, [pathname]);
+
+  // First-login welcome flow (password → confetti → role-aware tour). Shown
+  // once per (account, user) to the actual user — never to a rep viewing-as.
+  const [welcome, setWelcome] = useState(false);
+  const welcomeKey = () => {
+    try {
+      const active = localStorage.getItem('hv_ent_active_account');
+      const id = active ? JSON.parse(active)?.id : null;
+      const acctKey = id ? `hv_ent_acct_${id}` : 'hv_ent_demo_v2';
+      return `hv_ent_welcomed_${acctKey}_${activeUser.id}`;
+    } catch {
+      return `hv_ent_welcomed_default_${activeUser.id}`;
+    }
+  };
+  useEffect(() => {
+    if (viewingAs) {
+      setWelcome(false);
+      return;
+    }
+    try {
+      setWelcome(localStorage.getItem(welcomeKey()) !== '1');
+    } catch {
+      setWelcome(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUser.id, viewingAs]);
+  const finishWelcome = () => {
+    try {
+      localStorage.setItem(welcomeKey(), '1');
+    } catch {
+      /* ignore */
+    }
+    setWelcome(false);
+  };
 
   const exitViewAs = () => {
     try {
@@ -224,6 +259,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-tour={`nav-${item.href}`}
                   onClick={() => setOpen(false)}
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
@@ -420,6 +456,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
           )}
         </main>
       </div>
+
+      {welcome && (
+        <WelcomeFlow
+          company={state.company.name}
+          firstName={(activeUser.name ?? 'there').trim().split(' ')[0] || 'there'}
+          isAdmin={role === 'admin'}
+          onDone={finishWelcome}
+        />
+      )}
     </div>
   );
 }

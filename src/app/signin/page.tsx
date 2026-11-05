@@ -33,6 +33,36 @@ export default function SignInPage() {
     { key: DEMO_KEY, id: null, name: 'Demo company', domain: '' },
   ]);
   const [targetKey, setTargetKey] = useState<string>(DEMO_KEY);
+  // Demo data vs. a brand-new-company experience.
+  const [mode, setMode] = useState<'demo' | 'fresh'>('demo');
+  useEffect(() => {
+    try {
+      setMode(localStorage.getItem('hv_ent_experience') === 'fresh' ? 'fresh' : 'demo');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const chooseDemo = () => {
+    try {
+      localStorage.setItem('hv_ent_experience', 'demo');
+    } catch {
+      /* ignore */
+    }
+    setMode('demo');
+  };
+  const startFresh = () => {
+    try {
+      localStorage.setItem('hv_ent_experience', 'fresh');
+      // Wipe the default workspace + any active account so you truly start new.
+      localStorage.removeItem('hv_ent_demo_v2');
+      localStorage.removeItem('hv_ent_active_account');
+      sessionStorage.removeItem('hv_view_as');
+      sessionStorage.removeItem('hv_view_as_ctx');
+    } catch {
+      /* ignore */
+    }
+    window.location.href = '/signup';
+  };
 
   // Enumerate every workspace in this browser so you can sign in as the actual
   // user of an account a rep set up — defaulting to the active one.
@@ -164,6 +194,49 @@ export default function SignInPage() {
           <div className="mb-6 lg:hidden">
             <Logo imgClassName="h-7" />
           </div>
+
+          {/* Demo data vs. brand-new-company experience */}
+          <div className="mb-5 flex rounded-lg bg-slate-100 p-1 text-sm font-medium">
+            <button
+              onClick={chooseDemo}
+              className={`flex-1 rounded-md px-3 py-1.5 transition ${mode === 'demo' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+            >
+              Demo data
+            </button>
+            <button
+              onClick={() => setMode('fresh')}
+              className={`flex-1 rounded-md px-3 py-1.5 transition ${mode === 'fresh' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+            >
+              New user experience
+            </button>
+          </div>
+
+          {mode === 'fresh' ? (
+            <div className="rounded-2xl border border-brand/30 bg-brand/5 p-5 text-center">
+              <h2 className="font-display text-xl font-bold text-slate-900">Start as a brand-new company</h2>
+              <p className="mx-auto mt-2 max-w-xs text-sm text-slate-500">
+                Experience HeyVacay exactly as a new customer would — nothing pre-filled. You&apos;ll
+                sign up, set a password and get walked through everything.
+              </p>
+              <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs text-slate-500">
+                This clears the demo workspace on <span className="font-semibold">this device</span> so
+                you begin from zero.
+              </p>
+              <button
+                onClick={startFresh}
+                className="mt-4 w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-navy-deep shadow-sm hover:brightness-95"
+              >
+                Start fresh →
+              </button>
+              <button
+                onClick={chooseDemo}
+                className="mt-3 text-xs font-medium text-slate-400 hover:text-slate-600"
+              >
+                Never mind — use the demo
+              </button>
+            </div>
+          ) : (
+          <>
           <h2 className="font-display text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">Sign in to your workspace.</p>
 
@@ -264,6 +337,8 @@ export default function SignInPage() {
               Nova sales console
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>
