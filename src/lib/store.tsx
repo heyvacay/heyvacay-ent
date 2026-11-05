@@ -62,6 +62,37 @@ function mergeLoaded(s: AppState): AppState {
   };
 }
 
+/** The demo/experience mode. 'demo' = the rich seeded workspace; 'fresh' = a
+ *  brand-new empty company, for walking the true new-user experience. */
+export function readExperience(): 'demo' | 'fresh' {
+  try {
+    return localStorage.getItem('hv_ent_experience') === 'fresh' ? 'fresh' : 'demo';
+  } catch {
+    return 'demo';
+  }
+}
+
+/** A brand-new company workspace: just the owner, default policies, and no
+ *  activity at all — what an account looks like the moment it's created. */
+function freshSeed(): AppState {
+  const owner = SEED.users.find((u) => u.id === 'u_admin') ?? SEED.users[0];
+  return {
+    ...SEED,
+    users: owner ? [owner] : SEED.users.slice(0, 1),
+    activeUserId: owner?.id ?? SEED.activeUserId,
+    bookings: [],
+    expenses: [],
+    points: [],
+    tripPlans: [],
+    budgets: [],
+  };
+}
+
+/** The base workspace for the default login, honoring the experience mode. */
+function defaultBase(): AppState {
+  return readExperience() === 'fresh' ? freshSeed() : SEED;
+}
+
 /** A clean workspace for a newly-entered company: seed structure (users,
  *  policies, access rules) with the company's own identity and zero activity. */
 function seedAccount(ctx: { id?: string; name: string; domain: string }): AppState {
@@ -263,92 +294,96 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(SEED);
   const [role, setRole] = useState<Role>('admin');
   const [hydrated, setHydrated] = useState(false);
-  // When a sales rep "enters" a company from the Nova console, we overlay that
-  // company's identity onto the workspace (non-persistent — view only).
-  const [impersonation, setImpersonation] = useState<{
+  // The account the traveler app is working in. Persisted (localStorage) so the
+  // SAME workspace is shown whether a Nova rep "enters" it or the actual user
+  // logs into it — edits made in one are seen in the other. null = default
+  // demo workspace. Separately, `repViewing` is true only when a rep is viewing
+  // the account (the Nova overlay + KYC review powers); the actual user has it
+  // false. The two are independent: which account loads vs. who's looking.
+  const [activeAccount, setActiveAccount] = useState<{
     id?: string;
     name: string;
     domain: string;
   } | null>(null);
+  const [repViewing, setRepViewing] = useState(false);
 
   // The storage key that's currently loaded into `state`, so the persist
   // effect never writes one account's data under another's key mid-switch.
   const loadedKeyRef = useRef<string | null>(null);
 
-  // Read the "view as company" overlay set by the Sales console. This runs
-  // before the load effect so the correct account is chosen on first paint.
+  // Read the active account + rep-viewing flag from storage.
   useEffect(() => {
     const read = () => {
       try {
-        const raw = sessionStorage.getItem('hv_view_as_ctx');
-        setImpersonation(raw ? JSON.parse(raw) : null);
+        const raw = localStorage.getItem('hv_ent_active_account');
+        setActiveAccount(raw ? JSON.parse(raw) : null);
       } catch {
-        setImpersonation(null);
+        setActiveAccount(null);
+      }
+      try {
+        setRepViewing(!!sessionStorage.getItem('hv_view_as'));
+      } catch {
+        setRepViewing(false);
       }
     };
     read();
+    window.addEventListener('hv-account-change', read);
     window.addEventListener('hv-view-as-change', read);
     window.addEventListener('storage', read);
     return () => {
+      window.removeEventListener('hv-account-change', read);
       window.removeEventListener('hv-view-as-change', read);
       window.removeEventListener('storage', read);
     };
   }, []);
 
-  // Load the active account's workspace whenever the active company changes.
-  // Each company id maps to its own localStorage key (acctKey), so entering a
-  // different account swaps the entire workspace in and out — truly separate.
+  // Load the active account's workspace whenever it changes. Each company id
+  // maps to its own localStorage key (acctKey); the default login uses the
+  // experience-aware base (demo seed, or a fresh empty company).
   useEffect(() => {
-    const key = acctKey(impersonation?.id);
+    const key = acctKey(activeAccount?.id);
     if (loadedKeyRef.current === key) return; // already loaded this account
+    const base = () =>
+      activeAccount?.id ? seedAccount(activeAccount) : defaultBase();
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw) as { state?: AppState; role?: Role };
-        setState(
-          parsed.state
-            ? mergeLoaded(parsed.state)
-            : impersonation?.id
-              ? seedAccount(impersonation)
-              : SEED
-        );
+        setState(parsed.state ? mergeLoaded(parsed.state) : base());
         setRole(parsed.role ?? 'admin');
       } else {
-        // First time entering this account — start from a clean seed carrying
-        // the company's own identity (the owner's default login uses SEED).
-        setState(impersonation?.id ? seedAccount(impersonation) : SEED);
+        setState(base());
         setRole('admin');
       }
     } catch {
-      setState(impersonation?.id ? seedAccount(impersonation) : SEED);
+      setState(base());
       setRole('admin');
     }
     loadedKeyRef.current = key;
     setHydrated(true);
-  }, [impersonation]);
+  }, [activeAccount]);
 
   // Persist to the CURRENTLY loaded account's key only.
   useEffect(() => {
     if (!hydrated) return;
-    const key = acctKey(impersonation?.id);
+    const key = acctKey(activeAccount?.id);
     if (loadedKeyRef.current !== key) return; // mid-switch; skip
     try {
       localStorage.setItem(key, JSON.stringify({ state, role }));
     } catch {
       /* ignore */
     }
-  }, [state, role, hydrated, impersonation]);
+  }, [state, role, hydrated, activeAccount]);
 
   // The state exposed to the app. The persisted workspace already carries the
-  // right company identity; we re-overlay name/domain so live CRM edits (a
-  // rename, a domain change) show immediately without reloading the account.
-  const effectiveState: AppState = impersonation
+  // right company identity; we re-overlay name/domain so CRM renames show live.
+  const effectiveState: AppState = activeAccount
     ? {
         ...state,
         company: {
           ...state.company,
-          name: impersonation.name,
-          domain: impersonation.domain || state.company.domain,
+          name: activeAccount.name,
+          domain: activeAccount.domain || state.company.domain,
         },
       }
     : state;
@@ -1466,6 +1501,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // any "view as company" overlay, then reload so every provider reseeds.
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem('hv_crm_demo_v2');
+      localStorage.removeItem('hv_ent_active_account');
+      localStorage.removeItem('hv_ent_experience');
+      // Clear every per-company workspace we isolated.
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('hv_ent_acct_')) localStorage.removeItem(k);
+      }
       sessionStorage.removeItem('hv_view_as');
       sessionStorage.removeItem('hv_view_as_ctx');
     } catch {
@@ -1487,7 +1529,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     directReportIds,
     accessControl,
     setAccessControl,
-    viewingAs: impersonation != null,
+    viewingAs: repViewing,
     setActiveUser,
     userById,
     spentForScope,

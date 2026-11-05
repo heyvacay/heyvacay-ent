@@ -1,39 +1,93 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/app/Logo';
 import { useStore } from '@/lib/store';
 
+type Account = { key: string; id: string | null; name: string; domain: string };
+const DEMO_KEY = 'hv_ent_demo_v2';
+const ACCT_PREFIX = 'hv_ent_acct_';
+
+type StoredUser = { id: string; name?: string; role?: string };
+function readStored(key: string): { users?: StoredUser[]; company?: { id?: string; name?: string; domain?: string } } | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw).state ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Sign-in for HeyVacay Enterprise. Today this is a front-end gate that routes
- * into the demo workspace; it moves to real auth (SSO + work-email, with
- * domain-based auto-join) against ent.nova when that backend is stood up.
+ * Sign-in for HeyVacay Enterprise. A front-end gate that routes into the chosen
+ * company's workspace (the SAME workspace a Nova rep sets up, so rep edits are
+ * visible here). Real SSO + work-email auth replaces this when the backend is up.
  */
 export default function SignInPage() {
   const { state } = useStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [accounts, setAccounts] = useState<Account[]>([
+    { key: DEMO_KEY, id: null, name: 'Demo company', domain: '' },
+  ]);
+  const [targetKey, setTargetKey] = useState<string>(DEMO_KEY);
+
+  // Enumerate every workspace in this browser so you can sign in as the actual
+  // user of an account a rep set up — defaulting to the active one.
+  useEffect(() => {
+    const list: Account[] = [{ key: DEMO_KEY, id: null, name: 'Demo company', domain: '' }];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(ACCT_PREFIX)) continue;
+        const st = readStored(k);
+        list.push({
+          key: k,
+          id: st?.company?.id ?? k.slice(ACCT_PREFIX.length),
+          name: st?.company?.name ?? 'Company',
+          domain: st?.company?.domain ?? '',
+        });
+      }
+      const active = localStorage.getItem('hv_ent_active_account');
+      if (active) {
+        const a = JSON.parse(active);
+        if (a?.id && list.some((x) => x.id === a.id)) setTargetKey(ACCT_PREFIX + a.id);
+      }
+    } catch {
+      /* ignore */
+    }
+    setAccounts(list);
+  }, []);
+
+  const target = accounts.find((a) => a.key === targetKey) ?? accounts[0];
+  const targetUsers = (): StoredUser[] => readStored(targetKey)?.users ?? (state.users as StoredUser[]);
 
   const domain = email.includes('@') ? email.split('@')[1]?.trim() : '';
   const freeMail = /^(gmail|yahoo|outlook|hotmail|icloud|proton)\./i.test(domain ?? '');
   const showDomainJoin = !!domain && domain.includes('.') && !freeMail;
 
-  // Commit the signed-in identity straight to the default workspace's storage,
-  // clear any stale "view as company" overlay from an earlier CRM session, then
-  // hard-navigate so /app re-reads fresh state in its own StoreProvider. (A
-  // client-side push can land on /app before this provider persists, and a
-  // leftover view-as overlay would otherwise drop you into an empty account.)
+  // Commit the signed-in identity into the SELECTED account's workspace, point
+  // the active-account pointer at it (so rep edits and the user's view share one
+  // store), clear any rep overlay, then hard-navigate so /app re-reads it.
   const commitLogin = (userId: string, roleValue: string) => {
     try {
-      const raw = localStorage.getItem('hv_ent_demo_v2');
+      const raw = localStorage.getItem(target.key);
       const parsed = raw ? (JSON.parse(raw) as { state?: Record<string, unknown>; role?: string }) : null;
       const baseState = parsed?.state ?? {};
       localStorage.setItem(
-        'hv_ent_demo_v2',
+        target.key,
         JSON.stringify({ state: { ...baseState, activeUserId: userId }, role: roleValue })
       );
+      if (target.id) {
+        localStorage.setItem(
+          'hv_ent_active_account',
+          JSON.stringify({ id: target.id, name: target.name, domain: target.domain })
+        );
+      } else {
+        localStorage.removeItem('hv_ent_active_account');
+      }
       sessionStorage.removeItem('hv_view_as');
       sessionStorage.removeItem('hv_view_as_ctx');
     } catch {
@@ -45,11 +99,12 @@ export default function SignInPage() {
   // Demo auth: demo@demo.com/demo = full access; firstname@demo.com/demo views
   // that specific user. Real SSO/work-email auth replaces this with the backend.
   const enterFullAccess = () => {
+    const users = targetUsers();
     const owner =
-      state.users.find((u) => u.id === 'u_admin') ??
-      state.users.find((u) => u.role === 'admin') ??
-      state.users[0];
-    commitLogin(owner?.id ?? 'u_admin', 'admin');
+      users.find((u) => u.id === 'u_admin') ??
+      users.find((u) => u.role === 'admin') ??
+      users[0];
+    commitLogin(owner?.id ?? 'u_admin', owner?.role ?? 'admin');
   };
 
   const signIn = (e: React.FormEvent) => {
@@ -67,17 +122,17 @@ export default function SignInPage() {
     }
     if (em.endsWith('@demo.com')) {
       const first = em.split('@')[0];
-      const match = state.users.find(
+      const match = targetUsers().find(
         (u) => (u.name ?? '').trim().toLowerCase().split(' ')[0] === first
       );
       if (match) {
-        commitLogin(match.id, match.role);
+        commitLogin(match.id, match.role ?? 'employee');
         return;
       }
-      setError(`No demo user named "${first}". Try demo@demo.com for full access.`);
+      setError(`No demo user named "${first}" in ${target.name}. Try demo@demo.com for the owner.`);
       return;
     }
-    setError('Use demo@demo.com for full access, or firstname@demo.com to view a user.');
+    setError('Use demo@demo.com for the owner, or firstname@demo.com to view a user.');
   };
 
   const SSO = [
@@ -111,6 +166,26 @@ export default function SignInPage() {
           </div>
           <h2 className="font-display text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">Sign in to your workspace.</p>
+
+          {accounts.length > 1 && (
+            <label className="mt-5 block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Workspace</span>
+              <select
+                value={targetKey}
+                onChange={(e) => setTargetKey(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              >
+                {accounts.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {a.id ? a.name : 'Demo company (default)'}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-400">
+                Sign in as the real user of a company a rep set up — you&apos;ll see their live data.
+              </span>
+            </label>
+          )}
 
           <div className="mt-6 space-y-2">
             {SSO.map((s) => (

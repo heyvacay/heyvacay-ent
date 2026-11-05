@@ -130,14 +130,16 @@ export default function CompanyDetail({ id }: { id: string }) {
     );
   }
 
-  // Drop into the customer's workspace as their account manager.
+  // Drop into the customer's workspace as their account manager. Set the
+  // persistent active account (which workspace loads — shared with the actual
+  // user's login) AND the rep-viewing overlay flag (Nova powers).
   const openWorkspace = () => {
     try {
+      const ctx = { id: c.id, name: c.name, domain: c.domain };
+      localStorage.setItem('hv_ent_active_account', JSON.stringify(ctx));
       sessionStorage.setItem('hv_view_as', c.name);
-      sessionStorage.setItem(
-        'hv_view_as_ctx',
-        JSON.stringify({ id: c.id, name: c.name, domain: c.domain })
-      );
+      sessionStorage.setItem('hv_view_as_ctx', JSON.stringify(ctx));
+      window.dispatchEvent(new Event('hv-account-change'));
       window.dispatchEvent(new Event('hv-view-as-change'));
     } catch {
       /* ignore */
