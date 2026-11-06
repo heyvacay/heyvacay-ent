@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
+import { useEvents } from '@/lib/eventsStore';
 import type { Booking } from '@/lib/types';
 import { parseLocal } from '@/lib/format';
 import { Plane, MapPin, Receipt, Sparkles } from '@/components/icons';
@@ -45,10 +46,28 @@ function fmtTime(iso?: string): string {
  */
 export function ActiveTripBanner() {
   const { activeUser, state } = useStore();
+  const { events } = useEvents();
   const [weather, setWeather] = useState<Weather | null>(null);
 
   const now = Date.now();
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Smart contextual expense nudge: a group dinner the user is attending today
+  // with a booked restaurant → "ready to expense dinner at <place>?".
+  const mealNudge = useMemo(() => {
+    for (const ev of events) {
+      const din = ev.dinner;
+      const r = din?.reservation;
+      if (!r || r.date !== todayStr) continue;
+      if (din?.rsvps?.[activeUser.id] === 'no') continue;
+      return {
+        label: `dinner at ${r.restaurantName}`,
+        restaurant: r.restaurantName,
+        time: r.time || '',
+      };
+    }
+    return null;
+  }, [events, activeUser.id, todayStr]);
 
   const trip = useMemo<Booking | null>(() => {
     const mine = state.bookings.filter(
@@ -95,7 +114,7 @@ export function ActiveTripBanner() {
     };
   }, [destination]);
 
-  if (!trip) return null;
+  if (!trip && !mealNudge) return null;
 
   const first = activeUser.name.split(' ')[0];
   const destCity = cityOf(destination);
@@ -106,7 +125,13 @@ export function ActiveTripBanner() {
   let headline = '';
   let sub = '';
 
-  if (trip.type === 'flight') {
+  if (!trip) {
+    // Dinner-only day (no active flight/hotel) — still surface the nudge.
+    headline = `Good ${greetingWord()}, ${first}!`;
+    sub = mealNudge
+      ? `You've got ${mealNudge.label} tonight${mealNudge.time ? ` at ${mealNudge.time}` : ''}.`
+      : '';
+  } else if (trip.type === 'flight') {
     const depart = trip.departAt ? new Date(trip.departAt).getTime() : null;
     const arrive = trip.arriveAt ? new Date(trip.arriveAt).getTime() : null;
     const hoursToDepart = depart ? (depart - now) / 3600000 : null;
@@ -157,15 +182,24 @@ export function ActiveTripBanner() {
   // On-trip = the stay/flight covers today. In that window we surface the
   // "what you need right now" actions: log an expense, scan a receipt, manage.
   const onTrip =
-    (trip.type === 'hotel' && trip.startDate <= todayStr && trip.endDate >= todayStr) ||
-    (trip.type === 'flight' && trip.startDate === todayStr);
+    !!trip &&
+    ((trip.type === 'hotel' && trip.startDate <= todayStr && trip.endDate >= todayStr) ||
+      (trip.type === 'flight' && trip.startDate === todayStr));
+
+  const tripQ = trip ? `&trip=${trip.id}` : '';
 
   return (
     <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-navy-deep to-navy p-5 text-white sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
-            {trip.type === 'flight' ? <Plane className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
+            {!trip ? (
+              <span className="text-lg">🍽️</span>
+            ) : trip.type === 'flight' ? (
+              <Plane className="h-5 w-5" />
+            ) : (
+              <MapPin className="h-5 w-5" />
+            )}
           </span>
           <div className="min-w-0">
             <h2 className="font-display text-xl font-bold leading-tight">{headline}</h2>
@@ -173,30 +207,49 @@ export function ActiveTripBanner() {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          {onTrip && (
+          {onTrip && trip && (
             <>
               <Link
-                href={`/app/expenses?scan=1&trip=${trip.id}`}
+                href={`/app/expenses?scan=1${tripQ}`}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy-deep hover:brightness-95"
               >
                 <Sparkles className="h-4 w-4" /> Scan receipt
               </Link>
               <Link
-                href={`/app/expenses?new=1&trip=${trip.id}`}
+                href={`/app/expenses?new=1${tripQ}`}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3.5 py-2 text-sm font-semibold text-white hover:bg-white/25"
               >
                 <Receipt className="h-4 w-4" /> Add expense
               </Link>
             </>
           )}
-          <Link
-            href="/app/trips"
-            className="inline-flex items-center rounded-lg bg-white/15 px-3.5 py-2 text-sm font-semibold text-white hover:bg-white/25"
-          >
-            {onTrip ? 'Manage trip' : 'View trip'}
-          </Link>
+          {trip && (
+            <Link
+              href="/app/trips"
+              className="inline-flex items-center rounded-lg bg-white/15 px-3.5 py-2 text-sm font-semibold text-white hover:bg-white/25"
+            >
+              {onTrip ? 'Manage trip' : 'View trip'}
+            </Link>
+          )}
         </div>
       </div>
+
+      {/* Smart contextual nudge: expense tonight's dinner in one tap. */}
+      {mealNudge && (
+        <Link
+          href={`/app/expenses?scan=1&cat=Meals${tripQ}&ctx=${encodeURIComponent(mealNudge.label)}`}
+          className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-brand/15 px-4 py-3 text-sm ring-1 ring-brand/30 transition hover:bg-brand/20"
+        >
+          <span className="min-w-0">
+            <span className="font-semibold text-white">🍽️ Ready to expense {mealNudge.label}</span>
+            {mealNudge.time ? <span className="text-slate-300"> ({mealNudge.time})</span> : null}
+            <span className="block text-xs text-slate-300">
+              Snap the receipt and we&apos;ll fill in the details for you.
+            </span>
+          </span>
+          <span className="shrink-0 font-semibold text-brand">Do it here →</span>
+        </Link>
+      )}
     </div>
   );
 }

@@ -59,8 +59,12 @@ export default function ExpensesPage() {
   const [open, setOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null); // camera (capture)
+  const uploadRef = useRef<HTMLInputElement>(null); // file upload
   const scanTripRef = useRef('');
+  // When set, show the "scan or upload?" chooser. Carries an optional label so
+  // the active-trip context can say what we're expensing.
+  const [scanChoice, setScanChoice] = useState<{ context?: string } | null>(null);
   const [tool, setTool] = useState<null | 'perdiem'>(null);
   // Expense decision modal (approve/reject with an optional comment).
   const [decide, setDecide] = useState<{ id: string; kind: 'approved' | 'rejected' } | null>(
@@ -91,10 +95,17 @@ export default function ExpensesPage() {
     const trip = params.get('trip') || '';
     const wantScan = params.get('scan') === '1';
     const wantNew = params.get('new') === '1';
+    const cat = params.get('cat') as ExpenseCategory | null;
+    const ctx = params.get('ctx') || '';
     if (trip || wantScan || wantNew) {
       handledParams.current = true;
-      if (trip) setForm((f) => ({ ...f, tripId: trip }));
-      if (wantScan) scanReceipt(trip);
+      setForm((f) => ({
+        ...f,
+        ...(trip ? { tripId: trip } : {}),
+        ...(cat ? { category: cat } : {}),
+        ...(ctx ? { note: ctx.charAt(0).toUpperCase() + ctx.slice(1) } : {}),
+      }));
+      if (wantScan) scanReceipt(trip, ctx || undefined);
       else if (wantNew) setOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,11 +143,11 @@ export default function ExpensesPage() {
     (e) => (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
   );
 
-  // Open the camera / file picker to scan a receipt. tripId (optional) ties the
-  // resulting expense to a trip.
-  const scanReceipt = (tripId = '') => {
+  // Ask "scan or upload?", then open the camera or file picker. tripId (and an
+  // optional context label) tie the resulting expense to a trip.
+  const scanReceipt = (tripId = '', context?: string) => {
     scanTripRef.current = tripId;
-    fileRef.current?.click();
+    setScanChoice({ context });
   };
 
   // A receipt was photographed or uploaded: read it, send it for OCR, and
@@ -173,6 +184,7 @@ export default function ExpensesPage() {
     } finally {
       setScanning(false);
       if (fileRef.current) fileRef.current.value = '';
+      if (uploadRef.current) uploadRef.current.value = '';
     }
   };
 
@@ -204,7 +216,7 @@ export default function ExpensesPage() {
 
   return (
     <div>
-      {/* Hidden camera / file input for receipt scanning. */}
+      {/* Hidden inputs: one opens the camera, one the file picker. */}
       <input
         ref={fileRef}
         type="file"
@@ -213,6 +225,65 @@ export default function ExpensesPage() {
         className="hidden"
         onChange={(e) => onReceiptFile(e.target.files?.[0])}
       />
+      <input
+        ref={uploadRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(e) => onReceiptFile(e.target.files?.[0])}
+      />
+
+      {/* Scan-or-upload chooser */}
+      {scanChoice && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
+          onClick={() => setScanChoice(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+              Add a receipt
+            </h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              {scanChoice.context
+                ? `For ${scanChoice.context}. We’ll read the details automatically.`
+                : 'We’ll read the merchant, amount and date automatically.'}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  setScanChoice(null);
+                  fileRef.current?.click();
+                }}
+                className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 p-4 text-center transition hover:border-brand hover:bg-brand/5 dark:border-white/10"
+              >
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-brand/10 text-2xl">📷</span>
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Scan</span>
+                <span className="text-[11px] text-slate-400">Use your camera</span>
+              </button>
+              <button
+                onClick={() => {
+                  setScanChoice(null);
+                  uploadRef.current?.click();
+                }}
+                className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 p-4 text-center transition hover:border-brand hover:bg-brand/5 dark:border-white/10"
+              >
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-brand/10 text-2xl">🖼️</span>
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Upload</span>
+                <span className="text-[11px] text-slate-400">Photo or PDF</span>
+              </button>
+            </div>
+            <button
+              onClick={() => setScanChoice(null)}
+              className="mt-3 w-full text-center text-xs font-medium text-slate-400 hover:text-slate-600"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <PageHeader
         title="Expenses"
         subtitle={

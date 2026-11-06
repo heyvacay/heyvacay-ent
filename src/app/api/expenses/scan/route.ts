@@ -5,6 +5,19 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
+ * Diagnostic: GET /api/expenses/scan shows whether the OCR keys actually
+ * reached this running container (no secrets are exposed). If veryfi.configured
+ * is false, the VERYFI_* env vars aren't on the ENT task yet — add them to the
+ * ENT service's secret and wire the task, then redeploy.
+ */
+export async function GET() {
+  return NextResponse.json({
+    veryfi: { configured: VERYFI.live, base: VERYFI.base },
+    generic: { configured: RECEIPT_OCR.live },
+  });
+}
+
+/**
  * Receipt OCR. The client sends the photographed / uploaded receipt as a data
  * URL; we return the merchant, amount, date and a best-guess category to
  * autopopulate the expense form.
@@ -45,6 +58,10 @@ export async function POST(req: Request) {
   const image = body.image || '';
   if (!image) return NextResponse.json({ error: 'image required' }, { status: 400 });
 
+  // Why the Veryfi path didn't return a result (surfaced to the client so a
+  // misconfigured key isn't silently masked by the demo fallback).
+  let veryfiError: string | null = VERYFI.live ? null : 'not configured';
+
   // Veryfi provider path (our standard receipt-OCR provider). Veryfi accepts a
   // base64 payload with the data-URL prefix stripped; map its response to the
   // fields the expense form autopopulates.
@@ -54,6 +71,7 @@ export async function POST(req: Request) {
       const res = await fetch(`${VERYFI.base}/documents/`, {
         method: 'POST',
         headers: {
+          Accept: 'application/json',
           'Content-Type': 'application/json',
           'CLIENT-ID': VERYFI.clientId,
           AUTHORIZATION: `apikey ${VERYFI.username}:${VERYFI.apiKey}`,
@@ -77,9 +95,13 @@ export async function POST(req: Request) {
             source: 'veryfi',
           });
         }
+        veryfiError = 'empty result';
+      } else {
+        const text = await res.text().catch(() => '');
+        veryfiError = `HTTP ${res.status} ${text.slice(0, 160)}`.trim();
       }
-    } catch {
-      /* fall through to the generic / deterministic path */
+    } catch (e) {
+      veryfiError = `request failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 180);
     }
   }
 
@@ -126,5 +148,6 @@ export async function POST(req: Request) {
     date: d.toISOString().slice(0, 10),
     category: m.category,
     source: 'demo',
+    veryfiError,
   });
 }
