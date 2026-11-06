@@ -17,6 +17,7 @@ import {
 import { money, money2, shortDate, todayISO } from '@/lib/format';
 import { ACCOUNTING_IDS } from '@/lib/seed';
 import { Check, Globe, Receipt, Shield } from '@/components/icons';
+import { CameraCapture } from '@/components/app/CameraCapture';
 import type { ExpenseCategory, ExpenseStatus } from '@/lib/types';
 
 
@@ -65,6 +66,10 @@ export default function ExpensesPage() {
   // When set, show the "scan or upload?" chooser. Carries an optional label so
   // the active-trip context can say what we're expensing.
   const [scanChoice, setScanChoice] = useState<{ context?: string } | null>(null);
+  // Live camera capture modal (the "Scan" path).
+  const [camera, setCamera] = useState(false);
+  // Outcome of the last scan, so we never pass demo data off as a real read.
+  const [scanInfo, setScanInfo] = useState<{ source: string; error?: string } | null>(null);
   const [tool, setTool] = useState<null | 'perdiem'>(null);
   // Expense decision modal (approve/reject with an optional comment).
   const [decide, setDecide] = useState<{ id: string; kind: 'approved' | 'rejected' } | null>(
@@ -170,15 +175,20 @@ export default function ExpensesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrl, filename: file.name }),
       }).then((r) => r.json());
-      setForm({
-        merchant: res.merchant ?? '',
-        category: (res.category as ExpenseCategory) ?? 'Other',
-        amount: res.amount != null ? String(res.amount) : '',
-        date: res.date ?? todayISO(),
+      // Only treat it as a real read when it actually came from Veryfi. Never
+      // present the demo parser's made-up merchant/amount as a scan result —
+      // leave those blank so the user fills them in, with a clear notice.
+      const live = res.source === 'veryfi';
+      setScanInfo({ source: res.source ?? 'demo', error: res.veryfiError ?? undefined });
+      setForm((f) => ({
+        ...f,
+        merchant: live ? res.merchant ?? '' : '',
+        category: live && res.category ? (res.category as ExpenseCategory) : f.category,
+        amount: live && res.amount != null ? String(res.amount) : '',
+        date: live && res.date ? res.date : todayISO(),
         hasReceipt: true,
-        note: '',
         tripId,
-      });
+      }));
     } catch {
       // Keep the form open so the user can enter details manually.
     } finally {
@@ -211,6 +221,7 @@ export default function ExpensesPage() {
       tripId: '',
     });
     setReceiptPreview(null);
+    setScanInfo(null);
     setOpen(false);
   };
 
@@ -255,7 +266,7 @@ export default function ExpensesPage() {
               <button
                 onClick={() => {
                   setScanChoice(null);
-                  fileRef.current?.click();
+                  setCamera(true);
                 }}
                 className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 p-4 text-center transition hover:border-brand hover:bg-brand/5 dark:border-white/10"
               >
@@ -284,6 +295,22 @@ export default function ExpensesPage() {
           </div>
         </div>
       )}
+
+      {/* Live camera capture (the "Scan" path). */}
+      {camera && (
+        <CameraCapture
+          onCapture={(file) => {
+            setCamera(false);
+            onReceiptFile(file);
+          }}
+          onClose={() => setCamera(false)}
+          onUploadInstead={() => {
+            setCamera(false);
+            uploadRef.current?.click();
+          }}
+        />
+      )}
+
       <PageHeader
         title="Expenses"
         subtitle={
@@ -372,6 +399,25 @@ export default function ExpensesPage() {
               Reading your receipt — extracting merchant, amount and category…
             </div>
           )}
+          {!scanning && scanInfo && (
+            scanInfo.source === 'veryfi' ? (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                <Check className="h-4 w-4" /> Read from your receipt — check the details below.
+              </div>
+            ) : (
+              <div className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <p className="font-semibold">We couldn&apos;t read this receipt automatically.</p>
+                <p className="mt-0.5">
+                  Enter the details below.{' '}
+                  {scanInfo.error === 'not configured'
+                    ? 'Receipt OCR (Veryfi) isn’t switched on for this workspace yet.'
+                    : scanInfo.error
+                      ? `Scanner error: ${scanInfo.error}`
+                      : ''}
+                </p>
+              </div>
+            )
+          )}
           {receiptPreview && (
             <div className="mb-4 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -382,7 +428,7 @@ export default function ExpensesPage() {
               />
               <div className="text-xs text-slate-500">
                 <p className="font-semibold text-slate-700">Receipt attached</p>
-                <p className="mt-0.5">We read the details below — check them before submitting.</p>
+                <p className="mt-0.5">Confirm the details below before submitting.</p>
                 <button
                   onClick={() => {
                     setReceiptPreview(null);
