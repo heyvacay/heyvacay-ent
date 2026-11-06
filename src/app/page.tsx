@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import Nav from '@/components/Nav';
 import { Logo } from '@/components/app/Logo';
+import { CalEmbed } from '@/components/CalEmbed';
 import Reveal from '@/components/Reveal';
 import CountUp from '@/components/CountUp';
 import { SavingsCalculator } from '@/components/SavingsCalculator';
@@ -29,8 +30,16 @@ const GET_STARTED_URL = '/signup';
 const SIGN_IN_URL = '/app';
 // Book-a-demo scheduling link. Point this at your Cal.com event once the
 // HeyVacay demo account is set up (e.g. https://cal.com/heyvacay/demo).
+// Fallback URL if JS is off — the Cal popup (DEMO_CAL below) is the primary path.
 const DEMO_URL =
-  process.env.NEXT_PUBLIC_DEMO_URL || 'https://cal.com/heyvacay/demo';
+  process.env.NEXT_PUBLIC_DEMO_URL || 'https://cal.com/heyvacay-ent/demo';
+// Attributes that make an element open the Cal.com booking popup on click
+// (initialized once by <CalEmbed />). Spread onto any "Get a demo" element.
+const DEMO_CAL = {
+  'data-cal-link': 'heyvacay-ent/demo',
+  'data-cal-namespace': 'demo',
+  'data-cal-config': '{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}',
+} as const;
 
 /* --------------------------- small building blocks --------------------------- */
 
@@ -115,6 +124,7 @@ function Glow({
 export default function Home() {
   return (
     <div id="top" className="relative overflow-hidden">
+      <CalEmbed />
       <Nav />
 
       {/* ================================ HERO ================================ */}
@@ -155,8 +165,7 @@ export default function Home() {
                 </a>
                 <a
                   href={DEMO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  {...DEMO_CAL}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-line bg-white/5 px-7 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
                 >
                   Get a demo
@@ -759,8 +768,7 @@ export default function Home() {
                 </a>
                 <a
                   href={DEMO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  {...DEMO_CAL}
                   className="inline-flex w-full items-center justify-center rounded-full border border-line bg-white/5 px-8 py-4 text-base font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
                 >
                   Get a demo
@@ -770,8 +778,7 @@ export default function Home() {
                 Prefer to talk first?{' '}
                 <a
                   href={DEMO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  {...DEMO_CAL}
                   className="font-semibold text-brand hover:underline"
                 >
                   Book a 20-minute demo
@@ -797,7 +804,7 @@ export default function Home() {
           <div className="flex items-center gap-5 text-sm text-muted">
             <a href="#travel" className="hover:text-white">Platform</a>
             <a href="#pricing" className="hover:text-white">Pricing</a>
-            <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="hover:text-white">
+            <a href={DEMO_URL} {...DEMO_CAL} className="hover:text-white">
               Get a demo
             </a>
             <a href={SIGN_IN_URL} className="hover:text-white">Sign in</a>
