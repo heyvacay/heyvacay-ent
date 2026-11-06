@@ -462,6 +462,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           company={state.company.name}
           firstName={(activeUser.name ?? 'there').trim().split(' ')[0] || 'there'}
           isAdmin={role === 'admin'}
+          isOwner={!!activeUser.superAdmin}
           onDone={finishWelcome}
         />
       )}

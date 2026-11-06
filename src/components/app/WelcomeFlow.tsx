@@ -16,11 +16,15 @@ export function WelcomeFlow({
   company,
   firstName,
   isAdmin,
+  isOwner = false,
   onDone,
 }: {
   company: string;
   firstName: string;
   isAdmin: boolean;
+  /** The account owner (even when a rep created the account) gets the same
+   *  celebratory "about to save" moment a self-signup owner sees. */
+  isOwner?: boolean;
   onDone: () => void;
 }) {
   const [phase, setPhase] = useState<'password' | 'celebrate' | 'tour'>('password');
@@ -149,7 +153,23 @@ export function WelcomeFlow({
   }
 
   if (phase === 'celebrate') {
-    return (
+    // The account owner — whether they signed up themselves or a HeyVacay rep
+    // created the account for them — gets the celebratory "about to save" moment.
+    return isOwner ? (
+      <CelebrationOverlay
+        headline={
+          <>
+            {company} is about to travel smart
+            <br />
+            and <span className="text-brand">save a serious amount.</span>
+          </>
+        }
+        sub={`Welcome, ${firstName}! Your travel program is live — below-market fares, spend on budget, and rewards on every trip.`}
+        cta="Show me around →"
+        onCta={() => setPhase('tour')}
+        footnote="Takes about 30 seconds. You can skip anytime."
+      />
+    ) : (
       <CelebrationOverlay
         headline={
           <>
