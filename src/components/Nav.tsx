@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Logo as BrandLogo } from '@/components/app/Logo';
 
 const LINKS = [
   { href: '#travel', label: 'Travel' },
@@ -17,35 +18,9 @@ const GET_STARTED_URL = '/signup';
 
 function Logo() {
   return (
-    <a href="#top" className="flex items-center gap-2.5" aria-label="HeyVacay Enterprise home">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path
-            d="M3 20c3-1 5-1 9-1s6 0 9 1"
-            stroke="var(--color-brand)"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          <path
-            d="M12 19c-1.5-4-1.5-8 0-13 2.8 2.2 4 6.5 2.8 10"
-            stroke="var(--color-brand)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M12 6C9.5 4.5 6.8 4.3 4.5 5.4 6.6 7.9 9 9.2 11.6 9"
-            stroke="#8ef3fa"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-      <span className="font-display text-[17px] font-bold tracking-tight text-white">
-        HeyVacay{' '}
-        <span className="font-medium text-brand">Enterprise</span>
-      </span>
+    <a href="#top" className="flex items-center" aria-label="HeyVacay Enterprise home">
+      {/* The real HeyVacay wordmark + Enterprise lockup (same asset the app uses). */}
+      <BrandLogo tone="light" imgClassName="h-6" />
     </a>
   );
 }

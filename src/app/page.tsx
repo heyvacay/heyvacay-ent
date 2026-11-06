@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import Nav from '@/components/Nav';
+import { Logo } from '@/components/app/Logo';
 import Reveal from '@/components/Reveal';
 import CountUp from '@/components/CountUp';
 import { SavingsCalculator } from '@/components/SavingsCalculator';
@@ -788,14 +789,7 @@ export default function Home() {
       {/* ================================ FOOTER ================================ */}
       <footer className="border-t border-line px-5 py-12 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 sm:flex-row">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 ring-1 ring-brand/30">
-              <Sparkles className="h-4 w-4 text-brand" />
-            </span>
-            <span className="font-display text-sm font-bold text-white">
-              HeyVacay <span className="font-medium text-brand">Enterprise</span>
-            </span>
-          </div>
+          <Logo tone="light" imgClassName="h-6" />
           <p className="text-center text-xs text-muted">
             © {new Date().getFullYear()} HeyVacay. Corporate travel &amp; expense,
             completely free. We earn commission on bookings, never fees from you.
