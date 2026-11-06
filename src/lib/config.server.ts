@@ -119,12 +119,20 @@ export const RECEIPT_OCR = {
  *   VERYFI_CLIENT_ID     — your Veryfi Client ID
  *   VERYFI_USERNAME      — your Veryfi username
  *   VERYFI_API_KEY       — your Veryfi API key
- * Optional: VERYFI_API_BASE (defaults to Veryfi's v8 partner endpoint host).
+ * Optional:
+ *   VERYFI_API_BASE      — defaults to Veryfi's v8 partner endpoint host.
+ *   VERYFI_CLIENT_SECRET — NOT needed to authenticate. Veryfi uses it only for
+ *     the optional HMAC request signature (X-Veryfi-Request-Signature /
+ *     -Timestamp), an extra layer mainly for browser-side calls. Our scan runs
+ *     server-side with CLIENT-ID + apikey auth, so this is reserved/unused
+ *     unless your Veryfi account enforces signature verification.
  */
 export const VERYFI = {
   clientId: process.env.VERYFI_CLIENT_ID || '',
   username: process.env.VERYFI_USERNAME || '',
   apiKey: process.env.VERYFI_API_KEY || '',
+  /** Reserved: only used if Veryfi signature verification is enabled. */
+  clientSecret: process.env.VERYFI_CLIENT_SECRET || '',
   base: (process.env.VERYFI_API_BASE || 'https://api.veryfi.com/api/v8/partner').replace(/\/+$/, ''),
   get live() {
     return Boolean(this.clientId && this.username && this.apiKey);
