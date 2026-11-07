@@ -11,13 +11,12 @@ import type { Booking } from '@/lib/types';
 /** HeyVacay remit-to details shown on every invoice. */
 const REMIT = {
   entity: 'HeyVacay, Inc.',
-  address: '2100 Kramer Lane, Suite 300, Austin, TX 78758',
-  ein: '88-1234567',
-  bankName: 'Silicon Valley Bank',
-  routing: '121140399',
-  account: '•••• 4821',
-  swift: 'SVBKUS6S',
-  email: 'ar@heyvacay.co',
+  address: '806 Rough Hollow Drive, Lakeway, TX 78734',
+  phone: '888-260-2645',
+  bankName: 'JP Morgan Chase Bank',
+  routing: '111000614',
+  account: '720790578',
+  email: 'Support@heyvacay.co',
 };
 
 const TAX_RATE = 0.0825; // assumed sales/occupancy tax split out on each line
@@ -145,7 +144,6 @@ export default function InvoicesPage() {
               <Row k="Bank" v={REMIT.bankName} />
               <Row k="Routing (ABA)" v={REMIT.routing} />
               <Row k="Account" v={REMIT.account} />
-              <Row k="SWIFT" v={REMIT.swift} />
             </dl>
           </div>
           <div>
@@ -155,7 +153,7 @@ export default function InvoicesPage() {
               <br />
               {REMIT.address}
               <br />
-              EIN {REMIT.ein} · {REMIT.email}
+              {REMIT.phone} · {REMIT.email}
             </p>
           </div>
         </div>
@@ -297,7 +295,7 @@ function InvoiceSheet({
         <div className="text-right text-xs text-slate-500">
           <p className="font-semibold text-slate-700 dark:text-slate-200">{REMIT.entity}</p>
           <p>{REMIT.address}</p>
-          <p>EIN {REMIT.ein}</p>
+          <p>{REMIT.phone}</p>
         </div>
       </div>
 

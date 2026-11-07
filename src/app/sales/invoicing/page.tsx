@@ -58,16 +58,13 @@ const KYC_COLOR: Record<KycStatus, 'slate' | 'amber' | 'green' | 'red' | 'brand'
 
 const REMIT = {
   entity: 'HeyVacay, Inc.',
-  addressLines: ['2100 Kramer Lane, Suite 300', 'Austin, TX 78758', 'United States'],
-  taxId: '88-1234567',
-  phone: '+1 (512) 555-0142',
-  email: 'ar@heyvacay.co',
+  addressLines: ['806 Rough Hollow Drive', 'Lakeway, TX 78734', 'United States'],
+  phone: '888-260-2645',
+  email: 'Support@heyvacay.co',
   web: 'heyvacay.co',
-  bankName: 'Silicon Valley Bank',
-  routing: '121140399',
-  account: '•••• 4821',
-  swift: 'SVBKUS6S',
-  payLink: 'pay.heyvacay.co',
+  bankName: 'JP Morgan Chase Bank',
+  routing: '111000614',
+  account: '720790578',
 };
 
 function addDays(iso: string, days: number): string {
@@ -1079,8 +1076,7 @@ function PrintInvoiceModal({ invoice, onClose }: { invoice: Printable; onClose: 
                 {REMIT.addressLines.map((l) => (
                   <p key={l}>{l}</p>
                 ))}
-                <p className="mt-1">Tax ID {REMIT.taxId}</p>
-                <p>
+                <p className="mt-1">
                   {REMIT.phone} · {REMIT.email}
                 </p>
               </div>
@@ -1246,24 +1242,16 @@ function PrintInvoiceModal({ invoice, onClose }: { invoice: Printable; onClose: 
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Payment instructions</p>
               <dl className="mt-2 space-y-1 text-xs text-slate-600">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-400">Pay online</dt>
-                  <dd className="font-medium text-slate-700">{REMIT.payLink}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
                   <dt className="text-slate-400">Bank</dt>
                   <dd className="font-medium text-slate-700">{REMIT.bankName}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-400">ACH routing</dt>
+                  <dt className="text-slate-400">Routing (ABA)</dt>
                   <dd className="font-medium tabular-nums text-slate-700">{REMIT.routing}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-slate-400">Account</dt>
                   <dd className="font-medium tabular-nums text-slate-700">{REMIT.account}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-slate-400">SWIFT</dt>
-                  <dd className="font-medium text-slate-700">{REMIT.swift}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-slate-400">Reference</dt>
