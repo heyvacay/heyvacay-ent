@@ -15,6 +15,7 @@ import {
 } from '@/components/app/ui';
 import { money, money2, shortDate, todayISO, uid } from '@/lib/format';
 import { Receipt, Shield, Check } from '@/components/icons';
+import { Logo } from '@/components/app/Logo';
 import type { AppState, KycStatus, Net30Kyc } from '@/lib/types';
 import {
   readAccountState,
@@ -57,11 +58,16 @@ const KYC_COLOR: Record<KycStatus, 'slate' | 'amber' | 'green' | 'red' | 'brand'
 
 const REMIT = {
   entity: 'HeyVacay, Inc.',
-  address: '2100 Kramer Lane, Suite 300, Austin, TX 78758',
+  addressLines: ['2100 Kramer Lane, Suite 300', 'Austin, TX 78758', 'United States'],
+  taxId: '88-1234567',
+  phone: '+1 (512) 555-0142',
+  email: 'ar@heyvacay.co',
+  web: 'heyvacay.co',
   bankName: 'Silicon Valley Bank',
   routing: '121140399',
   account: '•••• 4821',
-  email: 'ar@heyvacay.co',
+  swift: 'SVBKUS6S',
+  payLink: 'pay.heyvacay.co',
 };
 
 function addDays(iso: string, days: number): string {
@@ -71,39 +77,66 @@ function addDays(iso: string, days: number): string {
 /* --------------------------- unified printable shape --------------------------- */
 
 interface PrintRow {
-  label: string;
-  sub?: string;
-  dates?: string;
+  category: string;
+  description: string;
+  detail?: string; // traveler / dates / qty×price note
+  quantity: number;
+  unitPrice: number;
   amount: number;
+}
+interface BillTo {
+  name: string;
+  attn?: string;
+  email?: string;
+  address?: string;
 }
 interface Printable {
   number: string;
-  billTo: string;
+  billTo: BillTo;
   issued: string;
   due: string;
+  terms: string;
   poNumber?: string;
+  status: 'paid' | 'open' | 'overdue';
   rows: PrintRow[];
   subtotal: number;
+  discount: number; // absolute value of negative lines
   tax: number;
+  taxRatePct?: number;
   lateFee?: number;
   total: number;
   notes?: string;
+  preparedBy?: string;
   kind: 'period' | 'manual';
 }
 
-function periodToPrintable(inv: Invoice, companyName: string): Printable {
+function bookingCategory(type?: string): string {
+  if (type === 'hotel') return 'Hotel';
+  if (type === 'flight') return 'Flight';
+  if (type === 'car') return 'Car rental';
+  if (type === 'train') return 'Rail';
+  return 'Travel';
+}
+
+function periodToPrintable(inv: Invoice, billTo: BillTo): Printable {
+  const rows: PrintRow[] = inv.lines.map((l) => ({
+    category: bookingCategory(l.booking.type),
+    description: `${l.booking.title}${l.booking.roomType ? ` · ${l.booking.roomType}` : ''}`,
+    detail: `${l.travelerName}${l.department && l.department !== '—' ? ` · ${l.department}` : ''} · ${l.booking.startDate} → ${l.booking.endDate}${l.nights ? ` (${l.nights} night${l.nights === 1 ? '' : 's'})` : ''}`,
+    quantity: 1,
+    unitPrice: l.total,
+    amount: l.total,
+  }));
   return {
-    number: `#${inv.number}`,
-    billTo: companyName,
+    number: `HV-${inv.number}`,
+    billTo,
     issued: inv.issued,
     due: inv.due,
-    rows: inv.lines.map((l) => ({
-      label: l.travelerName,
-      sub: `${l.booking.title}${l.booking.roomType ? ` · ${l.booking.roomType}` : ''}`,
-      dates: `${l.booking.startDate} → ${l.booking.endDate}`,
-      amount: l.total,
-    })),
+    terms: 'Net 10',
+    status: inv.reported ? 'paid' : inv.weeksLate > 0 ? 'overdue' : 'open',
+    rows,
     subtotal: inv.subtotal,
+    discount: 0,
     tax: inv.tax,
     lateFee: inv.lateFee,
     total: inv.amountDue,
@@ -111,23 +144,40 @@ function periodToPrintable(inv: Invoice, companyName: string): Printable {
   };
 }
 
-function manualToPrintable(inv: ManualInvoice, companyName: string): Printable {
+function manualToPrintable(inv: ManualInvoice, fallback: BillTo): Printable {
+  const today = todayISO();
+  const rows: PrintRow[] = inv.items.map((it) => ({
+    category: it.category,
+    description: it.description || it.category,
+    detail: undefined,
+    quantity: it.quantity,
+    unitPrice: it.unitAmount,
+    amount: lineAmount(it),
+  }));
+  const discount = inv.items.reduce((s, it) => {
+    const amt = lineAmount(it);
+    return amt < 0 ? s + amt : s;
+  }, 0);
+  const termDays = Math.max(
+    0,
+    Math.round((new Date(inv.due).getTime() - new Date(inv.issued).getTime()) / 86400000)
+  );
   return {
     number: inv.number,
-    billTo: inv.billTo || companyName,
+    billTo: { ...fallback, name: inv.billTo || fallback.name },
     issued: inv.issued,
     due: inv.due,
+    terms: `Net ${termDays}`,
     poNumber: inv.poNumber,
-    rows: inv.items.map((it) => ({
-      label: it.category,
-      sub: it.description || '—',
-      dates: it.quantity !== 1 ? `${it.quantity} × ${money2(it.unitAmount)}` : undefined,
-      amount: lineAmount(it),
-    })),
+    status: inv.paid ? 'paid' : inv.due < today ? 'overdue' : 'open',
+    rows,
     subtotal: inv.subtotal,
+    discount: Math.abs(discount),
     tax: inv.tax,
+    taxRatePct: inv.taxRatePct,
     total: inv.total,
     notes: inv.notes,
+    preparedBy: inv.createdBy,
     kind: 'manual',
   };
 }
@@ -188,6 +238,19 @@ export default function CrmInvoicingPage() {
   }, [workspaceCompanies, query, refresh, mounted]);
 
   const selected = rows.find((r) => r.company.id === selectedId) ?? rows[0] ?? null;
+
+  // Bill-to block for the selected company, enriched from approved KYC fields.
+  const selBillTo: BillTo | null = selected
+    ? (() => {
+        const f = selected.state?.billing?.netKyc?.fields;
+        return {
+          name: f?.legalName || selected.company.name,
+          email: f?.billingEmail || undefined,
+          address: f?.billingAddress || undefined,
+          attn: f?.signerName || undefined,
+        };
+      })()
+    : null;
 
   // Portfolio-wide AR summary (Salesforce-style billing overview).
   const ar = useMemo(() => {
@@ -327,8 +390,10 @@ export default function CrmInvoicingPage() {
                 invoices={selected.invoices}
                 manual={selected.manual}
                 onNewInvoice={() => setComposing(true)}
-                onGeneratePeriod={(inv) => setPrinting(periodToPrintable(inv, selected.company.name))}
-                onOpenManual={(m) => setPrinting(manualToPrintable(m, selected.company.name))}
+                onGeneratePeriod={(inv) =>
+                  selBillTo && setPrinting(periodToPrintable(inv, selBillTo))
+                }
+                onOpenManual={(m) => selBillTo && setPrinting(manualToPrintable(m, selBillTo))}
                 onPaidToggle={(period, paid) => {
                   crmRecordInvoicePaid(selected.company.id, period, paid);
                   bump();
@@ -357,7 +422,7 @@ export default function CrmInvoicingPage() {
           onClose={() => setComposing(false)}
           onGenerated={(inv) => {
             setComposing(false);
-            setPrinting(manualToPrintable(inv, selected.company.name));
+            if (selBillTo) setPrinting(manualToPrintable(inv, selBillTo));
             bump();
           }}
         />
@@ -972,85 +1037,264 @@ function InvoiceComposer({
 
 /* --------------------------- print modal (unified) --------------------------- */
 
+const STATUS_META: Record<Printable['status'], { label: string; cls: string }> = {
+  paid: { label: 'PAID', cls: 'border-emerald-300 bg-emerald-50 text-emerald-700' },
+  open: { label: 'BALANCE DUE', cls: 'border-amber-300 bg-amber-50 text-amber-700' },
+  overdue: { label: 'PAST DUE', cls: 'border-red-300 bg-red-50 text-red-700' },
+};
+
+function longDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 function PrintInvoiceModal({ invoice, onClose }: { invoice: Printable; onClose: () => void }) {
+  const status = STATUS_META[invoice.status];
+  const balance = invoice.status === 'paid' ? 0 : invoice.total;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose}>
+    <div
+      className="hv-print-overlay fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-slate-900/60 p-4 sm:p-8"
+      onClick={onClose}
+    >
+      {/* The sheet: forced white + dark ink so it reads as a real document in
+          both light and dark app themes, and prints clean. */}
       <div
-        className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-6 shadow-2xl print:shadow-none"
         onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#ffffff',
+          color: '#0f172a',
+          WebkitPrintColorAdjust: 'exact',
+          printColorAdjust: 'exact',
+        }}
+        className="hv-invoice-sheet relative my-2 w-full max-w-3xl rounded-2xl shadow-2xl"
       >
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="font-display text-xl font-bold text-slate-900">Invoice {invoice.number}</p>
-            <p className="text-xs text-slate-500">
-              Issued {invoice.issued} · Due {invoice.due}
-              {invoice.poNumber ? ` · PO ${invoice.poNumber}` : ''}
+        <div className="px-8 py-9 sm:px-12 sm:py-11">
+          {/* ---------- header ---------- */}
+          <div className="flex items-start justify-between gap-6 border-b-2 border-slate-900 pb-6">
+            <div>
+              <Logo imgClassName="h-9" />
+              <div className="mt-4 text-[11px] leading-relaxed text-slate-500">
+                <p className="text-sm font-bold text-slate-800">{REMIT.entity}</p>
+                {REMIT.addressLines.map((l) => (
+                  <p key={l}>{l}</p>
+                ))}
+                <p className="mt-1">Tax ID {REMIT.taxId}</p>
+                <p>
+                  {REMIT.phone} · {REMIT.email}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-display text-4xl font-extrabold tracking-tight text-slate-900">INVOICE</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">{invoice.number}</p>
+              <span
+                className={cn(
+                  'mt-3 inline-block rounded-md border px-3 py-1 text-xs font-extrabold tracking-wide',
+                  status.cls
+                )}
+              >
+                {status.label}
+              </span>
+            </div>
+          </div>
+
+          {/* ---------- parties + meta ---------- */}
+          <div className="mt-6 grid gap-6 sm:grid-cols-[1.3fr_1fr]">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Bill to</p>
+              <p className="mt-1.5 text-base font-bold text-slate-900">{invoice.billTo.name}</p>
+              {invoice.billTo.attn && (
+                <p className="text-sm text-slate-600">Attn: {invoice.billTo.attn}</p>
+              )}
+              {invoice.billTo.address && (
+                <p className="mt-0.5 whitespace-pre-line text-sm text-slate-600">{invoice.billTo.address}</p>
+              )}
+              {invoice.billTo.email && <p className="mt-0.5 text-sm text-slate-600">{invoice.billTo.email}</p>}
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4 text-sm">
+              <dl className="space-y-1.5">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">Invoice date</dt>
+                  <dd className="font-semibold text-slate-700">{longDate(invoice.issued)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">Due date</dt>
+                  <dd className="font-semibold text-slate-700">{longDate(invoice.due)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">Terms</dt>
+                  <dd className="font-semibold text-slate-700">{invoice.terms}</dd>
+                </div>
+                {invoice.poNumber && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-slate-400">PO number</dt>
+                    <dd className="font-semibold text-slate-700">{invoice.poNumber}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">Currency</dt>
+                  <dd className="font-semibold text-slate-700">USD</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          {/* ---------- amount due banner ---------- */}
+          <div className="mt-6 flex items-center justify-between rounded-lg bg-slate-900 px-5 py-3 text-white">
+            <span className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+              {invoice.status === 'paid' ? 'Amount paid' : 'Amount due'}
+            </span>
+            <span className="font-display text-2xl font-extrabold tabular-nums">
+              {money2(invoice.total)}
+              {invoice.status !== 'paid' && (
+                <span className="ml-2 align-middle text-xs font-medium text-slate-300">
+                  by {longDate(invoice.due)}
+                </span>
+              )}
+            </span>
+          </div>
+
+          {/* ---------- line items ---------- */}
+          <table className="mt-7 w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500">
+                <th className="w-8 px-2 py-2 text-center font-bold">#</th>
+                <th className="px-2 py-2 font-bold">Description</th>
+                <th className="w-24 px-2 py-2 font-bold">Category</th>
+                <th className="w-12 px-2 py-2 text-right font-bold">Qty</th>
+                <th className="w-28 px-2 py-2 text-right font-bold">Unit price</th>
+                <th className="w-28 px-2 py-2 text-right font-bold">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.rows.map((r, i) => (
+                <tr key={i} className={cn('align-top', i % 2 === 1 && 'bg-slate-50/70')}>
+                  <td className="px-2 py-2.5 text-center text-xs text-slate-400">{i + 1}</td>
+                  <td className="px-2 py-2.5">
+                    <p className="font-semibold text-slate-800">{r.description}</p>
+                    {r.detail && <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>}
+                  </td>
+                  <td className="px-2 py-2.5">
+                    <span className="inline-block rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                      {r.category}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{r.quantity}</td>
+                  <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{money2(r.unitPrice)}</td>
+                  <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-800">
+                    {money2(r.amount)}
+                  </td>
+                </tr>
+              ))}
+              {invoice.rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-2 py-6 text-center text-sm text-slate-400">
+                    No line items — $0.00 invoice.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* ---------- totals ---------- */}
+          <div className="mt-5 flex justify-end">
+            <div className="w-full max-w-xs space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Subtotal</span>
+                <span className="font-medium tabular-nums text-slate-700">{money2(invoice.subtotal)}</span>
+              </div>
+              {invoice.discount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Discounts</span>
+                  <span className="font-medium tabular-nums text-emerald-600">−{money2(invoice.discount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">
+                  Tax{typeof invoice.taxRatePct === 'number' ? ` (${invoice.taxRatePct}%)` : ''}
+                </span>
+                <span className="font-medium tabular-nums text-slate-700">{money2(invoice.tax)}</span>
+              </div>
+              {invoice.lateFee ? (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Late fee</span>
+                  <span className="font-medium tabular-nums text-red-600">{money2(invoice.lateFee)}</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between border-t-2 border-slate-900 pt-2 font-display text-lg font-extrabold text-slate-900">
+                <span>Total</span>
+                <span className="tabular-nums">{money2(invoice.total)}</span>
+              </div>
+              {invoice.status === 'paid' ? (
+                <div className="flex justify-between text-emerald-600">
+                  <span className="font-semibold">Paid in full</span>
+                  <span className="font-semibold tabular-nums">−{money2(invoice.total)}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between rounded-md bg-slate-100 px-2 py-1 font-bold text-slate-900">
+                  <span>Balance due</span>
+                  <span className="tabular-nums">{money2(balance)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ---------- payment instructions ---------- */}
+          <div className="mt-8 grid gap-5 border-t border-slate-200 pt-5 sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Payment instructions</p>
+              <dl className="mt-2 space-y-1 text-xs text-slate-600">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-400">Pay online</dt>
+                  <dd className="font-medium text-slate-700">{REMIT.payLink}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-400">Bank</dt>
+                  <dd className="font-medium text-slate-700">{REMIT.bankName}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-400">ACH routing</dt>
+                  <dd className="font-medium tabular-nums text-slate-700">{REMIT.routing}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-400">Account</dt>
+                  <dd className="font-medium tabular-nums text-slate-700">{REMIT.account}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-400">SWIFT</dt>
+                  <dd className="font-medium text-slate-700">{REMIT.swift}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-400">Reference</dt>
+                  <dd className="font-medium text-slate-700">{invoice.number}</dd>
+                </div>
+              </dl>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Notes &amp; terms</p>
+              {invoice.notes && <p className="mt-2 text-xs text-slate-600">{invoice.notes}</p>}
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                Payment due by {longDate(invoice.due)} ({invoice.terms}). A late fee of 3% per week
+                applies to past-due balances. Please include invoice reference{' '}
+                <span className="font-semibold text-slate-700">{invoice.number}</span> with your payment.
+                Questions? Contact {REMIT.email}.
+              </p>
+            </div>
+          </div>
+
+          {/* ---------- footer ---------- */}
+          <div className="mt-8 border-t border-slate-200 pt-4 text-center">
+            <p className="font-display text-sm font-bold text-slate-700">Thank you for your business.</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {REMIT.entity} · {REMIT.web} · {REMIT.email}
+              {invoice.preparedBy ? ` · Prepared by ${invoice.preparedBy}` : ''}
             </p>
           </div>
-          <div className="text-right text-xs text-slate-500">
-            <p className="font-semibold text-slate-700">{REMIT.entity}</p>
-            <p>{REMIT.address}</p>
-          </div>
-        </div>
-        <p className="mt-3 text-xs text-slate-500">
-          <span className="font-semibold text-slate-600">Bill to:</span> {invoice.billTo}
-        </p>
-
-        <table className="mt-4 w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-slate-200 text-slate-400">
-              <th className="py-1.5 pr-2">Item</th>
-              <th className="py-1.5 pr-2">Details</th>
-              <th className="py-1.5 text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoice.rows.map((r, i) => (
-              <tr key={i} className="border-b border-slate-100">
-                <td className="py-1.5 pr-2 font-medium text-slate-700">{r.label}</td>
-                <td className="py-1.5 pr-2 text-slate-500">
-                  {r.sub}
-                  {r.dates ? <span className="block text-[11px] text-slate-400">{r.dates}</span> : null}
-                </td>
-                <td className="py-1.5 text-right font-medium tabular-nums">{money2(r.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="mt-4 ml-auto w-full max-w-xs space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-400">Subtotal</span>
-            <span className="font-medium tabular-nums">{money2(invoice.subtotal)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Tax</span>
-            <span className="font-medium tabular-nums">{money2(invoice.tax)}</span>
-          </div>
-          {invoice.lateFee ? (
-            <div className="flex justify-between">
-              <span className="text-slate-400">Late fee</span>
-              <span className="font-medium tabular-nums">{money2(invoice.lateFee)}</span>
-            </div>
-          ) : null}
-          <div className="flex justify-between border-t border-slate-200 pt-1 font-display text-base font-bold">
-            <span>Amount due</span>
-            <span className="tabular-nums">{money2(invoice.total)}</span>
-          </div>
         </div>
 
-        {invoice.notes && (
-          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">Notes:</span> {invoice.notes}
-          </p>
-        )}
-
-        <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-400">
-          {invoice.kind === 'period' ? 'Net 10 terms. ' : ''}Remit to {REMIT.entity}, {REMIT.bankName}{' '}
-          routing {REMIT.routing}, acct {REMIT.account}. Questions: {REMIT.email}.
-        </p>
-
-        <div className="mt-4 flex justify-end gap-2 print:hidden">
+        {/* action bar (not printed) */}
+        <div className="flex justify-end gap-2 rounded-b-2xl border-t border-slate-200 bg-slate-50 px-6 py-3 print:hidden">
           <Button variant="ghost" onClick={onClose}>
             Close
           </Button>

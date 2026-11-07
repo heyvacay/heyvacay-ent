@@ -268,3 +268,32 @@ img.hv-logo-light {
     animation-duration: 3s;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/*  Invoice print: isolate the invoice sheet so Print / Save PDF emits  */
+/*  a clean white document (no dark overlay, no app chrome).            */
+/* ------------------------------------------------------------------ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .hv-print-overlay,
+  .hv-print-overlay * {
+    visibility: visible;
+  }
+  .hv-print-overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .hv-invoice-sheet {
+    margin: 0 !important;
+    max-width: 100% !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}
