@@ -11,9 +11,9 @@ import {
   type ReservationResult,
 } from '@/lib/restaurants';
 import { FOOD_GENRES } from '@/lib/events';
-import { Button, EmptyState, PageHeader, cn } from '@/components/app/ui';
+import { Button, EmptyState, Field, Input, Select, PageHeader, cn } from '@/components/app/ui';
 import { todayISO } from '@/lib/format';
-import { Check, Shield, MapPin } from '@/components/icons';
+import { Check, Shield, MapPin, Sparkles } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 
 export default function RestaurantsPage() {
@@ -45,61 +45,73 @@ export default function RestaurantsPage() {
       />
 
       {/* search hero */}
-      <div className="mb-6 rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-5 ring-1 ring-white/10 sm:p-6">
-        <div className="grid gap-3 sm:grid-cols-6">
-          <label className="sm:col-span-2">
-            <span className="mb-1 block text-xs font-medium text-mist/70">City</span>
-            <input
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="City"
-              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-brand"
-            />
-          </label>
-          <label>
-            <span className="mb-1 block text-xs font-medium text-mist/70">Cuisine</span>
-            <select
-              value={genre}
-              onChange={(e) => setGenre(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
-            >
-              <option value="" className="text-slate-900">Any cuisine</option>
-              {FOOD_GENRES.map((g) => (
-                <option key={g} value={g} className="text-slate-900">{g}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="mb-1 block text-xs font-medium text-mist/70">Date</span>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
-            />
-          </label>
-          <label>
-            <span className="mb-1 block text-xs font-medium text-mist/70">Time</span>
-            <input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
-            />
-          </label>
-          <label>
-            <span className="mb-1 block text-xs font-medium text-mist/70">Guests</span>
-            <input
-              type="number"
-              value={party}
-              onChange={(e) => setParty(Number(e.target.value) || 1)}
-              onFocus={(e) => e.currentTarget.select()}
-              className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-brand"
-            />
-          </label>
+      <div className="mb-5 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+        <div className="bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-5 pt-5 sm:px-7 sm:pt-6">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-brand-dark">
+            <Sparkles className="h-3.5 w-3.5" /> Dining
+          </span>
+          <h2 className="mt-3 font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
+            Find a table
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Book restaurants for your trip — the whole reservation happens right here.
+          </p>
         </div>
-        <div className="mt-4">
-          <Button onClick={search}>Find tables</Button>
+        <div className="px-5 pb-5 pt-4 sm:px-7 sm:pb-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="lg:col-span-2">
+              <Field label="City">
+                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" />
+              </Field>
+            </div>
+            <Field label="Cuisine">
+              <Select value={genre} onChange={(e) => setGenre(e.target.value)}>
+                <option value="">Any cuisine</option>
+                {FOOD_GENRES.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Date">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+            <Field label="Time">
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            </Field>
+            <Field label="Guests">
+              <Input
+                type="number"
+                value={party}
+                onChange={(e) => setParty(Number(e.target.value) || 1)}
+              />
+            </Field>
+          </div>
+
+          {/* quick cuisine chips */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {['', ...FOOD_GENRES.slice(0, 6)].map((g) => (
+              <button
+                key={g || 'any'}
+                onClick={() => setGenre(g)}
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-medium transition',
+                  genre === g
+                    ? 'bg-brand text-navy'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300'
+                )}
+              >
+                {g || 'Any cuisine'}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <Button onClick={search} disabled={loading}>
+              {loading ? 'Searching…' : 'Find tables'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -110,6 +122,13 @@ export default function RestaurantsPage() {
       )}
 
       {!loading && results && results.length > 0 && (
+        <>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+            {results.length} restaurant{results.length === 1 ? '' : 's'}{' '}
+            <span className="font-normal text-slate-400">in {city}</span>
+          </h3>
+        </div>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {results.map((r) => (
             <div
@@ -145,6 +164,7 @@ export default function RestaurantsPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {selected && (

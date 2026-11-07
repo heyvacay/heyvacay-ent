@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '@/lib/store';
 import {
   placesFlights,
@@ -14,7 +14,7 @@ import { HvRangeField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
 import { Button, Card, Field, Input, PageHeader, Badge, cn } from '@/components/app/ui';
 import { money, num, addDays, todayISO, dateRange, uid } from '@/lib/format';
-import { Plane, Building, Shield, ArrowRight, Sparkles } from '@/components/icons';
+import { Plane, Building, Shield, ArrowRight, Sparkles, Check } from '@/components/icons';
 import { rewardsFor } from '@/lib/rewards';
 import { FlightRow, HotelCard, type Sig } from '@/components/app/results';
 import type { InventoryOption, PlannedItem, TripPlan } from '@/lib/types';
@@ -42,6 +42,9 @@ export default function PlanTripPage() {
   // Optional ground legs the traveler wants us to arrange alongside the trip.
   const [addTrain, setAddTrain] = useState(false);
   const [addCar, setAddCar] = useState(false);
+  // Package flow: pick the hotel first, then the flight, then review — mirrors
+  // the HeyVacay consumer package booking. 'search' before results exist.
+  const [step, setStep] = useState<'search' | 'stay' | 'flight' | 'review'>('search');
 
   const firstName = (activeUser.name ?? '').trim().split(' ')[0] || 'there';
   const draftKey = `hv_ent_plan_draft_${state.company.id}`;
@@ -97,7 +100,9 @@ export default function PlanTripPage() {
         }),
       ]);
       setFlights(fl.slice(0, 5));
-      setHotels(hp.options.slice(0, 5));
+      setHotels(hp.options.slice(0, 6));
+      // Package flow always starts on the hotel step.
+      setStep('stay');
     } catch {
       setError('Could not load options. Try again.');
     } finally {
@@ -243,6 +248,7 @@ export default function PlanTripPage() {
     setHotels(null);
     setAddTrain(false);
     setAddCar(false);
+    setStep('search');
     try {
       localStorage.removeItem(draftKey);
     } catch {
@@ -261,105 +267,122 @@ export default function PlanTripPage() {
         subtitle="Search flights and hotels together, pick each from the same cards you book with, and submit the whole trip for approval at once."
       />
 
-      {/* composer */}
-      <Card>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Typeahead
-            label="Flying from"
-            placeholder="City or airport"
-            value={originText}
-            onText={setOriginText}
-            fetcher={async (q) => (await placesFlights(q)).map((p) => ({ key: p.code, label: p.label, sub: p.sub, data: p }))}
-            onPick={(s) => {
-              setOrigin(s.data as FlightPlace);
-              setOriginText(s.label);
-            }}
-          />
-          <Typeahead
-            label="Going to"
-            placeholder="City"
-            value={destText}
-            onText={setDestText}
-            fetcher={async (q) =>
-              (await placesHotels(q))
-                .filter((p) => p.type === 'region')
-                .map((p) => ({ key: `r${p.regionId}`, label: p.label, sub: p.sub, data: p }))
-            }
-            onPick={(s) => {
-              setDest(s.data as HotelPlace);
-              setDestText(s.label);
-            }}
-          />
-          <Field label="Dates">
-            <HvRangeField
-              value={{ from: dStart, to: dEnd }}
-              maxRangeDays={30}
-              onChange={(r) => {
-                if (r?.from) setStart(toISO(r.from));
-                if (r?.to) setEnd(toISO(r.to));
-              }}
-            />
-          </Field>
-          <div className="flex items-end">
-            <Button className="w-full" onClick={search} disabled={loading}>
-              {loading ? 'Searching…' : 'Find flight + hotel'}
-            </Button>
+      {/* ---- search hero (also the editor you return to) ---- */}
+      {step === 'search' && (
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div className="bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-5 pt-5 sm:px-7 sm:pt-7">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-brand-dark">
+              <Sparkles className="h-3.5 w-3.5" /> Package trip
+            </span>
+            <h2 className="mt-3 font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
+              Where to, {firstName}?
+            </h2>
+            <p className="mt-1 max-w-xl text-sm text-slate-500">
+              Choose your hotel first, then your flight — we bundle them into one trip and one
+              approval, just like booking a HeyVacay package.
+            </p>
+          </div>
+          <div className="px-5 pb-5 pt-4 sm:px-7 sm:pb-7">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Typeahead
+                label="Flying from"
+                placeholder="City or airport"
+                value={originText}
+                onText={setOriginText}
+                fetcher={async (q) => (await placesFlights(q)).map((p) => ({ key: p.code, label: p.label, sub: p.sub, data: p }))}
+                onPick={(s) => {
+                  setOrigin(s.data as FlightPlace);
+                  setOriginText(s.label);
+                }}
+              />
+              <Typeahead
+                label="Going to"
+                placeholder="City"
+                value={destText}
+                onText={setDestText}
+                fetcher={async (q) =>
+                  (await placesHotels(q))
+                    .filter((p) => p.type === 'region')
+                    .map((p) => ({ key: `r${p.regionId}`, label: p.label, sub: p.sub, data: p }))
+                }
+                onPick={(s) => {
+                  setDest(s.data as HotelPlace);
+                  setDestText(s.label);
+                }}
+              />
+              <Field label="Dates">
+                <HvRangeField
+                  value={{ from: dStart, to: dEnd }}
+                  maxRangeDays={30}
+                  onChange={(r) => {
+                    if (r?.from) setStart(toISO(r.from));
+                    if (r?.to) setEnd(toISO(r.to));
+                  }}
+                />
+              </Field>
+              <div className="flex items-end">
+                <Button className="w-full" onClick={search} disabled={loading}>
+                  {loading ? 'Searching…' : 'Search hotels & flights'}
+                </Button>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-slate-500">Also need ground travel?</span>
+              <button
+                type="button"
+                onClick={() => setAddTrain((v) => !v)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                  addTrain
+                    ? 'bg-brand text-navy'
+                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
+                )}
+              >
+                🚆 Add a train
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddCar((v) => !v)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                  addCar
+                    ? 'bg-brand text-navy'
+                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
+                )}
+              >
+                🚗 Add a rental car
+              </button>
+              {(addTrain || addCar) && (
+                <span className="text-xs text-slate-400">
+                  We&apos;ll arrange this with the trip and add it to the approval.
+                </span>
+              )}
+            </div>
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-500">Also need ground travel?</span>
-          <button
-            type="button"
-            onClick={() => setAddTrain((v) => !v)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              addTrain
-                ? 'bg-brand text-navy'
-                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
-            )}
-          >
-            🚆 Add a train
-          </button>
-          <button
-            type="button"
-            onClick={() => setAddCar((v) => !v)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              addCar
-                ? 'bg-brand text-navy'
-                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
-            )}
-          >
-            🚗 Add a rental car
-          </button>
-          {(addTrain || addCar) && (
-            <span className="text-xs text-slate-400">
-              We&apos;ll arrange this with the trip and add it to the approval.
-            </span>
-          )}
-        </div>
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      </Card>
+      )}
 
-      {/* pre-search guide */}
-      {!loading && flights === null && hotels === null && !error && (
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
-          {[
-            { icon: <Plane className="h-5 w-5 text-brand-dark" />, t: 'Flight', d: 'Pick the outbound you want.' },
-            { icon: <Building className="h-5 w-5 text-brand-dark" />, t: 'Hotel', d: 'Choose a stay for the same dates.' },
-            { icon: <Shield className="h-5 w-5 text-brand-dark" />, t: 'One approval', d: 'Submit both legs together.' },
-          ].map((s, i) => (
-            <Card key={s.t} className="flex items-start gap-3">
-              <StepDot n={i + 1} done={false} />
-              <div>
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-white">
-                  {s.icon} {s.t}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">{s.d}</p>
-              </div>
-            </Card>
-          ))}
-        </div>
+      {/* ---- trip bar + package stepper (after a search) ---- */}
+      {step !== 'search' && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="font-semibold text-slate-800 dark:text-white">
+                {originText ? originText.split(',')[0] : 'Trip'} → {dest?.label.split(',')[0] ?? destText}
+              </span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-500">{dateRange(start, end)}</span>
+            </div>
+            <button
+              onClick={() => setStep('search')}
+              className="text-xs font-semibold text-brand-dark hover:underline"
+            >
+              Edit search
+            </button>
+          </div>
+          <PackageStepper step={step} hasHotel={!!pickHotel} hasFlight={!!pickFlight} onJump={setStep} />
+        </>
       )}
 
       {/* results — same cards as the single-booking flow */}
@@ -369,13 +392,34 @@ export default function PlanTripPage() {
         </p>
       )}
 
-      {!loading && flights && (
-        <section className="mt-8">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
-            <StepDot n={1} done={!!pickFlight} />
-            <Plane className="h-5 w-5 text-brand-dark" /> Pick your flight
-            {pickFlight && <Badge color="green">Selected</Badge>}
-          </h2>
+      {step === 'flight' && !loading && flights && (
+        <section className="mt-6 pb-28">
+          {/* selected-hotel recap so the package context is always visible */}
+          {pickHotel && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+              <div className="flex min-w-0 items-center gap-2 text-sm">
+                <Building className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span className="truncate">
+                  <span className="font-semibold text-slate-800 dark:text-white">Hotel:</span>{' '}
+                  {pickHotel.title} · {money(pickHotel.price)}
+                </span>
+              </div>
+              <button
+                onClick={() => setStep('stay')}
+                className="shrink-0 text-xs font-semibold text-brand-dark hover:underline"
+              >
+                Change
+              </button>
+            </div>
+          )}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
+              <Plane className="h-5 w-5 text-brand-dark" /> Now choose your flight
+            </h2>
+            {flights.length > 0 && (
+              <span className="text-xs text-slate-400">{flights.length} fares</span>
+            )}
+          </div>
           {flights.length === 0 ? (
             <Card>
               <p className="py-4 text-center text-sm text-slate-400">
@@ -389,23 +433,54 @@ export default function PlanTripPage() {
                   key={opt.id}
                   opt={opt}
                   sig={sigFor(opt)}
-                  actionLabel="Add to trip"
+                  actionLabel="Select flight"
                   selected={pickFlight?.id === opt.id}
                   onAction={() => setPickFlight((p) => (p?.id === opt.id ? null : opt))}
                 />
               ))}
             </div>
           )}
+
+          <StickyBar
+            left={
+              <span>
+                <span className="text-slate-500">Trip total</span>{' '}
+                <span className="font-display text-base font-bold text-slate-900 dark:text-white">
+                  {money(total)}
+                </span>
+              </span>
+            }
+          >
+            <Button variant="outline" onClick={() => setStep('stay')}>
+              Back
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPickFlight(null);
+                setStep('review');
+              }}
+            >
+              Skip flight
+            </Button>
+            <Button disabled={!pickFlight} onClick={() => setStep('review')}>
+              Review trip <ArrowRight className="h-4 w-4" />
+            </Button>
+          </StickyBar>
         </section>
       )}
 
-      {!loading && hotels && (
-        <section className="mt-8">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
-            <StepDot n={2} done={!!pickHotel} />
-            <Building className="h-5 w-5 text-brand-dark" /> Pick your hotel
-            {pickHotel && <Badge color="green">Selected</Badge>}
-          </h2>
+      {step === 'stay' && !loading && hotels && (
+        <section className="mt-6 pb-28">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
+              <Building className="h-5 w-5 text-brand-dark" /> Choose your hotel
+              <span className="text-slate-400">in {dest?.label.split(',')[0] ?? destText}</span>
+            </h2>
+            {hotels.length > 0 && (
+              <span className="text-xs text-slate-400">{hotels.length} stays</span>
+            )}
+          </div>
           {hotels.length === 0 ? (
             <Card>
               <p className="py-4 text-center text-sm text-slate-400">
@@ -419,23 +494,64 @@ export default function PlanTripPage() {
                   key={opt.id}
                   opt={opt}
                   sig={sigFor(opt)}
-                  actionLabel="Add to trip"
+                  actionLabel="Select hotel"
                   selected={pickHotel?.id === opt.id}
                   onAction={() => setPickHotel((p) => (p?.id === opt.id ? null : opt))}
                 />
               ))}
             </div>
           )}
+
+          <StickyBar
+            left={
+              pickHotel ? (
+                <span>
+                  <span className="font-semibold text-slate-800 dark:text-white">{pickHotel.title}</span>{' '}
+                  · {money(pickHotel.price)}
+                </span>
+              ) : (
+                <span className="text-slate-500">Select a hotel to continue</span>
+              )
+            }
+          >
+            <Button variant="outline" onClick={() => setStep('search')}>
+              Back
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPickFlight(null);
+                setStep('review');
+              }}
+            >
+              Hotel only
+            </Button>
+            <Button disabled={!pickHotel} onClick={() => setStep('flight')}>
+              Continue to flights <ArrowRight className="h-4 w-4" />
+            </Button>
+          </StickyBar>
         </section>
       )}
 
-      {/* review — a sticky summary rail once anything is picked */}
-      {anyPicked && (
-        <Card className="mt-8 border-brand/30 bg-brand/5">
-          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
-            <StepDot n={3} done={!!(plannedFlight && plannedHotel)} />
-            Review your trip
-          </h2>
+      {/* review — final step of the package flow */}
+      {step === 'review' && (
+        <Card className="mt-6 border-brand/30 bg-brand/5">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900 dark:text-white">
+              <Sparkles className="h-5 w-5 text-brand-dark" /> Review your trip
+            </h2>
+            <button
+              onClick={() => setStep(pickFlight ? 'flight' : 'stay')}
+              className="text-xs font-semibold text-brand-dark hover:underline"
+            >
+              ← Back
+            </button>
+          </div>
+          {!anyPicked && (
+            <p className="mb-3 text-sm text-slate-500">
+              Nothing selected yet. Go back to pick a hotel and flight.
+            </p>
+          )}
           <p className="mb-3 text-xs text-slate-500">
             {dest?.label} · {dateRange(start, end)}
           </p>
@@ -470,7 +586,7 @@ export default function PlanTripPage() {
               back, and you’ll get an email with the confirmation numbers.
             </span>
           </div>
-          <Button className="mt-4" onClick={submit}>
+          <Button className="mt-4" onClick={submit} disabled={!anyPicked}>
             Submit trip for approval <ArrowRight className="h-4 w-4" />
           </Button>
         </Card>
@@ -517,21 +633,92 @@ export default function PlanTripPage() {
 
 type Sug = { key: string; label: string; sub: string; data: unknown };
 
-/** A small numbered step indicator — filled brand once that step is done. */
-function StepDot({ n, done }: { n: number; done: boolean }) {
+/** Horizontal progress through the package flow: Hotel → Flight → Review. */
+function PackageStepper({
+  step,
+  hasHotel,
+  hasFlight,
+  onJump,
+}: {
+  step: 'stay' | 'flight' | 'review' | 'search';
+  hasHotel: boolean;
+  hasFlight: boolean;
+  onJump: (s: 'stay' | 'flight' | 'review') => void;
+}) {
+  const order = ['stay', 'flight', 'review'] as const;
+  const activeIdx = order.indexOf(step as (typeof order)[number]);
+  const steps: { key: (typeof order)[number]; label: string; Icon: typeof Plane; done: boolean }[] = [
+    { key: 'stay', label: 'Hotel', Icon: Building, done: hasHotel },
+    { key: 'flight', label: 'Flight', Icon: Plane, done: hasFlight },
+    { key: 'review', label: 'Review', Icon: Sparkles, done: false },
+  ];
   return (
-    <span
-      className={cn(
-        'grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold transition-colors',
-        done
-          ? 'bg-brand text-navy'
-          : 'bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-300'
-      )}
-    >
-      {n}
-    </span>
+    <div className="my-5 flex items-center">
+      {steps.map((s, i) => {
+        const idx = order.indexOf(s.key);
+        const active = idx === activeIdx;
+        const reachable = idx <= activeIdx || (s.key === 'flight' && hasHotel) || (s.key === 'review' && hasHotel);
+        return (
+          <div key={s.key} className="flex flex-1 items-center last:flex-none">
+            <button
+              type="button"
+              disabled={!reachable}
+              onClick={() => reachable && onJump(s.key)}
+              className={cn(
+                'flex items-center gap-2 rounded-full px-1 py-1 transition',
+                reachable ? 'cursor-pointer' : 'cursor-default'
+              )}
+            >
+              <span
+                className={cn(
+                  'grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors',
+                  active
+                    ? 'bg-brand text-navy ring-4 ring-brand/20'
+                    : s.done
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-300'
+                )}
+              >
+                {s.done && !active ? <Check className="h-4 w-4" /> : i + 1}
+              </span>
+              <span
+                className={cn(
+                  'text-sm font-semibold',
+                  active
+                    ? 'text-slate-900 dark:text-white'
+                    : 'text-slate-400 dark:text-slate-500'
+                )}
+              >
+                {s.label}
+              </span>
+            </button>
+            {i < steps.length - 1 && (
+              <span
+                className={cn(
+                  'mx-2 h-0.5 flex-1 rounded-full',
+                  idx < activeIdx ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-white/10'
+                )}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
+
+/** A sticky action bar pinned to the bottom of the viewport within the flow. */
+function StickyBar({ left, children }: { left: ReactNode; children: ReactNode }) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-slate-900/95">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="text-sm">{left}</div>
+        <div className="flex items-center gap-2">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 
 function Typeahead({
   label,
