@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Logo } from './Logo';
 import { DinnerRsvpPrompt } from './DinnerRsvpPrompt';
 import { WelcomeFlow } from './WelcomeFlow';
+import { clearSignedIn } from '@/lib/session';
 import {
   ChartBar,
   Users,
@@ -416,6 +417,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                         try {
                           sessionStorage.removeItem('hv_view_as');
                           sessionStorage.removeItem('hv_view_as_ctx');
+                          clearSignedIn();
                         } catch {
                           /* ignore */
                         }

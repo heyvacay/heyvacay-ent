@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/components/app/ui';
 import {
   ChartBar,
@@ -26,6 +26,165 @@ const NAV = [
   { href: '/sales/contracts', label: 'Contracts', icon: Receipt },
   { href: '/sales/team', label: 'Team', icon: Users },
 ];
+
+type SearchHit = {
+  id: string;
+  companyId: string;
+  kind: 'Company' | 'Contact' | 'Deal';
+  title: string;
+  subtitle: string;
+};
+
+/** Salesforce-style global search: jump to any company, contact or deal from
+ *  anywhere in Nova. ⌘K / Ctrl+K focuses it. */
+function GlobalSearch() {
+  const router = useRouter();
+  const { companies } = useCrm();
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const hits = useMemo<SearchHit[]>(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return [];
+    const out: SearchHit[] = [];
+    for (const c of companies) {
+      if (
+        c.name.toLowerCase().includes(term) ||
+        c.domain.toLowerCase().includes(term) ||
+        (c.industry ?? '').toLowerCase().includes(term) ||
+        (c.hq ?? '').toLowerCase().includes(term)
+      ) {
+        out.push({
+          id: `co-${c.id}`,
+          companyId: c.id,
+          kind: 'Company',
+          title: c.name,
+          subtitle: `${c.industry || 'Account'} · ${c.status}`,
+        });
+      }
+      for (const ct of c.contacts ?? []) {
+        if (
+          ct.name.toLowerCase().includes(term) ||
+          (ct.email ?? '').toLowerCase().includes(term) ||
+          (ct.title ?? '').toLowerCase().includes(term)
+        ) {
+          out.push({
+            id: `ct-${c.id}-${ct.email || ct.name}`,
+            companyId: c.id,
+            kind: 'Contact',
+            title: ct.name,
+            subtitle: `${ct.title ? ct.title + ' · ' : ''}${c.name}`,
+          });
+        }
+      }
+      for (const d of c.deals ?? []) {
+        if (d.name.toLowerCase().includes(term)) {
+          out.push({
+            id: `d-${d.id}`,
+            companyId: c.id,
+            kind: 'Deal',
+            title: d.name,
+            subtitle: `${c.name} · ${d.stage}`,
+          });
+        }
+      }
+    }
+    return out.slice(0, 12);
+  }, [q, companies]);
+
+  useEffect(() => setActive(0), [q]);
+
+  const go = (hit: SearchHit) => {
+    setOpen(false);
+    setQ('');
+    router.push(`/sales/companies/${hit.companyId}`);
+  };
+
+  return (
+    <div ref={boxRef} className="relative mx-2 w-full max-w-md">
+      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+        <span className="text-slate-400">⌕</span>
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setActive((a) => Math.min(hits.length - 1, a + 1));
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setActive((a) => Math.max(0, a - 1));
+            } else if (e.key === 'Enter' && hits[active]) {
+              go(hits[active]);
+            }
+          }}
+          placeholder="Search companies, contacts, deals…"
+          className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+        />
+        <kbd className="hidden rounded border border-slate-300 px-1.5 text-[10px] font-semibold text-slate-400 sm:inline">
+          ⌘K
+        </kbd>
+      </div>
+
+      {open && q.trim() && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-80 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+          {hits.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-slate-400">No matches for “{q.trim()}”.</p>
+          ) : (
+            hits.map((h, i) => (
+              <button
+                key={h.id}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => go(h)}
+                className={cn(
+                  'flex w-full items-center justify-between gap-3 px-3 py-2 text-left',
+                  i === active ? 'bg-brand/5' : 'hover:bg-slate-50'
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-slate-800">{h.title}</span>
+                  <span className="block truncate text-xs text-slate-400">{h.subtitle}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {h.kind}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SalesShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -103,7 +262,7 @@ export default function SalesShell({ children }: { children: ReactNode }) {
             <span className="mt-1 block h-0.5 w-5 bg-current" />
             <span className="mt-1 block h-0.5 w-5 bg-current" />
           </button>
-          <p className="text-sm font-medium text-slate-400">Internal sales console</p>
+          <GlobalSearch />
           <div className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">
               {currentRep.slice(0, 1)}

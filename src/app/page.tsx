@@ -124,6 +124,15 @@ function Glow({
 export default function Home() {
   return (
     <div id="top" className="relative overflow-hidden">
+      {/* Returning-visitor auto-login: if this browser has signed in before, go
+          straight to the workspace instead of showing the marketing site. Runs
+          inline during HTML parse so it redirects before the page paints. */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "try{if(localStorage.getItem('hv_ent_signed_in')==='1'){var h=location.hash||'';if(h!=='#stay'){location.replace('/app')}}}catch(e){}",
+        }}
+      />
       <CalEmbed />
       <Nav />
 

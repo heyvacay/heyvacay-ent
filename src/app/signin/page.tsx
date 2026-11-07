@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/app/Logo';
 import { useStore } from '@/lib/store';
+import { markSignedIn } from '@/lib/session';
 
 type Account = { key: string; id: string | null; name: string; domain: string };
 const DEMO_KEY = 'hv_ent_demo_v2';
@@ -120,6 +121,7 @@ export default function SignInPage() {
       }
       sessionStorage.removeItem('hv_view_as');
       sessionStorage.removeItem('hv_view_as_ctx');
+      markSignedIn();
     } catch {
       /* ignore storage errors — /app still loads a usable workspace */
     }

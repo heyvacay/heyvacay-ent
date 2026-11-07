@@ -14,6 +14,7 @@ import { EmailVerify } from '@/components/app/EmailVerify';
 import { TravelHistoryForm } from '@/components/app/TravelHistoryForm';
 import type { TravelHistory } from '@/lib/travelHistory';
 import { CelebrationOverlay } from '@/components/app/CelebrationOverlay';
+import { markSignedIn } from '@/lib/session';
 import {
   ArrowRight,
   Building,
@@ -246,6 +247,7 @@ export default function SignupPage() {
     } catch {
       /* ignore */
     }
+    markSignedIn();
     setCelebrate(true);
   };
 
