@@ -28,6 +28,11 @@ export default function RestaurantsPage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Restaurant | null>(null);
 
+  // Result-side filters (work on the mock now, and on OpenTable results later).
+  const [nameQuery, setNameQuery] = useState('');
+  const [priceMax, setPriceMax] = useState(0); // 0 = any, else 1–4 ($–$$$$)
+  const [sortBy, setSortBy] = useState<'rating' | 'price_low' | 'price_high'>('rating');
+
   const search = async () => {
     setLoading(true);
     try {
@@ -36,6 +41,23 @@ export default function RestaurantsPage() {
       setLoading(false);
     }
   };
+
+  const shown = (() => {
+    if (!results) return [];
+    const q = nameQuery.trim().toLowerCase();
+    const filtered = results.filter(
+      (r) =>
+        (!q || r.name.toLowerCase().includes(q) || (r.cuisine ?? '').toLowerCase().includes(q)) &&
+        (priceMax === 0 || r.priceBand <= priceMax)
+    );
+    return filtered.sort((a, b) =>
+      sortBy === 'rating'
+        ? (b.rating ?? 0) - (a.rating ?? 0)
+        : sortBy === 'price_low'
+          ? a.priceBand - b.priceBand
+          : b.priceBand - a.priceBand
+    );
+  })();
 
   return (
     <div>
@@ -54,7 +76,7 @@ export default function RestaurantsPage() {
             Find a table
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Book restaurants for your trip — the whole reservation happens right here.
+            Search by city and cuisine, then filter and reserve — all in one place.
           </p>
         </div>
         <div className="px-5 pb-5 pt-4 sm:px-7 sm:pb-6">
@@ -123,14 +145,59 @@ export default function RestaurantsPage() {
 
       {!loading && results && results.length > 0 && (
         <>
+        {/* filter / sort / search bar */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div className="relative min-w-[12rem] flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+            <input
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              placeholder="Search by name or cuisine…"
+              className="w-full rounded-lg border border-transparent bg-slate-50 py-2 pl-8 pr-3 text-sm text-slate-800 outline-none focus:border-brand focus:bg-white dark:bg-white/5 dark:text-slate-100"
+            />
+          </div>
+          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-white/10">
+            {[
+              { v: 0, label: 'Any $' },
+              { v: 1, label: '$' },
+              { v: 2, label: '$$' },
+              { v: 3, label: '$$$' },
+              { v: 4, label: '$$$$' },
+            ].map((o) => (
+              <button
+                key={o.v}
+                onClick={() => setPriceMax(o.v)}
+                className={cn(
+                  'rounded-md px-2.5 py-1.5 text-xs font-semibold transition',
+                  priceMax === o.v ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-700 outline-none focus:border-brand dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+          >
+            <option value="rating">Top rated</option>
+            <option value="price_low">Price: low → high</option>
+            <option value="price_high">Price: high → low</option>
+          </select>
+        </div>
+
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
-            {results.length} restaurant{results.length === 1 ? '' : 's'}{' '}
+            {shown.length} restaurant{shown.length === 1 ? '' : 's'}{' '}
             <span className="font-normal text-slate-400">in {city}</span>
           </h3>
         </div>
+        {shown.length === 0 ? (
+          <EmptyState title="No matches" sub="Loosen the filters or search a different name." />
+        ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {results.map((r) => (
+          {shown.map((r) => (
             <div
               key={r.id}
               className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -164,6 +231,7 @@ export default function RestaurantsPage() {
             </div>
           ))}
         </div>
+        )}
         </>
       )}
 

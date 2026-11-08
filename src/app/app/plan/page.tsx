@@ -15,6 +15,7 @@ import { format as fmtDate, parseISO } from 'date-fns';
 import { Button, Card, Field, Input, PageHeader, Badge, cn } from '@/components/app/ui';
 import { money, num, addDays, todayISO, dateRange, uid } from '@/lib/format';
 import { Plane, Building, Shield, ArrowRight, Sparkles, Check } from '@/components/icons';
+import { Train, Car } from 'lucide-react';
 import { rewardsFor } from '@/lib/rewards';
 import { FlightRow, HotelCard, type Sig } from '@/components/app/results';
 import type { InventoryOption, PlannedItem, TripPlan, LiveBookingContext } from '@/lib/types';
@@ -357,36 +358,30 @@ export default function PlanTripPage() {
                 </Button>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-slate-500">Also need ground travel?</span>
-              <button
-                type="button"
-                onClick={() => setAddTrain((v) => !v)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-                  addTrain
-                    ? 'bg-brand text-navy'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
-                )}
-              >
-                🚆 Add a train
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddCar((v) => !v)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-                  addCar
-                    ? 'bg-brand text-navy'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
-                )}
-              >
-                🚗 Add a rental car
-              </button>
+            <div className="mt-4 border-t border-slate-200 pt-4 dark:border-white/10">
+              <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Add ground transportation
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <GroundToggle
+                  active={addTrain}
+                  onToggle={() => setAddTrain((v) => !v)}
+                  Icon={Train}
+                  label="Rail"
+                  sub="Train between cities"
+                />
+                <GroundToggle
+                  active={addCar}
+                  onToggle={() => setAddCar((v) => !v)}
+                  Icon={Car}
+                  label="Rental car"
+                  sub="Pick-up at destination"
+                />
+              </div>
               {(addTrain || addCar) && (
-                <span className="text-xs text-slate-400">
-                  We&apos;ll arrange this with the trip and add it to the approval.
-                </span>
+                <p className="mt-2 text-xs text-slate-400">
+                  Our travel team arranges this with the trip and adds it to the approval.
+                </p>
               )}
             </div>
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -750,6 +745,56 @@ function StickyBar({ left, children }: { left: ReactNode; children: ReactNode })
   );
 }
 
+
+/** A serious, selectable ground-transport option (not a playful chip). */
+function GroundToggle({
+  active,
+  onToggle,
+  Icon,
+  label,
+  sub,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  Icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  sub: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={cn(
+        'flex min-w-[12rem] flex-1 items-center gap-3 rounded-xl border px-4 py-3 text-left transition sm:flex-none',
+        active
+          ? 'border-brand bg-brand/5 ring-1 ring-brand/30'
+          : 'border-slate-200 bg-white hover:border-slate-300 dark:border-white/10 dark:bg-white/5'
+      )}
+    >
+      <span
+        className={cn(
+          'grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors',
+          active ? 'bg-brand text-navy' : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300'
+        )}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
+        <span className="block text-xs text-slate-400">{sub}</span>
+      </span>
+      <span
+        className={cn(
+          'grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors',
+          active ? 'border-brand bg-brand text-navy' : 'border-slate-300 text-transparent dark:border-white/20'
+        )}
+      >
+        <Check className="h-3 w-3" />
+      </span>
+    </button>
+  );
+}
 
 function Typeahead({
   label,
