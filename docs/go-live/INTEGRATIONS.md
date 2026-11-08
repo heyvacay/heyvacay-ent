@@ -54,7 +54,8 @@ you do per integration.
 - **Secret fields:** `OPENTABLE_API_KEY` **or** (`OPENTABLE_CLIENT_ID` + `OPENTABLE_CLIENT_SECRET`).
 - **tfvars:** `ent_opentable_api_key_arn` (or the `…_client_id_arn` + `…_client_secret_arn` pair).
 - **Verify:** diag `opentable.configured:true`, then Dining search returns `source:"opentable"`.
-- **Note:** the live response→card field mapping has a `TODO(opentable)` in `src/app/api/restaurants/search/route.ts` to finalize once we see the real schema (we can't finalize it blind). Until then it cleanly falls back to the mock directory.
+- **Status:** the real OpenTable Partner API is now fully wired in `src/lib/opentable.server.ts` — OAuth2 client-credentials (Basic auth → bearer, token cached), the **Directory API** (`/sync/directory`, paged into a 6h in-memory cache and filtered by city/genre locally — OpenTable has no server-side city filter), **single-search availability** (`/v2/availability/{rid}`, ±120 min window so we can offer nearest slots), and the **2-step booking** (`/v2/booking/{rid}/slot_locks` → `/v2/booking/{rid}/reservations`). Each route falls back to the mock directory if a call fails or a city has no match, so the UI is never empty.
+- **Optional envs (non-secret):** `OPENTABLE_OAUTH_URL` (defaults to `https://oauth.opentable.com`; use `https://oauth-pp.opentable.com` for pre-prod) and `OPENTABLE_API_BASE` (defaults to `https://platform.opentable.com`).
 
 ### 2. OpenWeather — active-trip forecast
 - **Powers:** the weather chip on the active-trip home view.

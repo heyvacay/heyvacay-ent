@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 import { OPENTABLE } from '@/lib/config.server';
+import { searchDirectory } from '@/lib/opentable.server';
 import { searchRestaurants } from '@/lib/restaurants.mock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Restaurant directory search. Uses OpenTable's Directory API when credentials
- * are configured; otherwise returns the built-in mock directory so the dinner
- * and event flows work in the demo. See docs/opentable.md for the exact
- * request mapping to finalize once keys are live.
+ * Restaurant directory search. When OpenTable credentials are configured we page
+ * the live Directory API (cached in-memory) and filter by city/genre; otherwise
+ * we return the built-in mock directory so the dinner and event flows work in
+ * the demo. If a live search yields no match for the city, we fall back to mock
+ * so the UI is never empty.
  */
 export async function POST(req: Request) {
   let body: Record<string, unknown> = {};
@@ -23,16 +25,9 @@ export async function POST(req: Request) {
 
   if (OPENTABLE.live) {
     try {
-      const res = await fetch(`${OPENTABLE.base}/directory/v1/restaurants?q=${encodeURIComponent(city ?? '')}`, {
-        headers: { Authorization: `Bearer ${OPENTABLE.apiKey}`, Accept: 'application/json' },
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        // TODO(opentable): map data.restaurants -> our shape once schema confirmed.
-        if (Array.isArray(data?.restaurants) && data.restaurants.length) {
-          return NextResponse.json({ restaurants: data.restaurants, source: 'opentable' });
-        }
+      const live = await searchDirectory(city, genre);
+      if (live.length) {
+        return NextResponse.json({ restaurants: live, source: 'opentable' });
       }
     } catch {
       /* fall through to mock */

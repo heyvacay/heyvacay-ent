@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { OPENTABLE } from '@/lib/config.server';
+import { getAvailability as getLiveAvailability } from '@/lib/opentable.server';
 import { mockAvailability } from '@/lib/restaurants.mock';
 
 export const runtime = 'nodejs';
@@ -10,6 +11,9 @@ export const dynamic = 'force-dynamic';
  * when the requested time is not available we still return nearby bookable
  * times with requestedAvailable:false, so the UI makes clear the requested
  * time is unavailable and offers the closest alternatives.
+ *
+ * Live path uses OpenTable's /v2/availability/{rid} (window around the request);
+ * mock path mirrors the same shape.
  */
 export async function POST(req: Request) {
   let body: Record<string, unknown> = {};
@@ -28,22 +32,9 @@ export async function POST(req: Request) {
 
   if (OPENTABLE.live) {
     try {
-      const res = await fetch(`${OPENTABLE.base}/consumer/v1/availability`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${OPENTABLE.apiKey}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ restaurant_id: restaurantId, date, time, party_size: partySize }),
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        // TODO(opentable): map data.slots -> {requestedAvailable, slots[]} once schema confirmed.
-        if (data?.slots) {
-          return NextResponse.json({ ...data, source: 'opentable' });
-        }
+      const live = await getLiveAvailability({ restaurantId, date, time, partySize });
+      if (live) {
+        return NextResponse.json({ ...live, source: 'opentable' });
       }
     } catch {
       /* fall through to mock */
