@@ -170,7 +170,7 @@ export interface StoreApi {
     patch: Partial<
       Pick<
         User,
-        'name' | 'title' | 'department' | 'role' | 'status' | 'approvalMode' | 'managerId' | 'fullAccess' | 'superAdmin'
+        'name' | 'title' | 'department' | 'role' | 'status' | 'approvalMode' | 'managerId' | 'fullAccess' | 'superAdmin' | 'travelProfile'
       >
     >
   ) => void;
@@ -247,6 +247,14 @@ export interface StoreApi {
   submitPlan: (id: string) => void;
   /** Approve (books both legs + emails the traveler) or decline a plan. */
   resolvePlan: (id: string, approve: boolean, note?: string) => void;
+  /** Approve a plan AND really book each leg unattended (flight legs need a
+   *  complete traveler travel profile); a blocker stops the whole trip with
+   *  'needs_reconfirm' rather than half-booking. */
+  resolvePlanLive: (
+    id: string,
+    approve: boolean,
+    note?: string
+  ) => Promise<{ status: 'booked' | 'needs_reconfirm' | 'declined'; message?: string }>;
   removePlan: (id: string) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Approve AND place the real supplier order unattended when a live payload
@@ -1343,6 +1351,128 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  /**
+   * Approve a trip plan AND really book each leg unattended (hotel legs from the
+   * single-booking path and flight legs with a complete travel profile). A
+   * blocker on any live leg (price moved / sold out / needs profile) stops the
+   * WHOLE trip with status 'needs_reconfirm' — never a half-booked trip. Legs
+   * with no live payload (or live booking off) confirm locally, as before.
+   */
+  const resolvePlanLive = useCallback(
+    async (
+      id: string,
+      approve: boolean,
+      note?: string
+    ): Promise<{ status: 'booked' | 'needs_reconfirm' | 'declined'; message?: string }> => {
+      const s0 = stateRef.current;
+      const plan = (s0.tripPlans ?? []).find((p) => p.id === id);
+      if (!plan || plan.status !== 'pending_approval') return { status: 'declined' };
+      if (!approve) {
+        setState((s) => ({
+          ...s,
+          tripPlans: (s.tripPlans ?? []).map((p) =>
+            p.id === id ? { ...p, status: 'declined' as const, reviewNote: note } : p
+          ),
+        }));
+        return { status: 'declined' };
+      }
+
+      const legs: { key: 'flight' | 'hotel'; item: PlannedItem }[] = [];
+      if (plan.flight) legs.push({ key: 'flight', item: plan.flight });
+      if (plan.hotel) legs.push({ key: 'hotel', item: plan.hotel });
+
+      const results: Record<string, AutoBookResult | { status: 'local' }> = {};
+      for (const leg of legs) {
+        results[leg.key] = leg.item.liveContext
+          ? await autoBookOnApproval(leg.item.liveContext)
+          : { status: 'local' };
+      }
+
+      const BLOCKERS = ['price_changed', 'unavailable', 'needs_payment', 'needs_details', 'error'];
+      const blocked = legs.find((l) => BLOCKERS.includes(results[l.key].status));
+      if (blocked) {
+        const r = results[blocked.key];
+        const msg = 'message' in r && r.message ? r.message : r.status;
+        setState((s) => ({
+          ...s,
+          tripPlans: (s.tripPlans ?? []).map((p) =>
+            p.id === id ? { ...p, status: 'needs_reconfirm' as const, reviewNote: note } : p
+          ),
+        }));
+        const trav = s0.users.find((u) => u.id === plan.travelerId);
+        if (trav?.email)
+          sendEmail('approvalDecided', trav.email, {
+            travelerName: trav.name,
+            title: `Trip to ${plan.destination}`,
+            approved: true,
+            note: `Approved — the ${blocked.key} needs a quick re-confirm: ${msg}`,
+          });
+        return { status: 'needs_reconfirm', message: `${blocked.key}: ${msg}` };
+      }
+
+      // All legs bookable → create confirmed bookings (real ref for live legs).
+      const newBookings: Booking[] = [];
+      const confos: Record<'flight' | 'hotel', string> = { flight: '', hotel: '' };
+      for (const leg of legs) {
+        const r = results[leg.key];
+        const realRef = r.status === 'booked' ? r.supplierRef : undefined;
+        const confirmation = realRef ?? `HV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        const { savings, points } = rewardsFor(leg.item.opt);
+        newBookings.push({
+          id: uid('bk'),
+          type: leg.item.opt.type,
+          title: leg.item.opt.title,
+          detail: leg.item.opt.detail,
+          travelerId: plan.travelerId,
+          bookedById: plan.travelerId,
+          department: s0.users.find((u) => u.id === plan.travelerId)?.department ?? '',
+          startDate: leg.item.startDate,
+          endDate: leg.item.endDate,
+          marketPrice: leg.item.opt.marketPrice,
+          price: r.status === 'booked' && r.amount ? r.amount : leg.item.opt.price,
+          savings,
+          pointsEarned: points,
+          status: 'confirmed',
+          createdAt: todayISO(),
+          destination: plan.destination,
+          roomType: leg.item.roomType,
+          images: leg.item.images,
+          supplierRef: realRef,
+          rebookStatus: realRef ? 'booked_live' : 'local',
+        });
+        confos[leg.key] = confirmation;
+      }
+      const updatedPlan: TripPlan = {
+        ...plan,
+        status: 'booked',
+        reviewNote: note,
+        flight: plan.flight ? { ...plan.flight, confirmation: confos.flight } : undefined,
+        hotel: plan.hotel ? { ...plan.hotel, confirmation: confos.hotel } : undefined,
+      };
+      setState((s) => ({
+        ...s,
+        bookings: [...newBookings, ...s.bookings],
+        tripPlans: (s.tripPlans ?? []).map((p) => (p.id === id ? updatedPlan : p)),
+      }));
+      const trav = s0.users.find((u) => u.id === plan.travelerId);
+      if (trav?.email) {
+        const total = legs.reduce((sum, l) => sum + l.item.opt.price, 0);
+        sendEmail('confirmation', trav.email, {
+          travelerName: trav.name,
+          title: `Trip to ${plan.destination} approved`,
+          dates: `${plan.startDate} – ${plan.endDate}`,
+          total,
+          savings: legs.reduce((sum, l) => sum + rewardsFor(l.item.opt).savings, 0),
+          points: legs.reduce((sum, l) => sum + rewardsFor(l.item.opt).points, 0),
+          inPolicy: legs.every((l) => l.item.inPolicy),
+          note: `Your manager approved your trip. Flight: ${confos.flight || '—'} · Hotel: ${confos.hotel || '—'}.`,
+        });
+      }
+      return { status: 'booked' };
+    },
+    []
+  );
+
   const proposeChange: StoreApi['proposeChange'] = useCallback((id, data) => {
     setState((s) => ({
       ...s,
@@ -1686,6 +1816,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     savePlan,
     submitPlan,
     resolvePlan,
+    resolvePlanLive,
     removePlan,
     approveBooking,
     approveBookingLive,

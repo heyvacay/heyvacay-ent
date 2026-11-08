@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { Badge, Button, Card, Field, Input, PageHeader, cn } from '@/components/app/ui';
+import { Badge, Button, Card, Field, Input, Select, PageHeader, cn } from '@/components/app/ui';
 import { Wallet, Globe, Check } from '@/components/icons';
+import type { User } from '@/lib/types';
 
 interface SavedCard {
   id: string;
@@ -39,9 +40,42 @@ const DEFAULT_PREFS: Prefs = {
 };
 
 export default function PreferencesPage() {
-  const { activeUser, setHomeCity } = useStore();
+  const { activeUser, setHomeCity, updateUser } = useStore();
   const [homeCity, setHomeCityDraft] = useState(activeUser.homeCity ?? '');
   useEffect(() => setHomeCityDraft(activeUser.homeCity ?? ''), [activeUser.homeCity]);
+
+  // Travel profile (for auto-ticketing an approved flight).
+  const [travel, setTravel] = useState(() => {
+    const p = activeUser.travelProfile ?? {};
+    return {
+      title: p.title ?? '',
+      gender: p.gender ?? '',
+      dob: p.dob ?? '',
+      middleName: p.middleName ?? '',
+      phone: p.phone ?? '',
+    };
+  });
+  useEffect(() => {
+    const p = activeUser.travelProfile ?? {};
+    setTravel({
+      title: p.title ?? '',
+      gender: p.gender ?? '',
+      dob: p.dob ?? '',
+      middleName: p.middleName ?? '',
+      phone: p.phone ?? '',
+    });
+  }, [activeUser.travelProfile]);
+  const travelComplete = !!(travel.title && travel.gender && travel.dob);
+  const saveTravel = () =>
+    updateUser(activeUser.id, {
+      travelProfile: {
+        title: (travel.title || undefined) as NonNullable<User['travelProfile']>['title'],
+        gender: (travel.gender || undefined) as NonNullable<User['travelProfile']>['gender'],
+        dob: travel.dob || undefined,
+        middleName: travel.middleName.trim() || undefined,
+        phone: travel.phone.trim() || undefined,
+      },
+    });
   const key = `hv_prefs_${activeUser.id}`;
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -122,6 +156,62 @@ export default function PreferencesPage() {
         <p className="mt-2 text-xs text-slate-400">
           Used for events — whether you&apos;ll need a hotel. Saved to your profile.
         </p>
+      </Card>
+
+      {/* travel profile (for auto-ticketing an approved flight) */}
+      <Card className="mb-6">
+        <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+          <Globe className="h-5 w-5 text-brand-dark" /> Travel details
+          {travelComplete ? (
+            <Badge color="green">Complete</Badge>
+          ) : (
+            <Badge color="amber">Needed for flight ticketing</Badge>
+          )}
+        </h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Airlines require these to issue a ticket. Once complete, a flight your manager approves
+          books automatically — no second step.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Title">
+            <Select value={travel.title} onChange={(e) => setTravel({ ...travel, title: e.target.value })}>
+              <option value="">Select…</option>
+              <option value="mr">Mr</option>
+              <option value="ms">Ms</option>
+              <option value="mrs">Mrs</option>
+              <option value="miss">Miss</option>
+              <option value="dr">Dr</option>
+            </Select>
+          </Field>
+          <Field label="Gender (as on ID)">
+            <Select value={travel.gender} onChange={(e) => setTravel({ ...travel, gender: e.target.value })}>
+              <option value="">Select…</option>
+              <option value="m">Male</option>
+              <option value="f">Female</option>
+            </Select>
+          </Field>
+          <Field label="Date of birth">
+            <Input type="date" value={travel.dob} onChange={(e) => setTravel({ ...travel, dob: e.target.value })} />
+          </Field>
+          <Field label="Middle name (optional)">
+            <Input
+              value={travel.middleName}
+              onChange={(e) => setTravel({ ...travel, middleName: e.target.value })}
+              placeholder="As on government ID"
+            />
+          </Field>
+          <Field label="Mobile (optional)">
+            <Input
+              value={travel.phone}
+              onChange={(e) => setTravel({ ...travel, phone: e.target.value })}
+              placeholder="(555) 555-5555"
+              inputMode="tel"
+            />
+          </Field>
+        </div>
+        <div className="mt-3">
+          <Button onClick={saveTravel}>Save travel details</Button>
+        </div>
       </Card>
 
       {/* payment */}

@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { searchFlights } from '@/lib/search';
 import { getSeatMap, type SeatRow } from '@/lib/seatmap';
-import type { InventoryOption, FlightDetails, User } from '@/lib/types';
+import type { InventoryOption, FlightDetails, User, LiveBookingContext } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import {
   Button,
@@ -305,6 +305,34 @@ export default function FlightsResults() {
       detail: `${opt.detail}${fareLabel ? ` · ${fareLabel}` : ''}${seat ? ` · Seat ${seat}` : ''}`,
     };
     const { needsApproval } = sig(finalOpt);
+    // For an APPROVAL booking (no live order yet), snapshot what the airline
+    // needs so the manager's approval can auto-issue the ticket. Passengers come
+    // from the traveler's travel profile; if incomplete the approval flags
+    // "needs travel profile" rather than booking with bad data.
+    let liveContext: LiveBookingContext | undefined;
+    if (needsApproval && !realRef && finalOpt.id) {
+      const trav = state.users.find((u) => u.id === travelerId) ?? activeUser;
+      const tp = trav.travelProfile ?? {};
+      const { firstName, lastName } = splitName(guestName?.trim() || trav.name);
+      liveContext = {
+        kind: 'flight',
+        outOfferId: finalOpt.id,
+        amount: finalOpt.price,
+        currency: 'USD',
+        seatPreference: seat || undefined,
+        contact: { email: trav.email || activeUser.email || '', phone: (tp.phone || '').replace(/\D/g, '') },
+        passengers: [
+          {
+            title: tp.title ?? '',
+            gender: tp.gender ?? '',
+            givenName: firstName,
+            middleName: tp.middleName || undefined,
+            familyName: lastName,
+            bornOn: tp.dob ?? '',
+          },
+        ],
+      };
+    }
     book({
       opt: finalOpt,
       travelerId,
@@ -315,6 +343,7 @@ export default function FlightsResults() {
       eventName,
       supplierRef: realRef,
       stripePaymentIntentId,
+      liveContext,
     });
     setConfirmed({ opt: finalOpt, pending: needsApproval });
     setSelected(null);

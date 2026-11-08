@@ -65,6 +65,17 @@ export interface User {
   homeLng?: number;
   /** A saved personal card, so personal-card checkout pre-populates. */
   personalCard?: { brand: string; last4: string };
+  /** Details required to ISSUE AN AIRLINE TICKET when a flight is booked on this
+   *  person's behalf. Needed by the unattended approve-to-book flow: without a
+   *  complete profile, an approved flight can't be auto-ticketed (the approval
+   *  flags "needs travel profile" instead of booking at the wrong data). */
+  travelProfile?: {
+    title?: 'mr' | 'ms' | 'mrs' | 'miss' | 'dr';
+    gender?: 'm' | 'f';
+    dob?: string; // YYYY-MM-DD (date of birth)
+    middleName?: string; // matches government ID, optional
+    phone?: string; // contact for the airline (digits, US)
+  };
 }
 
 export type BudgetScope = 'company' | 'department' | 'employee';

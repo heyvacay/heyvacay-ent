@@ -17,12 +17,13 @@ import { money, num, addDays, todayISO, dateRange, uid } from '@/lib/format';
 import { Plane, Building, Shield, ArrowRight, Sparkles, Check } from '@/components/icons';
 import { rewardsFor } from '@/lib/rewards';
 import { FlightRow, HotelCard, type Sig } from '@/components/app/results';
-import type { InventoryOption, PlannedItem, TripPlan } from '@/lib/types';
+import type { InventoryOption, PlannedItem, TripPlan, LiveBookingContext } from '@/lib/types';
+import { splitName } from '@/lib/liveBooking';
 
 const toISO = (d: Date) => fmtDate(d, 'yyyy-MM-dd');
 
 export default function PlanTripPage() {
-  const { state, activeUser, role, evaluatePolicies, savePlan, submitPlan, resolvePlan } = useStore();
+  const { state, activeUser, role, evaluatePolicies, savePlan, submitPlan, resolvePlanLive } = useStore();
 
   // ---- plan composer ----
   const [origin, setOrigin] = useState<FlightPlace | null>(null);
@@ -208,8 +209,38 @@ export default function PlanTripPage() {
     }
   }, [draftKey, origin, originText, dest, destText, start, end, addTrain, addCar]);
 
+  // Flight leg carries its live payload so an approved plan can auto-ticket it.
+  const flightLiveContext = (opt: InventoryOption): LiveBookingContext | undefined => {
+    if (!opt.id) return undefined;
+    const tp = activeUser.travelProfile ?? {};
+    const { firstName, lastName } = splitName(activeUser.name);
+    return {
+      kind: 'flight',
+      outOfferId: opt.id,
+      amount: opt.price,
+      currency: 'USD',
+      contact: { email: activeUser.email || '', phone: (tp.phone || '').replace(/\D/g, '') },
+      passengers: [
+        {
+          title: tp.title ?? '',
+          gender: tp.gender ?? '',
+          givenName: firstName,
+          middleName: tp.middleName || undefined,
+          familyName: lastName,
+          bornOn: tp.dob ?? '',
+        },
+      ],
+    };
+  };
+
   const plannedFlight: PlannedItem | null = pickFlight
-    ? { opt: pickFlight, startDate: start, endDate: end, ...assess(pickFlight) }
+    ? {
+        opt: pickFlight,
+        startDate: start,
+        endDate: end,
+        ...assess(pickFlight),
+        liveContext: flightLiveContext(pickFlight),
+      }
     : null;
   const plannedHotel: PlannedItem | null = pickHotel
     ? {
@@ -607,7 +638,7 @@ export default function PlanTripPage() {
                 key={p.id}
                 plan={p}
                 travelerName={state.users.find((u) => u.id === p.travelerId)?.name ?? '—'}
-                onResolve={resolvePlan}
+                onResolve={resolvePlanLive}
               />
             ))}
           </div>
@@ -836,7 +867,7 @@ function PlanApprovalRow({
 }: {
   plan: TripPlan;
   travelerName: string;
-  onResolve: (id: string, approve: boolean, note?: string) => void;
+  onResolve: (id: string, approve: boolean, note?: string) => void | Promise<unknown>;
 }) {
   const total = (plan.flight?.opt.price ?? 0) + (plan.hotel?.opt.price ?? 0);
   const allIn = (plan.flight?.inPolicy ?? true) && (plan.hotel?.inPolicy ?? true);
@@ -882,7 +913,9 @@ function MyPlanRow({ plan }: { plan: TripPlan }) {
         ? 'Pending approval'
         : plan.status === 'declined'
           ? 'Declined'
-          : 'Planning';
+          : plan.status === 'needs_reconfirm'
+            ? 'Needs re-confirm'
+            : 'Planning';
   const color =
     plan.status === 'booked' ? 'green' : plan.status === 'declined' ? 'red' : 'amber';
   return (
