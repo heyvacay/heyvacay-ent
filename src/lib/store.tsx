@@ -353,25 +353,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // experience-aware base (demo seed, or a fresh empty company).
   useEffect(() => {
     const key = acctKey(activeAccount?.id);
-    if (loadedKeyRef.current === key) return; // already loaded this account
+    const switching = loadedKeyRef.current !== key;
     const base = () =>
       activeAccount?.id ? seedAccount(activeAccount) : defaultBase();
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw) as { state?: AppState; role?: Role };
-        setState(parsed.state ? mergeLoaded(parsed.state) : base());
-        setRole(parsed.role ?? 'admin');
-      } else {
+        const nextState = parsed.state ? mergeLoaded(parsed.state) : base();
+        if (switching) {
+          // New account → load it wholesale.
+          setState(nextState);
+          setRole(parsed.role ?? 'admin');
+        } else {
+          // SAME account, re-fired by an external write (e.g. a Nova rep approved
+          // KYC from the CRM, or another tab/device edited this workspace): adopt
+          // the external change, but never clobber our own identical state (no
+          // churn / no feedback loop, since our own writes don't fire 'storage').
+          setState((cur) =>
+            JSON.stringify(cur) !== JSON.stringify(nextState) ? nextState : cur
+          );
+          if (parsed.role) setRole((r) => (r !== parsed.role ? (parsed.role as Role) : r));
+        }
+      } else if (switching) {
         setState(base());
         setRole('admin');
       }
     } catch {
-      setState(base());
-      setRole('admin');
+      if (switching) {
+        setState(base());
+        setRole('admin');
+      }
     }
     loadedKeyRef.current = key;
-    setHydrated(true);
+    if (switching) setHydrated(true);
   }, [activeAccount]);
 
   // Persist to the CURRENTLY loaded account's key only.

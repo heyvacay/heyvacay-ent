@@ -195,6 +195,28 @@ export default function CrmInvoicingPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Re-read when a customer updates their KYC from inside the account (same tab
+  // dispatches hv-view-as-change; another tab fires 'storage'), or when the rep
+  // returns to this tab — so an approval/submission on either side reflects live.
+  useEffect(() => {
+    const refresh = () => setRefresh((n) => n + 1);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    window.addEventListener('storage', refresh);
+    window.addEventListener('hv-view-as-change', refresh);
+    window.addEventListener('hv-account-change', refresh);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('hv-view-as-change', refresh);
+      window.removeEventListener('hv-account-change', refresh);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   // Companies that have (or can have) a workspace — leads have none yet.
   const workspaceCompanies = useMemo(
     () => companies.filter((c) => c.status === 'onboarding' || c.status === 'active'),
