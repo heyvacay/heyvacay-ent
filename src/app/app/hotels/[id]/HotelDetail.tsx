@@ -12,7 +12,7 @@ import {
   type HotelDetailData,
   type HotelReviewSummary,
 } from '@/lib/search';
-import type { InventoryOption } from '@/lib/types';
+import type { InventoryOption, LiveBookingContext } from '@/lib/types';
 import { rewardsFor } from '@/lib/rewards';
 import { roomTierRank, type RoomTier, type OverTierAction } from '@/lib/events';
 import { classifyRoomTier } from '@/lib/eventPlanning';
@@ -24,7 +24,7 @@ import { Button, Card, Field, cn } from '@/components/app/ui';
 import { TravelerPicker } from '@/components/app/TravelerPicker';
 import { StripeCheckout } from '@/components/app/StripeCheckout';
 import { LiveHotelCheckout } from '@/components/app/LiveHotelCheckout';
-import { splitName, type LiveGuest } from '@/lib/liveBooking';
+import { splitName, buildPrebookPayload, type LiveGuest } from '@/lib/liveBooking';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 import { HvLoader } from '@/components/HvLoader';
 import { sendEmail } from '@/lib/email';
@@ -219,6 +219,28 @@ export default function HotelDetail({ hid }: { hid: string }) {
   // Commit the booking (after payment / approval decision). A realRef is passed
   // when a live supplier order was actually issued; otherwise we show a demo ref.
   const commitBooking = (realRef?: string, stripePaymentIntentId?: string) => {
+    // For an APPROVAL booking (no live order placed yet), snapshot the supplier
+    // payload so the manager's approval can really book it later, unattended.
+    let liveContext: LiveBookingContext | undefined;
+    if (needsApproval && !realRef && selected?.bookHash && detail) {
+      try {
+        liveContext = {
+          kind: 'hotel',
+          prebook: buildPrebookPayload({ hid, detail, rate: selected, checkin, checkout, adults }),
+          bookHash: selected.bookHash,
+          amount: price,
+          currency: selected.currency || 'USD',
+          guest: {
+            firstName: liveGuest.firstName,
+            lastName: liveGuest.lastName,
+            email: liveGuest.email,
+            note: liveGuest.note,
+          },
+        };
+      } catch {
+        liveContext = undefined;
+      }
+    }
     book({
       opt,
       travelerId,
@@ -233,6 +255,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
       bypassPolicy: eventAllow,
       supplierRef: realRef,
       stripePaymentIntentId,
+      liveContext,
     });
     setConfirmed({
       pending: needsApproval,

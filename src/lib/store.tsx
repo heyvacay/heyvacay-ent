@@ -32,8 +32,10 @@ import type {
   Role,
   TripPlan,
   User,
+  LiveBookingContext,
 } from './types';
 import { SEED } from './seed';
+import { autoBookOnApproval, type AutoBookResult } from './approvalBooking';
 import { uid, todayISO } from './format';
 import { rewardsFor } from './rewards';
 import { sendEmail } from './email';
@@ -225,6 +227,8 @@ export interface StoreApi {
     supplierRef?: string;
     /** Stripe PaymentIntent the charge was made on (for refunds on cancel). */
     stripePaymentIntentId?: string;
+    /** Live supplier payload to really book this on approval (approval path). */
+    liveContext?: LiveBookingContext;
   }) => Booking;
   /** Company rule: whether booking for a custom/guest name needs approval. */
   guestBookingMode: GuestBookingMode;
@@ -245,6 +249,10 @@ export interface StoreApi {
   resolvePlan: (id: string, approve: boolean, note?: string) => void;
   removePlan: (id: string) => void;
   approveBooking: (id: string, note?: string, noteVisible?: boolean) => void;
+  /** Approve AND place the real supplier order unattended when a live payload
+   *  was captured and live booking is on; falls back to a local confirm, and
+   *  flags a re-confirm instead of booking at a moved price. */
+  approveBookingLive: (id: string, note?: string, noteVisible?: boolean) => Promise<AutoBookResult>;
   /** Manager "approve if changed": sends a counter-offer to the traveler. */
   proposeChange: (
     id: string,
@@ -292,6 +300,9 @@ const Ctx = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(SEED);
+  // Always-current snapshot for async flows (e.g. live auto-book on approve).
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [role, setRole] = useState<Role>('admin');
   const [hydrated, setHydrated] = useState(false);
   // The account the traveler app is working in. Persisted (localStorage) so the
@@ -949,7 +960,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy, supplierRef, stripePaymentIntentId }) => {
+    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy, supplierRef, stripePaymentIntentId, liveContext }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
       const guest = guestName?.trim() || undefined;
       // An event allow-listed stay is pre-cleared by an admin: skip the travel
@@ -1003,6 +1014,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         eventName,
         supplierRef,
         stripePaymentIntentId,
+        liveContext: needsApproval ? liveContext : undefined,
       };
 
       setState((s) => {
@@ -1070,6 +1082,96 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     },
     []
+  );
+
+  /** Flip a pending booking to confirmed (+ points), the legacy local path. */
+  const confirmPendingLocal = useCallback(
+    (id: string, patch: Partial<Booking> = {}) => {
+      setState((s) => {
+        const bk = s.bookings.find((b) => b.id === id);
+        if (!bk) return s;
+        const alreadyHasPoints = s.points.some((p) => p.bookingId === id);
+        const points = alreadyHasPoints
+          ? s.points
+          : [
+              ...s.points,
+              {
+                id: uid('pt'),
+                userId: bk.travelerId,
+                delta: bk.pointsEarned,
+                reason: `${bk.type === 'flight' ? 'Flight' : 'Hotel'} savings · ${bk.title}`,
+                bucket: 'self' as const,
+                bookingId: bk.id,
+                createdAt: bk.createdAt,
+              },
+            ];
+        return {
+          ...s,
+          bookings: s.bookings.map((b) =>
+            b.id === id ? { ...b, status: 'confirmed' as const, ...patch } : b
+          ),
+          points,
+        };
+      });
+    },
+    []
+  );
+
+  /** Just patch a pending booking's rebook sub-state (no confirm, no points). */
+  const patchBooking = useCallback((id: string, patch: Partial<Booking>) => {
+    setState((s) => ({
+      ...s,
+      bookings: s.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+    }));
+  }, []);
+
+  /**
+   * Approve a booking AND place the real supplier order (unattended), when a
+   * live payload was captured at request time and live booking is on. Falls
+   * back to the legacy local confirm when live booking is off or no payload
+   * exists, and never books at a moved price — it flags a re-confirm instead.
+   */
+  const approveBookingLive = useCallback(
+    async (id: string, note?: string, noteVisible = true): Promise<AutoBookResult> => {
+      const bk = stateRef.current.bookings.find((b) => b.id === id);
+      if (!bk || bk.status !== 'pending_approval') return { status: 'error', message: 'Not pending.' };
+      if (!bk.liveContext) {
+        confirmPendingLocal(id, { reviewNote: note || bk.reviewNote, reviewNoteVisible: note ? noteVisible : bk.reviewNoteVisible, rebookStatus: 'local' });
+        return { status: 'live_off' };
+      }
+      const result = await autoBookOnApproval(bk.liveContext);
+      switch (result.status) {
+        case 'booked':
+          confirmPendingLocal(id, {
+            reviewNote: note || bk.reviewNote,
+            reviewNoteVisible: note ? noteVisible : bk.reviewNoteVisible,
+            rebookStatus: 'booked_live',
+            supplierRef: result.supplierRef ?? bk.supplierRef,
+            price: result.amount || bk.price,
+            priceRefreshedTo: result.amount && result.amount !== bk.price ? result.amount : undefined,
+          });
+          break;
+        case 'live_off':
+          confirmPendingLocal(id, { reviewNote: note || bk.reviewNote, reviewNoteVisible: note ? noteVisible : bk.reviewNoteVisible, rebookStatus: 'local' });
+          break;
+        case 'price_changed':
+          patchBooking(id, { rebookStatus: 'price_changed', priceRefreshedTo: result.newAmount, rebookMessage: `Supplier price moved to $${Math.round(result.newAmount)} — re-confirm to book.` });
+          break;
+        case 'unavailable':
+          patchBooking(id, { rebookStatus: 'unavailable', rebookMessage: result.message || 'No longer available.' });
+          break;
+        case 'needs_payment':
+          patchBooking(id, { rebookStatus: 'needs_payment', rebookMessage: result.message || 'Company card could not be charged.' });
+          break;
+        case 'needs_details':
+          patchBooking(id, { rebookStatus: 'needs_details', rebookMessage: result.message || 'Traveler travel profile required.' });
+          break;
+        default:
+          patchBooking(id, { rebookMessage: result.message || 'Could not complete the booking.' });
+      }
+      return result;
+    },
+    [confirmPendingLocal, patchBooking]
   );
 
   const cancelBooking: StoreApi['cancelBooking'] = useCallback(
@@ -1571,6 +1673,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     resolvePlan,
     removePlan,
     approveBooking,
+    approveBookingLive,
     proposeChange,
     respondOffer,
     sendChat,

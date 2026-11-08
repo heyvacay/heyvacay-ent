@@ -132,6 +132,55 @@ export interface PolicyChangeRequest {
   status: 'pending' | 'approved' | 'rejected';
 }
 
+/**
+ * Everything the live supplier engine needs to actually book a trip LATER,
+ * captured when a booking is submitted for approval (the normal checkout is
+ * skipped for approval bookings, so we snapshot the payload here). On approve,
+ * the orchestrator re-prices with the supplier and places the real order using
+ * the company's saved card — unattended. Absent (demo / non-live search) → the
+ * approval just confirms locally, as before.
+ */
+export type LiveBookingContext =
+  | {
+      kind: 'hotel';
+      /** The transformed prebook payload (buildPrebookPayload output). */
+      prebook: Record<string, unknown>;
+      bookHash: string;
+      /** Supplier rate amount + currency captured at request time. */
+      amount: number;
+      currency: string;
+      guest: { firstName: string; lastName: string; email: string; note?: string };
+    }
+  | {
+      kind: 'flight';
+      outOfferId: string;
+      outServiceIds?: string[];
+      amount: number;
+      currency: string;
+      seatPreference?: string;
+      contact: { email: string; phone: string };
+      /** Passenger records required to issue the ticket. When missing/incomplete
+       *  the order can't be placed unattended (needs the traveler's travel
+       *  profile) — the orchestrator returns needs_details instead of booking. */
+      passengers: {
+        title: string;
+        gender: string;
+        givenName: string;
+        middleName?: string;
+        familyName: string;
+        bornOn: string;
+      }[];
+    };
+
+/** Sub-state of an approval booking after the on-approve auto-book attempt. */
+export type RebookStatus =
+  | 'booked_live' // real supplier order placed on approve
+  | 'price_changed' // supplier price moved — traveler must re-confirm
+  | 'unavailable' // sold out / no longer bookable
+  | 'needs_payment' // approved but the company card couldn't be charged
+  | 'needs_details' // approved but passenger/travel profile is incomplete
+  | 'local'; // live booking off — confirmed locally (legacy behavior)
+
 /** One leg (flight or hotel) selected into a combined trip plan. */
 export interface PlannedItem {
   opt: InventoryOption;
@@ -143,9 +192,16 @@ export interface PlannedItem {
   flags: string[];
   /** Confirmation number, set when the plan is booked. */
   confirmation?: string;
+  /** Live supplier payload, so the plan can be really booked on approval. */
+  liveContext?: LiveBookingContext;
 }
 
-export type TripPlanStatus = 'planning' | 'pending_approval' | 'booked' | 'declined';
+export type TripPlanStatus =
+  | 'planning'
+  | 'pending_approval'
+  | 'booked'
+  | 'declined'
+  | 'needs_reconfirm'; // approved but a leg's price/availability moved
 
 /** A combined flight + hotel trip planned and approved/booked together. */
 export interface TripPlan {
@@ -229,6 +285,15 @@ export interface Booking {
   /** The Stripe PaymentIntent id the charge was made on, so a cancellation can
    *  issue the refund against the right charge. */
   stripePaymentIntentId?: string;
+  /** Live supplier payload captured at request time, so an approval booking can
+   *  be really booked (re-priced + charged + ordered) when the manager approves. */
+  liveContext?: LiveBookingContext;
+  /** Outcome of the on-approve auto-book attempt (see RebookStatus). */
+  rebookStatus?: RebookStatus;
+  /** Human-readable detail for rebookStatus (e.g. the new price, the reason). */
+  rebookMessage?: string;
+  /** Supplier's refreshed price on approve, when it moved from what was requested. */
+  priceRefreshedTo?: number;
   /** Cancellation record (set when the trip is cancelled through the refund flow). */
   cancelledAt?: string;
   cancellationReason?: string;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
+import type { AutoBookResult } from '@/lib/approvalBooking';
 import {
   Avatar,
   Badge,
@@ -40,12 +41,13 @@ function roomAllIn(room: UiRoom): { title: string; price: number; image?: string
 }
 
 export default function ApprovalDetail({ id }: { id: string }) {
-  const { state, userById, spentForScope, approveBooking, cancelBooking, proposeChange, activeUser } =
+  const { state, userById, spentForScope, approveBookingLive, cancelBooking, proposeChange, activeUser } =
     useStore();
   const [note, setNote] = useState('');
   const [noteVisible, setNoteVisible] = useState(true);
   const [done, setDone] = useState<null | 'approved' | 'declined' | 'offered'>(null);
   const [autoBooking, setAutoBooking] = useState(false);
+  const [outcome, setOutcome] = useState<AutoBookResult | null>(null);
   // "Approve if changed" counter-offer form.
   const [offerMode, setOfferMode] = useState(false);
   const [offer, setOffer] = useState({ note: '', newRoomType: '', newPrice: 0, newImage: '' });
@@ -109,31 +111,45 @@ export default function ApprovalDetail({ id }: { id: string }) {
         : 'Non-refundable rate — live supplier pricing cannot be held, so the fare is re-confirmed the moment you approve. If it has moved materially, the traveler is asked to re-confirm before it books.'
       : 'Airfare is re-priced at ticketing — approve promptly to lock the quoted fare; a material change bounces back to the traveler.';
 
-  const decide = (kind: 'approved' | 'declined') => {
+  const decide = async (kind: 'approved' | 'declined') => {
     const comment = note.trim() || undefined;
-    if (kind === 'approved') approveBooking(b.id, comment, noteVisible);
-    else cancelBooking(b.id, comment, noteVisible);
-    setDone(kind);
-    if (kind === 'approved') {
-      // Simulate the auto-booking finishing on the supplier side, then email
-      // the traveler their confirmation.
-      setAutoBooking(true);
-      setTimeout(() => setAutoBooking(false), 2400);
+    if (kind === 'declined') {
+      cancelBooking(b.id, comment, noteVisible);
+      setDone('declined');
+      if (traveler?.email) {
+        sendEmail('approvalDecided', traveler.email, {
+          travelerName: travelerName ?? traveler.name,
+          title: b.title,
+          approved: false,
+          note: noteVisible ? comment : undefined,
+        });
+      }
+      return;
     }
+
+    // Approve → run the REAL supplier booking (unattended) via the service
+    // account. Falls back to a local confirm when live booking is off.
+    setDone('approved');
+    setAutoBooking(true);
+    const res = await approveBookingLive(b.id, comment, noteVisible);
+    setAutoBooking(false);
+    setOutcome(res);
+
+    const booked = res.status === 'booked' || res.status === 'live_off';
     if (traveler?.email) {
       sendEmail('approvalDecided', traveler.email, {
         travelerName: travelerName ?? traveler.name,
         title: b.title,
-        approved: kind === 'approved',
+        approved: true,
         note: noteVisible ? comment : undefined,
       });
-      if (kind === 'approved') {
+      if (booked) {
         sendEmail('confirmation', traveler.email, {
           travelerName: travelerName ?? traveler.name,
           title: b.title,
           roomType: b.roomType,
           dates: dateRange(b.startDate, b.endDate),
-          total: b.price,
+          total: res.status === 'booked' ? res.amount || b.price : b.price,
           savings: b.savings,
           points: b.pointsEarned,
           inPolicy: (b.policyNotes?.length ?? 0) === 0,
@@ -222,19 +238,62 @@ export default function ApprovalDetail({ id }: { id: string }) {
               <div className="flex items-center gap-3">
                 <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-600" />
                 <div>
-                  <p className="font-semibold text-emerald-800">Approved — auto-booking in progress…</p>
+                  <p className="font-semibold text-emerald-800">Approved — booking with the supplier…</p>
                   <p className="text-sm text-emerald-700">
-                    We&apos;re confirming the reservation with the supplier. {traveler?.name ?? 'The traveler'} will
-                    get a confirmation email the moment it&apos;s booked.
+                    Confirming {traveler?.name ?? 'the traveler'}&apos;s reservation and settling payment on the
+                    company account.
                   </p>
                 </div>
+              </div>
+            ) : outcome?.status === 'price_changed' ? (
+              <div>
+                <p className="font-semibold text-amber-800">
+                  Approved — but the supplier price moved to ${Math.round(outcome.newAmount)}.
+                </p>
+                <p className="text-sm text-amber-700">
+                  It was <strong>not</strong> booked at the new price. {traveler?.name ?? 'The traveler'} has been
+                  asked to re-confirm — they complete it in one tap at the updated fare.
+                </p>
+              </div>
+            ) : outcome?.status === 'unavailable' ? (
+              <div>
+                <p className="font-semibold text-red-800">Approved — but it&apos;s no longer available.</p>
+                <p className="text-sm text-red-700">
+                  The rate/fare sold out before approval. {traveler?.name ?? 'The traveler'} can pick an
+                  alternative — nothing was charged.
+                </p>
+              </div>
+            ) : outcome?.status === 'needs_payment' ? (
+              <div>
+                <p className="font-semibold text-amber-800">Approved — company card couldn&apos;t be charged.</p>
+                <p className="text-sm text-amber-700">
+                  Add or update the company card in Billing, then re-approve to book. Nothing was charged.
+                </p>
+              </div>
+            ) : outcome?.status === 'needs_details' ? (
+              <div>
+                <p className="font-semibold text-amber-800">Approved — traveler travel profile needed.</p>
+                <p className="text-sm text-amber-700">
+                  A flight ticket needs the traveler&apos;s date of birth, title and gender. Once their profile is
+                  complete it books automatically.
+                </p>
+              </div>
+            ) : outcome?.status === 'error' ? (
+              <div>
+                <p className="font-semibold text-amber-800">Approved — the booking didn&apos;t complete.</p>
+                <p className="text-sm text-amber-700">{outcome.message || 'Please try again from the traveler’s trip.'}</p>
               </div>
             ) : (
               <div>
                 <p className="font-semibold text-emerald-800">
-                  Booked ✓ — {traveler?.name ?? 'the traveler'} has been emailed the confirmation.
+                  {outcome?.status === 'booked' ? 'Booked ✓ with the supplier' : 'Approved & recorded'} —{' '}
+                  {traveler?.name ?? 'the traveler'} has been emailed the confirmation.
                 </p>
-                <p className="text-sm text-emerald-700">Points have been awarded for the savings.</p>
+                <p className="text-sm text-emerald-700">
+                  {outcome?.status === 'booked'
+                    ? 'Payment settled on the company account. Points awarded for the savings.'
+                    : 'Points have been awarded for the savings.'}
+                </p>
               </div>
             )
           ) : done === 'declined' ? (
