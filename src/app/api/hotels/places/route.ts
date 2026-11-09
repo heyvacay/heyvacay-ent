@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_BASE_URL } from '@/lib/config.server';
+import { serviceAuthHeaders } from '@/lib/backendAuth.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,7 +84,7 @@ export async function GET(req: Request) {
   try {
     const res = await fetch(`${API_BASE_URL}/hotels/global-suggest`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...serviceAuthHeaders() },
       body: JSON.stringify({ query: q }),
       cache: 'no-store',
     });

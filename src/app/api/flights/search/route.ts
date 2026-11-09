@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_BASE_URL } from '@/lib/config.server';
+import { serviceAuthHeaders } from '@/lib/backendAuth.server';
 
 // Live search hits the provider every time — never cache the route.
 export const runtime = 'nodejs';
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   try {
     const res = await fetch(`${API_BASE_URL}/flights/search`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...serviceAuthHeaders() },
       body: JSON.stringify(payload),
       cache: 'no-store',
     });

@@ -4,6 +4,7 @@ import {
   BACKEND_SERVICE_TOKEN,
   isLiveBooking,
 } from '@/lib/config.server';
+import { serviceAuthHeaders } from '@/lib/backendAuth.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    ...serviceAuthHeaders(),
   };
   if (live) {
     headers.Authorization = `Bearer ${BACKEND_SERVICE_TOKEN}`;

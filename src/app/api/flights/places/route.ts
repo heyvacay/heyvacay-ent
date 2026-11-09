@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_BASE_URL } from '@/lib/config.server';
+import { serviceAuthHeaders } from '@/lib/backendAuth.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
   try {
     const res = await fetch(
       `${API_BASE_URL}/flights/places?query=${encodeURIComponent(q)}`,
-      { headers: { Accept: 'application/json' }, cache: 'no-store' }
+      { headers: { Accept: 'application/json', ...serviceAuthHeaders() }, cache: 'no-store' }
     );
     const data = await res.json().catch(() => null);
     const results = Array.isArray(data?.results) ? data.results : [];

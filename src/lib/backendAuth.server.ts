@@ -12,6 +12,26 @@ import { API_BASE_URL, BACKEND_SERVICE_TOKEN, isLiveBooking } from './config.ser
  */
 
 /**
+ * Auth headers for the Enterprise service account, for use on plain proxy
+ * fetches (search / suggest / hotel details). The shared backend guards these
+ * browse endpoints with @PublicWhenGuestBrowse — i.e. they 401 for an
+ * unauthenticated caller unless GUEST_BROWSE_ENABLED is on. The enterprise app
+ * is a logged-in service, so it must present the service token: the backend
+ * then authenticates it as the enterprise account AND returns NET pricing,
+ * keeping search prices consistent with what booking charges.
+ *
+ * Degrades gracefully: when no service token is configured (local/demo), it
+ * returns no headers, so the call stays exactly as before (unauthenticated).
+ */
+export function serviceAuthHeaders(): Record<string, string> {
+  if (!BACKEND_SERVICE_TOKEN) return {};
+  return {
+    Authorization: `Bearer ${BACKEND_SERVICE_TOKEN}`,
+    'X-HeyVacay-Channel': 'enterprise',
+  };
+}
+
+/**
  * Authenticated POST/GET against the backend as the Enterprise service account.
  * Attaches the service token + enterprise channel header. Returns the raw
  * Response so callers can read status + body (the booking flow branches on
