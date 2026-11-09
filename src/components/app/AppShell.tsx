@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Logo } from './Logo';
 import { DinnerRsvpPrompt } from './DinnerRsvpPrompt';
 import { WelcomeFlow } from './WelcomeFlow';
+import { HomeCityGate } from './HomeCityGate';
 import { clearSignedIn } from '@/lib/session';
 import {
   ChartBar,
@@ -114,7 +115,7 @@ const EMPLOYEE_NAV: NavSection[] = [
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { state, activeUser, role, isSuperAdmin, viewingAs, setActiveUser, setRole, reset } = useStore();
+  const { state, activeUser, role, isSuperAdmin, viewingAs, setActiveUser, setRole, reset, setHomeCity } = useStore();
 
   // Company logo uploaded in the CRM (matched by id/domain). Read once on mount.
   const [companyLogo, setCompanyLogo] = useState('');
@@ -466,6 +467,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
           isAdmin={role === 'admin'}
           isOwner={!!activeUser.superAdmin}
           onDone={finishWelcome}
+        />
+      )}
+
+      {/* After the welcome tour, if the company never set this person's home
+          city, ask for it before they use the app (not while viewing-as). */}
+      {!welcome && !viewingAs && !activeUser.homeCity?.trim() && (
+        <HomeCityGate
+          firstName={(activeUser.name ?? 'there').trim().split(' ')[0] || 'there'}
+          onSave={(city) => setHomeCity(activeUser.id, city)}
         />
       )}
     </div>

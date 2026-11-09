@@ -642,9 +642,9 @@ export default function SignupPage() {
 
               <div className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-dark" />
-                We&apos;ve pre-set a sensible travel policy and queued QuickBooks +
-                BambooHR to connect. Tweak policies, integrations and invite your
-                team from the dashboard — it&apos;s all one click away.
+                We&apos;ve pre-set a sensible travel policy. Tweak policies,
+                connect integrations and invite your team from the dashboard —
+                it&apos;s all one click away.
               </div>
 
               <div className="mt-5 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">

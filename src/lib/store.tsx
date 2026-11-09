@@ -160,6 +160,8 @@ export interface StoreApi {
 
   inviteUser: (data: {
     name: string;
+    firstName?: string;
+    lastName?: string;
     email: string;
     department: string;
     title: string;
@@ -670,6 +672,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           {
             id: uid('u'),
             name: data.name,
+            firstName: data.firstName ?? data.name.trim().split(/\s+/)[0],
+            lastName:
+              data.lastName ?? data.name.trim().split(/\s+/).slice(1).join(' '),
             email: data.email,
             role: data.role,
             department: data.department,

@@ -30,7 +30,8 @@ export default function PeoplePage() {
   } | null>(null);
   const nameOf = (id?: string) => state.users.find((u) => u.id === id)?.name;
   const [form, setForm] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     department: 'Sales',
     title: '',
@@ -45,10 +46,21 @@ export default function PeoplePage() {
   );
 
   const submit = () => {
-    if (!form.name.trim() || !form.email.trim()) return;
-    inviteUser(form);
+    const firstName = form.firstName.trim();
+    const lastName = form.lastName.trim();
+    if (!firstName || !form.email.trim()) return;
+    const name = `${firstName} ${lastName}`.trim();
+    inviteUser({
+      name,
+      firstName,
+      lastName,
+      email: form.email,
+      department: form.department,
+      title: form.title,
+      role: form.role,
+    });
     window.alert(`Invite email sent to ${form.email}. They'll verify their email and join your workspace.`);
-    setForm({ name: '', email: '', department: 'Sales', title: '', role: 'employee' });
+    setForm({ firstName: '', lastName: '', email: '', department: 'Sales', title: '', role: 'employee' });
     setOpen(false);
   };
 
@@ -70,11 +82,18 @@ export default function PeoplePage() {
             Invite a teammate
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Full name">
+            <Field label="First name">
               <Input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Jordan Lee"
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                placeholder="Jordan"
+              />
+            </Field>
+            <Field label="Last name">
+              <Input
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                placeholder="Lee"
               />
             </Field>
             <Field label="Work email">
