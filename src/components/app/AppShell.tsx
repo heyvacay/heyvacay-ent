@@ -475,7 +475,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {!welcome && !viewingAs && !activeUser.homeCity?.trim() && (
         <HomeCityGate
           firstName={(activeUser.name ?? 'there').trim().split(' ')[0] || 'there'}
-          onSave={(city) => setHomeCity(activeUser.id, city)}
+          onSave={(city, lat, lng) => setHomeCity(activeUser.id, city, lat, lng)}
         />
       )}
     </div>

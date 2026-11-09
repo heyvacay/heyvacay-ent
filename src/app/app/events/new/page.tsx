@@ -7,7 +7,8 @@ import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
 import { Button, Card, Field, Input, cn } from '@/components/app/ui';
 import { HotelAllowPicker, type AllowHotel } from '@/components/app/HotelAllowPicker';
-import { placesHotels, startHotels, getHotelDetail, type HotelPlace } from '@/lib/search';
+import { startHotels, getHotelDetail, type HotelPlace } from '@/lib/search';
+import { CityPicker } from '@/components/app/CityPicker';
 import { defaultSelection, resolveLeaf, sumPayAtProperty } from '@/lib/hotelRooms';
 import { HvRangeField } from '@/components/datepicker/HvDatePicker';
 import { format as fmtDate, parseISO } from 'date-fns';
@@ -840,88 +841,6 @@ export default function NewEventPage() {
           </div>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function CityPicker({
-  value,
-  selected,
-  onText,
-  onPick,
-}: {
-  value: string;
-  selected?: boolean;
-  onText: (v: string) => void;
-  onPick: (p: HotelPlace) => void;
-}) {
-  const [items, setItems] = useState<HotelPlace[]>([]);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const term = value.trim();
-    if (term.length < 2) {
-      setItems([]);
-      return;
-    }
-    let live = true;
-    const t = setTimeout(async () => {
-      try {
-        const places = await placesHotels(term);
-        if (live) setItems(places.filter((p) => p.type === 'region').slice(0, 6));
-      } catch {
-        if (live) setItems([]);
-      }
-    }, 240);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [value]);
-
-  return (
-    <div className="relative">
-      <div className="relative">
-        <Input
-          value={value}
-          onChange={(e) => {
-            onText(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search a city…"
-          autoComplete="off"
-          className={selected ? 'border-emerald-300 bg-emerald-50/40 pr-9' : undefined}
-        />
-        {selected && (
-          <Check className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600" />
-        )}
-      </div>
-      {open && items.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-          {items.map((p, i) => (
-            <li key={`${p.regionId}-${i}`}>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onPick(p);
-                  setItems([]);
-                  setOpen(false);
-                }}
-                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-              >
-                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-dark" />
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-slate-800">{p.label}</span>
-                  {p.sub && <span className="block truncate text-xs text-slate-400">{p.sub}</span>}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

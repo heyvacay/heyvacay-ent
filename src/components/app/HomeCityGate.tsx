@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Logo } from './Logo';
-import { Button, Field, Input } from './ui';
+import { Button, Field } from './ui';
+import { CityPicker } from './CityPicker';
 import { MapPin, Check } from '@/components/icons';
+import type { HotelPlace } from '@/lib/search';
 
 /**
  * One-time blocking prompt shown right after the first-login welcome tour, only
@@ -17,10 +19,16 @@ export function HomeCityGate({
   onSave,
 }: {
   firstName: string;
-  onSave: (city: string) => void;
+  onSave: (city: string, lat?: number, lng?: number) => void;
 }) {
   const [city, setCity] = useState('');
+  const [place, setPlace] = useState<HotelPlace | null>(null);
   const ready = city.trim().length >= 2;
+  const save = () => {
+    if (!ready) return;
+    const label = (place?.label ?? city).trim();
+    onSave(label, place?.lat, place?.lng);
+  };
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-navy-deep/95 px-5 py-10">
@@ -42,26 +50,27 @@ export function HomeCityGate({
         </p>
         <div className="mt-5 space-y-4">
           <Field label="Home city">
-            <Input
+            <CityPicker
               value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="e.g. Austin, TX"
+              selected={!!place}
               autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && ready) onSave(city.trim());
+              placeholder="Start typing your city…"
+              onText={(v) => {
+                setCity(v);
+                setPlace(null);
+              }}
+              onPick={(p) => {
+                setCity(p.label);
+                setPlace(p);
               }}
             />
           </Field>
-          {ready && (
+          {place && (
             <p className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-              <Check className="h-3.5 w-3.5" /> Got it.
+              <Check className="h-3.5 w-3.5" /> {place.label} selected.
             </p>
           )}
-          <Button
-            className="w-full"
-            disabled={!ready}
-            onClick={() => onSave(city.trim())}
-          >
+          <Button className="w-full" disabled={!ready} onClick={save}>
             Save &amp; continue
           </Button>
         </div>
