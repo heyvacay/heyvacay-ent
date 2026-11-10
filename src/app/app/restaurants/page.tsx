@@ -6,19 +6,53 @@ import {
   searchRestaurants,
   getAvailability,
   bookRestaurant,
+  cancelRestaurant,
   type Restaurant,
   type Availability,
   type ReservationResult,
 } from '@/lib/restaurants';
+import {
+  listReservations,
+  saveReservation,
+  setReservationStatus,
+  type DiningReservation,
+} from '@/lib/diningReservations';
 import { FOOD_GENRES } from '@/lib/events';
 import { Button, EmptyState, Field, Input, Select, PageHeader, cn } from '@/components/app/ui';
 import { CityPicker } from '@/components/app/CityPicker';
-import { todayISO } from '@/lib/format';
-import { Check, Shield, MapPin, Sparkles } from '@/components/icons';
+import { todayISO, shortDate } from '@/lib/format';
+import { Check, Shield, MapPin, Sparkles, Calendar } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 
 export default function RestaurantsPage() {
-  const { activeUser } = useStore();
+  const { activeUser, state } = useStore();
+  const scope = state.company.id;
+
+  // Warm the OpenTable directory cache in the background so the first search is
+  // fast (runs while the traveler is picking a city).
+  useEffect(() => {
+    fetch('/api/restaurants/warm').catch(() => {});
+  }, []);
+
+  // Traveler's reservations (local record of real OpenTable bookings).
+  const [reservations, setReservations] = useState<DiningReservation[]>([]);
+  const refreshReservations = () =>
+    setReservations(listReservations(scope, activeUser.id));
+  useEffect(() => {
+    refreshReservations();
+    const on = () => refreshReservations();
+    window.addEventListener('hv-dining-change', on);
+    return () => window.removeEventListener('hv-dining-change', on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, activeUser.id]);
+
+  const cancelReservation = async (r: DiningReservation) => {
+    if (r.source === 'opentable') {
+      await cancelRestaurant({ restaurantId: r.restaurantId, confirmation: r.confirmation });
+    }
+    setReservationStatus(scope, r.id, 'cancelled');
+    refreshReservations();
+  };
   const [city, setCity] = useState('');
   const [cityPicked, setCityPicked] = useState(false);
   const [genre, setGenre] = useState('');
@@ -162,6 +196,73 @@ export default function RestaurantsPage() {
         </div>
       </div>
 
+      {reservations.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-5">
+          <h3 className="mb-3 font-display text-lg font-bold text-slate-900 dark:text-white">
+            My reservations
+          </h3>
+          <div className="space-y-2.5">
+            {reservations.map((r) => (
+              <div
+                key={r.id}
+                className={cn(
+                  'flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between',
+                  r.status === 'cancelled'
+                    ? 'border-slate-200 bg-slate-50 opacity-70 dark:border-white/10 dark:bg-white/5'
+                    : 'border-slate-200 dark:border-white/10'
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+                    <span className="truncate">{r.restaurantName}</span>
+                    {r.status === 'cancelled' ? (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                        Cancelled
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        Confirmed
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" /> {shortDate(r.date)} · {r.time}
+                    </span>
+                    <span>Party of {r.partySize}</span>
+                    {r.name && <span>Under {r.name}</span>}
+                    <span className="text-slate-400">Conf. {r.confirmation}</span>
+                  </p>
+                  {r.specialRequest && (
+                    <p className="mt-1 text-xs italic text-slate-500">“{r.specialRequest}”</p>
+                  )}
+                </div>
+                {r.status !== 'cancelled' && (
+                  <div className="flex shrink-0 items-center gap-2">
+                    {r.manageUrl && (
+                      <a
+                        href={r.manageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg px-3 py-1.5 text-xs font-semibold text-brand-dark hover:underline"
+                      >
+                        Manage →
+                      </a>
+                    )}
+                    <button
+                      onClick={() => cancelReservation(r)}
+                      className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-600 ring-1 ring-red-200 hover:bg-red-50 dark:bg-transparent"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading && <HvLoader className="py-16" />}
 
       {!loading && results && results.length === 0 && (
@@ -266,9 +367,15 @@ export default function RestaurantsPage() {
           date={date}
           time={time}
           party={party}
+          city={city}
+          userId={activeUser.id}
           guestName={activeUser.name}
           guestEmail={activeUser.email}
           guestPhone={activeUser.travelProfile?.phone}
+          onBooked={(r) => {
+            saveReservation(scope, r);
+            refreshReservations();
+          }}
           onClose={() => setSelected(null)}
         />
       )}
@@ -281,18 +388,24 @@ function BookingModal({
   date,
   time,
   party,
+  city,
+  userId,
   guestName,
   guestEmail,
   guestPhone,
+  onBooked,
   onClose,
 }: {
   restaurant: Restaurant;
   date: string;
   time: string;
   party: number;
+  city: string;
+  userId: string;
   guestName: string;
   guestEmail?: string;
   guestPhone?: string;
+  onBooked: (r: DiningReservation) => void;
   onClose: () => void;
 }) {
   const [avail, setAvail] = useState<Availability | null>(null);
@@ -302,7 +415,12 @@ function BookingModal({
   const [done, setDone] = useState<ReservationResult | null>(null);
   const [email, setEmail] = useState(guestEmail ?? '');
   const [phone, setPhone] = useState(guestPhone ?? '');
-  const contactOk = /\S+@\S+\.\S+/.test(email) && phone.replace(/\D/g, '').length >= 10;
+  const [resName, setResName] = useState(guestName);
+  const [special, setSpecial] = useState('');
+  const contactOk =
+    resName.trim().length > 1 &&
+    /\S+@\S+\.\S+/.test(email) &&
+    phone.replace(/\D/g, '').length >= 10;
 
   // Load availability on open.
   useEffect(() => {
@@ -322,16 +440,40 @@ function BookingModal({
   const book = async () => {
     setBooking(true);
     try {
+      const finalName = resName.trim() || guestName;
+      const specialReq = special.trim() || undefined;
       const r = await bookRestaurant({
         restaurantId: restaurant.id,
         date,
         time: chosenTime,
         partySize: party,
-        name: guestName,
+        name: finalName,
         email: email.trim(),
         phone: phone.trim(),
+        specialRequest: specialReq,
       });
-      if (r) setDone(r);
+      if (r) {
+        setDone(r);
+        onBooked({
+          id: `dr_${Math.random().toString(36).slice(2, 10)}`,
+          userId,
+          confirmation: r.confirmation,
+          manageUrl: r.manageUrl,
+          restaurantId: restaurant.id,
+          restaurantName: restaurant.name,
+          city,
+          date,
+          time: chosenTime,
+          partySize: party,
+          name: finalName,
+          email: email.trim(),
+          phone: phone.trim(),
+          specialRequest: specialReq,
+          source: r.source,
+          status: 'confirmed',
+          createdAt: new Date().toISOString(),
+        });
+      }
     } finally {
       setBooking(false);
     }
@@ -436,28 +578,52 @@ function BookingModal({
                 )}
               </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <div className="mt-4 space-y-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-500">Email for the reservation</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">
+                    Name on the reservation
+                  </label>
                   <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    value={resName}
+                    onChange={(e) => setResName(e.target.value)}
+                    placeholder="Full name"
                   />
                 </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-500">Email</label>
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-500">Mobile</label>
+                    <Input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="(512) 555-0142"
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-500">Mobile</label>
-                  <Input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(512) 555-0142"
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">
+                    Special request <span className="font-normal text-slate-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={special}
+                    onChange={(e) => setSpecial(e.target.value)}
+                    rows={2}
+                    placeholder="Dietary needs, occasion, seating preference…"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                   />
                 </div>
               </div>
               <p className="mt-1.5 text-[11px] text-slate-400">
-                The restaurant uses these to confirm your table — booked for {guestName}.
+                The restaurant uses your email &amp; mobile to confirm the table.
               </p>
 
               <Button

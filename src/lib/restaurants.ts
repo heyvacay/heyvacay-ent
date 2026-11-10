@@ -88,3 +88,20 @@ export async function bookRestaurant(args: {
   const data = await res.json().catch(() => null);
   return res.ok ? (data as ReservationResult) : null;
 }
+
+export async function cancelRestaurant(args: {
+  restaurantId: string;
+  confirmation: string;
+}): Promise<{ cancelled: boolean }> {
+  try {
+    const res = await fetch('/api/restaurants/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    const data = await res.json().catch(() => null);
+    return { cancelled: Boolean(data?.cancelled) };
+  } catch {
+    return { cancelled: false };
+  }
+}

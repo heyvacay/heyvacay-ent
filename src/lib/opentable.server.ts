@@ -196,13 +196,21 @@ function mapDirectoryItem(it: DirectoryItem): OtRestaurant | null {
  * cache and filter locally. The cache is per-container and TTL'd; we cap the
  * number of pages so a cold search costs a bounded number of upstream calls.
  */
-const DIR_PAGE_SIZE = 100;
+const DIR_REQ_LIMIT = 1000; // ask for big pages; we use the server's real size
 const DIR_TTL_MS = 6 * 60 * 60 * 1000; // 6h
-const DIR_MAX_PAGES = 800; // safety cap (~60,895 venues @ 100/page ≈ 609)
-const DIR_CONCURRENCY = 6; // parallel page fetches
+const DIR_MAX_PAGES = 800; // safety cap
+const DIR_CONCURRENCY = 16; // parallel page fetches
+const DIR_WAIT_MS = 9000; // max a search waits on a cold cache before serving partial
 
-let dirCache: { items: OtRestaurant[]; loadedAt: number } | null = null;
-let dirLoading: Promise<OtRestaurant[]> | null = null;
+// Progressive cache: `items` grows as pages stream in; `complete` flips true
+// when the whole directory is loaded. A search serves whatever's loaded so far
+// (bounded wait), and the background load keeps filling it for the next search.
+const dir: {
+  items: OtRestaurant[];
+  loadedAt: number;
+  complete: boolean;
+  loading: boolean;
+} = { items: [], loadedAt: 0, complete: false, loading: false };
 
 async function fetchDirPage(
   headers: Record<string, string>,
@@ -224,62 +232,90 @@ async function fetchDirPage(
   }
 }
 
-/**
- * Load the ENTIRE OpenTable directory into an in-memory cache (per container,
- * 6h TTL) so a city search returns every venue in that city — not just the
- * first slice. The directory has no server-side city/name filter, so we page
- * the whole thing once (page 0 tells us total_items; the rest fetch in parallel
- * batches) and filter locally thereafter.
- */
-async function loadDirectory(): Promise<OtRestaurant[]> {
-  const fresh = dirCache && Date.now() - dirCache.loadedAt < DIR_TTL_MS;
-  if (fresh) return dirCache!.items;
-  if (dirLoading) return dirLoading;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  dirLoading = (async () => {
+/**
+ * Kick off a full directory load in the BACKGROUND (non-blocking). Streams
+ * mapped venues into `dir.items` as pages arrive (parallel worker pool) so a
+ * concurrent search can serve partial results immediately. Idempotent: no-op
+ * while a load is running or while the cache is still fresh and complete.
+ */
+function warmDirectory(): void {
+  const fresh = dir.complete && Date.now() - dir.loadedAt < DIR_TTL_MS;
+  if (dir.loading || fresh) return;
+  dir.loading = true;
+
+  void (async () => {
     const headers = await authHeaders();
-    if (!headers) return [];
+    if (!headers) {
+      dir.loading = false;
+      return;
+    }
+    const acc: OtRestaurant[] = [];
     try {
-      // Page 0 — establishes the effective page size and total count.
-      const first = await fetchDirPage(headers, DIR_PAGE_SIZE, 0);
-      if (!first || first.items.length === 0) return dirCache?.items || [];
+      // Page 0 — establishes the effective page size and total count, and makes
+      // first results available right away.
+      const first = await fetchDirPage(headers, DIR_REQ_LIMIT, 0);
+      if (!first || first.items.length === 0) return;
       const pageSize = first.items.length;
       const total = first.total || pageSize;
       const pages = Math.min(DIR_MAX_PAGES, Math.ceil(total / pageSize));
-
-      const out: OtRestaurant[] = [];
       for (const it of first.items) {
         const m = mapDirectoryItem(it);
-        if (m) out.push(m);
+        if (m) acc.push(m);
       }
+      dir.items = acc; // publish (same ref; grows as we push)
+      dir.loadedAt = Date.now();
+      dir.complete = pages <= 1;
 
-      // Remaining pages in parallel batches.
+      // Worker pool over the remaining offsets.
       const offsets: number[] = [];
       for (let p = 1; p < pages; p++) offsets.push(p * pageSize);
-      for (let i = 0; i < offsets.length; i += DIR_CONCURRENCY) {
-        const batch = offsets.slice(i, i + DIR_CONCURRENCY);
-        const results = await Promise.all(
-          batch.map((off) => fetchDirPage(headers, pageSize, off))
-        );
-        for (const r of results) {
-          if (!r) continue;
-          for (const it of r.items) {
-            const m = mapDirectoryItem(it);
-            if (m) out.push(m);
+      let idx = 0;
+      const worker = async () => {
+        while (idx < offsets.length) {
+          const off = offsets[idx++];
+          const r = await fetchDirPage(headers, pageSize, off);
+          if (r) {
+            for (const it of r.items) {
+              const m = mapDirectoryItem(it);
+              if (m) acc.push(m);
+            }
           }
         }
-      }
-
-      if (out.length) dirCache = { items: out, loadedAt: Date.now() };
-      return out.length ? out : dirCache?.items || [];
-    } catch {
-      return dirCache?.items || [];
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(DIR_CONCURRENCY, offsets.length || 1) }, () => worker())
+      );
+      dir.loadedAt = Date.now();
+      dir.complete = true;
     } finally {
-      dirLoading = null;
+      dir.loading = false;
     }
   })();
+}
 
-  return dirLoading;
+/** Trigger a background warm without waiting (called when the Dining page opens). */
+export function primeDirectory(): void {
+  warmDirectory();
+}
+
+/**
+ * Return the cached directory, serving partial results on a cold cache rather
+ * than blocking on the full ~60k load. Starts the background warm, waits up to
+ * DIR_WAIT_MS for enough to be useful, then returns whatever's loaded.
+ */
+async function loadDirectory(): Promise<OtRestaurant[]> {
+  const fresh = dir.complete && Date.now() - dir.loadedAt < DIR_TTL_MS;
+  if (fresh) return dir.items;
+  warmDirectory();
+  const deadline = Date.now() + DIR_WAIT_MS;
+  // Serve complete results if the load finishes within the budget; otherwise
+  // return whatever has streamed in so far (the next search gets more).
+  while (!dir.complete && Date.now() < deadline) {
+    await sleep(150);
+  }
+  return dir.items;
 }
 
 /**
@@ -466,6 +502,34 @@ export interface OtReservation {
   confirmation: string;
   manageUrl?: string;
   status: string;
+}
+
+/**
+ * Best-effort cancellation. The confirmed cancel path on OpenTable is the
+ * guest's manage_reservation_url; this attempts the partner cancel endpoint so
+ * an in-app cancel works when available, and reports failure so the UI can fall
+ * back to the manage link.
+ */
+export async function cancelReservation(args: {
+  restaurantId: string;
+  confirmation: string;
+}): Promise<{ ok: boolean; status: number }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, status: 0 };
+  const url =
+    `${OPENTABLE.base}/v2/booking/${encodeURIComponent(args.restaurantId)}` +
+    `/reservations/${encodeURIComponent(args.confirmation)}/cancel`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: '{}',
+      cache: 'no-store',
+    });
+    return { ok: res.ok, status: res.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
 }
 
 function splitName(full: string): { first: string; last: string } {
