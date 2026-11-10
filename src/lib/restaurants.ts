@@ -38,6 +38,8 @@ export interface ReservationResult {
   partySize: number;
   name: string;
   status: string;
+  /** The venue required a card hold / deposit to hold the table. */
+  depositRequired?: boolean;
   source?: string;
 }
 

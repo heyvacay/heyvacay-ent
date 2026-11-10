@@ -52,6 +52,7 @@ export async function POST(req: Request) {
           partySize,
           name,
           status: resv.status,
+          depositRequired: resv.depositRequired ?? false,
           source: 'opentable',
         });
       }

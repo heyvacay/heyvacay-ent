@@ -502,6 +502,9 @@ export interface OtReservation {
   confirmation: string;
   manageUrl?: string;
   status: string;
+  /** True when OpenTable's slot lock required a card on file / deposit for
+   *  this venue (payment_method present on the lock response). */
+  depositRequired?: boolean;
 }
 
 /**
@@ -615,9 +618,15 @@ export async function bookReservation(args: {
     );
     if (!lockRes.ok) return null;
     const lock = (await lockRes.json().catch(() => null)) as
-      | { reservation_token?: string }
+      | { reservation_token?: string; payment_method?: unknown }
       | null;
     if (!lock?.reservation_token) return null;
+    // A payment_method on the lock means the venue requires a card hold /
+    // deposit to hold the table. OpenTable collects it through the guest's
+    // reservation, so we surface it to the booker.
+    const depositRequired =
+      lock.payment_method != null &&
+      !(Array.isArray(lock.payment_method) && lock.payment_method.length === 0);
 
     // Step 2 — commit the reservation.
     const { first, last } = splitName(args.name);
@@ -653,6 +662,7 @@ export async function bookReservation(args: {
       confirmation: String(resv.confirmation_number),
       manageUrl: resv.manage_reservation_url,
       status: 'confirmed',
+      depositRequired,
     };
   } catch {
     return null;

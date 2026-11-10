@@ -38,6 +38,21 @@ function to12h(t: string): string {
  * some venues with no (or a dead) profile photo; rather than a broken-image
  * icon we show a gradient tile with the restaurant's initial.
  */
+/**
+ * Honest highlight chips derived only from the real directory fields we have
+ * (rating, price band, cuisine) — not fabricated editorial. Keeps the card
+ * informative within what the OpenTable partner Directory API provides.
+ */
+function highlightsFor(r: Restaurant): string[] {
+  const out: string[] = [];
+  if (r.rating >= 4.7) out.push('Top rated');
+  else if (r.rating >= 4.4) out.push('Well reviewed');
+  if (r.priceBand >= 4) out.push('Fine dining');
+  else if (r.priceBand <= 1) out.push('Budget-friendly');
+  if (r.genre && r.genre !== 'Restaurant') out.push(r.genre);
+  return out.slice(0, 3);
+}
+
 function RestaurantImage({ src, name }: { src?: string; name: string }) {
   const [failed, setFailed] = useState(!src);
   const letter = name.trim()[0]?.toUpperCase() || '•';
@@ -382,6 +397,18 @@ export default function RestaurantsPage() {
                 <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-400">
                   <MapPin className="h-3 w-3" /> {r.neighborhood}, {r.city}
                 </p>
+                {highlightsFor(r).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {highlightsFor(r).map((h) => (
+                      <span
+                        key={h}
+                        className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+                      >
+                        {h}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-auto pt-4">
                   <Button size="sm" className="w-full" onClick={() => setSelected(r)}>
                     Reserve a table
@@ -557,6 +584,13 @@ function BookingModal({
                 {restaurant.name} · {date} at {done.time} · party of {party}
               </p>
               <p className="mt-1 text-xs text-slate-400">Confirmation {done.confirmation}</p>
+              {done.depositRequired && (
+                <p className="mx-auto mt-2 max-w-xs rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                  This venue required a card on file / deposit to hold the table.
+                  OpenTable manages the hold — review the cancellation policy on your
+                  reservation to avoid a charge.
+                </p>
+              )}
               {done.source === 'opentable' ? (
                 <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
                   <Check className="h-3 w-3" /> Confirmed on OpenTable
