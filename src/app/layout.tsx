@@ -64,10 +64,11 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${sora.variable}`} suppressHydrationWarning>
       <head>
         <script
-          // Apply the saved theme before paint so there's no light→dark flash.
+          // Apply the saved theme before paint so there's no flash. Saved
+          // preference wins; with none, follow the OS (prefers-color-scheme).
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{if(localStorage.getItem('hv_theme')==='dark')document.documentElement.classList.add('dark');}catch(e){}})();",
+              "(function(){try{var t=localStorage.getItem('hv_theme');if(t==='dark'||(!t&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark');}catch(e){}})();",
           }}
         />
       </head>

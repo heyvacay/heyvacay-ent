@@ -1,5 +1,12 @@
 @import 'tailwindcss';
 
+/* Drive `dark:` variants from the `.dark` class our theme toggle sets on <html>
+   (ThemeToggle + the bootstrap script in layout.tsx), NOT the OS
+   prefers-color-scheme. Without this, Tailwind v4 defaults to the media query,
+   so toggling the app to light while the OS is in dark mode left every
+   `dark:text-white` active → white text on light backgrounds. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ------------------------------------------------------------------ */
 /*  HeyVacay Enterprise — brand design tokens                          */
 /*  Signature cyan #23e3ef on deep navy. Premium, high-contrast SaaS.  */
