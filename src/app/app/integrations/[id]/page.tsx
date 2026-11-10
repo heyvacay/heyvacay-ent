@@ -22,7 +22,14 @@ import { QuickBooksPanel } from '@/components/app/QuickBooksPanel';
 import { XeroPanel } from '@/components/app/XeroPanel';
 import { BambooHRPanel } from '@/components/app/BambooHRPanel';
 import { SlackPanel } from '@/components/app/SlackPanel';
+import { RosterImportPanel } from '@/components/app/RosterImportPanel';
+import { CardFeedPanel } from '@/components/app/CardFeedPanel';
+import { NetSuitePanel } from '@/components/app/NetSuitePanel';
+import { ExpensifyPanel } from '@/components/app/ExpensifyPanel';
 import type { ExpenseCategory } from '@/lib/types';
+
+const ROSTER_IDS = ['rippling', 'okta', 'workday', 'gusto', 'google'];
+const CARD_IDS = ['ramp', 'brex'];
 
 const CATEGORIES: ExpenseCategory[] = [
   'Meals',
@@ -85,9 +92,14 @@ export default function IntegrationDetailPage() {
   const isXero = integration.id === 'xero';
   const isBambooHR = integration.id === 'bamboohr';
   const isSlack = integration.id === 'slack';
+  const isRoster = ROSTER_IDS.includes(integration.id);
+  const isCard = CARD_IDS.includes(integration.id);
+  const isNetSuite = integration.id === 'netsuite';
+  const isExpensify = integration.id === 'expensify';
   const isRealAccounting = isQuickBooks || isXero;
   // Any integration with its own real panel (owns its connect/disconnect).
-  const isRealIntegration = isRealAccounting || isBambooHR || isSlack;
+  const isRealIntegration =
+    isRealAccounting || isBambooHR || isSlack || isRoster || isCard || isNetSuite || isExpensify;
 
   const connect = () => {
     setConnecting(true);
@@ -145,6 +157,10 @@ export default function IntegrationDetailPage() {
       {isXero && <XeroPanel integration={integration} />}
       {isBambooHR && <BambooHRPanel integration={integration} />}
       {isSlack && <SlackPanel integration={integration} />}
+      {isRoster && <RosterImportPanel integration={integration} />}
+      {isCard && <CardFeedPanel integration={integration} />}
+      {isNetSuite && <NetSuitePanel integration={integration} />}
+      {isExpensify && <ExpensifyPanel integration={integration} />}
 
       {/* ---- not connected: connect panel ---- */}
       {!isRealIntegration && !connected && (

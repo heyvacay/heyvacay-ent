@@ -258,6 +258,44 @@ export const XERO = {
 };
 
 /**
+ * Gusto — HR roster sync (OAuth2). Shared app; each company authorizes its own
+ * Gusto. Secrets: GUSTO_CLIENT_ID, GUSTO_CLIENT_SECRET. Non-secret: GUSTO_REDIRECT_URI.
+ * GUSTO_API_BASE defaults to the demo host; set it to the production host to go live.
+ */
+export const GUSTO = {
+  clientId: process.env.GUSTO_CLIENT_ID || '',
+  clientSecret: process.env.GUSTO_CLIENT_SECRET || '',
+  redirectUri:
+    process.env.GUSTO_REDIRECT_URI ||
+    'https://ent.stage.heyvacay.co/api/integrations/roster/gusto/callback',
+  apiBase: (process.env.GUSTO_API_BASE || 'https://api.gusto-demo.com').replace(/\/+$/, ''),
+  authorizeUrl: process.env.GUSTO_OAUTH_AUTHORIZE || '', // defaults to `${apiBase}/oauth/authorize`
+  tokenUrl: process.env.GUSTO_OAUTH_TOKEN || '', // defaults to `${apiBase}/oauth/token`
+  get configured(): boolean {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
+/**
+ * Google Workspace — directory user sync (OAuth2, Admin SDK). The authorizing
+ * user must be a Workspace admin. Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+ * Non-secret: GOOGLE_REDIRECT_URI.
+ */
+export const GOOGLE_WS = {
+  clientId: process.env.GOOGLE_CLIENT_ID || '',
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  redirectUri:
+    process.env.GOOGLE_REDIRECT_URI ||
+    'https://ent.stage.heyvacay.co/api/integrations/roster/google/callback',
+  authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenUrl: 'https://oauth2.googleapis.com/token',
+  scope: 'openid email https://www.googleapis.com/auth/admin.directory.user.readonly',
+  get configured(): boolean {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
+/**
  * DynamoDB table holding per-company integration connections (OAuth tokens +
  * account mappings). The ENT ECS task role is granted access to this one table.
  * When unset / unreachable, tokenStore falls back to an in-process map so local

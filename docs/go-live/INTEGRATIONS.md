@@ -20,11 +20,15 @@ you do per integration.
 | **OpenWeather** (forecast) | 🟢 Key-ready | Add `WEATHER_API_KEY` → uncomment tfvars → apply |
 | **Email / Resend** (transactional) | 🟢 Key-ready | Add `EMAIL_API_KEY` + verify domain → uncomment tfvars → apply |
 | **Flight status** (AeroDataBox) | 🟢 Key-ready | Add `FLIGHT_STATUS_API_KEY` (RapidAPI) → uncomment tfvars → apply |
-| **NetSuite / Workday / Rippling / Gusto / Expensify / Ramp / Brex / Okta / Google SSO** | 🟡 Roadmap | Each needs a real OAuth/API build — see the roadmap section |
+| **Rippling / Okta / Workday** (people) | 🟢 Ready now | No server keys — admin enters credentials in the UI |
+| **Ramp / Brex** (card feed) | 🟢 Ready now | No server keys — admin enters API creds in the UI |
+| **NetSuite** (accounting) | 🟢 Ready now | No server keys — admin enters Token-Based Auth values in the UI |
+| **Expensify** (link) | 🟢 Ready now | No server keys — admin enters partner creds in the UI |
+| **Gusto** (people) | 🟢 Key-ready | Register a Gusto OAuth app → add 2 keys → uncomment tfvars → apply |
+| **Google Workspace** (directory) | 🟢 Key-ready | Register a Google OAuth app → add 2 keys → uncomment tfvars → apply |
 
-All integrations now show **real brand logos**. The ones marked 🟡 still display
-in the Integrations tab (with logos) but their connect flow is not wired to a live
-API yet — nothing fake is shown as "connected" for the ones that are built.
+**Every integration card is now a real integration** — nothing is faked as
+"connected." All show **real brand logos**.
 
 ## The universal pattern (same for all)
 
@@ -163,21 +167,61 @@ Per-company Incoming Webhook; nothing to wire in IaC.
   hello message confirms it; approval requests + trip alerts post to that channel.
   URLs are restricted to `hooks.slack.com` server-side.
 
+### 9. People sync — Rippling, Okta, Workday 🟢 ready now (no server keys)
+All three import your roster into HeyVacay as people (deduped by email). In the
+app: Integrations → the provider → enter credentials → **Sync roster**.
+- **Rippling:** API key (Rippling → Settings → API).
+- **Okta:** Okta domain (`yourco.okta.com`) + an API token (Security → API → Tokens).
+- **Workday:** a Report-as-a-Service (RaaS) report URL that outputs workers (name,
+  email, title, department) + an Integration System User (username + password).
+
+### 10. Card feed — Ramp, Brex 🟢 ready now (no server keys)
+Pull recent card transactions to reconcile against trips. In the app: Integrations
+→ the provider → enter API credentials → **Load transactions**.
+- **Ramp:** client id + secret (Ramp → Developer API, grant `transactions:read`).
+- **Brex:** an API token (Brex → Developer → Tokens, transactions scope).
+
+### 11. NetSuite 🟢 ready now (no server keys) — Token-Based Auth
+In the app: Integrations → NetSuite → paste the five TBA values (account id,
+consumer key/secret, token id/secret) → map accounts (live via SuiteQL, with
+smart suggestions) → **Post** approved expenses as Journal Entries (debit the
+mapped expense account, credit the chosen bank/card account).
+- **Your part in NetSuite:** enable Token-Based Auth + REST Web Services, create an
+  Integration record (consumer key/secret) and an Access Token (token id/secret).
+
+### 12. Expensify 🟢 ready now (no server keys)
+In the app: Integrations → Expensify → paste the Integration Server
+`partnerUserID` + `partnerUserSecret` (expensify.com → Settings → Account → API).
+We validate by listing your policies (workspaces). Full report import is the next step.
+
+### 13. Gusto — roster (OAuth) 🟢 key-ready
+- **Your part:** register an app at dev.gusto.com; redirect URI
+  `https://ent.stage.heyvacay.co/api/integrations/roster/gusto/callback`.
+- **Secret fields:** `GUSTO_CLIENT_ID`, `GUSTO_CLIENT_SECRET`. **tfvars:** uncomment
+  `ent_gusto_client_*_arn`, then the standard targeted apply.
+- **Note:** defaults to Gusto's **demo** API host (`GUSTO_API_BASE`); set it to the
+  production host to go live.
+
+### 14. Google Workspace — directory (OAuth) 🟢 key-ready
+- **Your part:** OAuth client at console.cloud.google.com (enable the Admin SDK);
+  redirect URI `https://ent.stage.heyvacay.co/api/integrations/roster/google/callback`.
+  The authorizing user must be a **Workspace admin**.
+- **Secret fields:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. **tfvars:** uncomment
+  `ent_google_client_*_arn`, then the standard targeted apply.
+
 ---
 
-## Display-only today (roadmap — real build still required)
-These show in **Integrations** with real logos, but their connect flow is **not
-wired to a live API yet** (each needs its own OAuth app + sync service). Not shown
-as "connected" — the UI keeps the existing placeholder flow:
-- **NetSuite** (accounting) — OAuth1 TBA / SuiteTalk; heavier than QBO/Xero.
-- **Workday** (HR) — enterprise SOAP/REST; large build.
-- **Rippling / Gusto** (HR) — OAuth2 employee sync; can reuse the BambooHR import shape.
-- **Expensify / Ramp / Brex** (expense & cards) — OAuth/API transaction sync.
-- **Okta / Google Workspace SSO** (identity) — SAML/SCIM; an auth project, not a data sync.
+## Everything is built
+All 13 integration cards + the infra integrations are now **real** — nothing is
+faked as "connected." The two that still need a server OAuth app (Gusto, Google)
+are clearly marked above; the rest are per-company (the admin connects in the UI
+with their own credentials, no infra). Verify any of them at
+`/api/integrations/diag`.
 
-Priority order to build next (fastest first, reusing what's built): **Ramp/Brex**
-(token + transactions), **Gusto/Rippling** (OAuth roster, like BambooHR),
-**NetSuite** (like Xero), then **Workday** and **SSO**.
+**Reminder:** the per-company integrations (Rippling, Okta, Workday, Ramp, Brex,
+NetSuite, Expensify, BambooHR, Slack) are built against each provider's documented
+API but can only be exercised with real credentials — connect each once to confirm
+the field mapping against your actual account, the same way we did QuickBooks.
 
 ---
 

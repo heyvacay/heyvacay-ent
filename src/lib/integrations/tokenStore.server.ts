@@ -19,7 +19,20 @@ import 'server-only';
 
 import { INTEGRATIONS_TABLE, AWS_REGION } from '@/lib/config.server';
 
-export type IntegrationProvider = 'quickbooks' | 'xero' | 'bamboohr' | 'slack';
+export type IntegrationProvider =
+  | 'quickbooks'
+  | 'xero'
+  | 'netsuite'
+  | 'bamboohr'
+  | 'slack'
+  | 'rippling'
+  | 'okta'
+  | 'workday'
+  | 'gusto'
+  | 'google'
+  | 'ramp'
+  | 'brex'
+  | 'expensify';
 
 export interface IntegrationConnection {
   companyId: string;

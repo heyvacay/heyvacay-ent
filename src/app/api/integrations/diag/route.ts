@@ -9,6 +9,8 @@ import {
   RECEIPT_OCR,
   QUICKBOOKS,
   XERO,
+  GUSTO,
+  GOOGLE_WS,
   INTEGRATIONS_TABLE,
   isLiveBooking,
   API_BASE_URL,
@@ -112,6 +114,16 @@ export function GET() {
       powers: 'Approval requests + trip alerts to a Slack channel',
       verify: '/app/integrations/slack',
     },
+    { key: 'gusto', name: 'Gusto — roster sync (OAuth2)', configured: GUSTO.configured, powers: 'Import employees', verify: '/app/integrations/gusto' },
+    { key: 'google', name: 'Google Workspace — user sync (OAuth2)', configured: GOOGLE_WS.configured, powers: 'Import directory users', verify: '/app/integrations/google' },
+    // Per-company (admin enters their own credentials in the UI) — always "ready".
+    { key: 'rippling', name: 'Rippling — roster sync (per-company API key)', configured: true, powers: 'Import employees', verify: '/app/integrations/rippling' },
+    { key: 'okta', name: 'Okta — user sync (per-company API token)', configured: true, powers: 'Import users', verify: '/app/integrations/okta' },
+    { key: 'workday', name: 'Workday — worker sync (per-company RaaS)', configured: true, powers: 'Import workers', verify: '/app/integrations/workday' },
+    { key: 'ramp', name: 'Ramp — card feed (per-company API creds)', configured: true, powers: 'Recent card transactions', verify: '/app/integrations/ramp' },
+    { key: 'brex', name: 'Brex — card feed (per-company API token)', configured: true, powers: 'Recent card transactions', verify: '/app/integrations/brex' },
+    { key: 'netsuite', name: 'NetSuite — accounting (per-company TBA)', configured: true, powers: 'Map accounts + post journal entries', verify: '/app/integrations/netsuite' },
+    { key: 'expensify', name: 'Expensify — link (per-company partner creds)', configured: true, powers: 'Validate + list policies', verify: '/app/integrations/expensify' },
   ];
 
   const connected = integrations.filter((i) => i.configured).length;
