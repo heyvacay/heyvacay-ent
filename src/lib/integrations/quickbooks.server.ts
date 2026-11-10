@@ -182,7 +182,7 @@ export async function getValidAccessToken(
   companyId: string
 ): Promise<{ accessToken: string; realmId: string; conn: IntegrationConnection }> {
   const conn = await getConnection(companyId, PROVIDER);
-  if (!conn || conn.status === 'revoked') {
+  if (!conn || conn.status === 'revoked' || !conn.realmId) {
     throw new Error('QuickBooks is not connected for this company.');
   }
   if (Date.now() < conn.accessExpiresAt - REFRESH_SKEW_MS) {
@@ -190,7 +190,7 @@ export async function getValidAccessToken(
   }
   try {
     const refreshed = await refreshTokens(conn);
-    return { accessToken: refreshed.accessToken, realmId: refreshed.realmId, conn: refreshed };
+    return { accessToken: refreshed.accessToken, realmId: refreshed.realmId || conn.realmId, conn: refreshed };
   } catch (err) {
     await patchConnection(companyId, PROVIDER, { status: 'error' });
     throw new Error(

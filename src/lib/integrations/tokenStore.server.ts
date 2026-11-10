@@ -19,12 +19,13 @@ import 'server-only';
 
 import { INTEGRATIONS_TABLE, AWS_REGION } from '@/lib/config.server';
 
-export type IntegrationProvider = 'quickbooks';
+export type IntegrationProvider = 'quickbooks' | 'xero' | 'bamboohr' | 'slack';
 
 export interface IntegrationConnection {
   companyId: string;
   provider: IntegrationProvider;
-  /** OAuth access token (short-lived; refreshed automatically). */
+  /** OAuth access token (short-lived; refreshed automatically). Empty for
+   *  API-key / webhook providers (BambooHR, Slack). */
   accessToken: string;
   /** OAuth refresh token (long-lived). */
   refreshToken: string;
@@ -33,15 +34,21 @@ export interface IntegrationConnection {
   /** Epoch ms when the refresh token expires (QBO ~100 days). */
   refreshExpiresAt?: number;
   /** QuickBooks company (realm) id the tokens are scoped to. */
-  realmId: string;
-  /** Human-friendly company name, fetched once at connect for display. */
+  realmId?: string;
+  /** Xero tenant (organisation) id the tokens are scoped to. */
+  tenantId?: string;
+  /** Human-friendly company / organisation name, fetched once for display. */
   companyName?: string;
-  /** Category -> QuickBooks expense Account id (the GL account each posts to). */
+  /** Category -> accounting Account id (the GL/code each category posts to). */
   accountMap?: Record<string, string>;
-  /** The QBO bank/credit-card Account id purchases are paid from. */
+  /** The bank/credit-card Account id purchases are paid from. */
   paymentAccountId?: string;
-  /** Default QBO Vendor id used when an expense has no matched vendor. */
+  /** Default Vendor/Contact id used when an expense has no matched vendor. */
   defaultVendorId?: string;
+  /** Generic per-provider config bag (e.g. BambooHR subdomain, Slack webhook,
+   *  stored API key). Kept flexible so API-key/webhook providers reuse the
+   *  same store without new columns. */
+  config?: Record<string, string>;
   status: 'connected' | 'revoked' | 'error';
   connectedAt: string;
   updatedAt: string;

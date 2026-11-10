@@ -85,12 +85,25 @@ export const WEATHER = {
   },
 };
 
-/** Flight status — live on-time / delay / gate info for the active-trip view. */
+/**
+ * Flight status — live on-time / delay / gate info for the active-trip view.
+ * Defaults to AeroDataBox via RapidAPI (easiest to sign up for), so it's
+ * turn-key with just the RapidAPI key. For FlightAware or another provider,
+ * override FLIGHT_STATUS_API_BASE (+ _HOST if it uses a RapidAPI host header).
+ */
 export const FLIGHT_STATUS = {
-  base: process.env.FLIGHT_STATUS_API_BASE?.replace(/\/+$/, '') || '',
+  base:
+    process.env.FLIGHT_STATUS_API_BASE?.replace(/\/+$/, '') ||
+    'https://aerodatabox.p.rapidapi.com',
   apiKey: process.env.FLIGHT_STATUS_API_KEY || '',
+  /** RapidAPI host header value; empty for a non-RapidAPI provider (Bearer auth). */
+  host: process.env.FLIGHT_STATUS_API_HOST || 'aerodatabox.p.rapidapi.com',
   get live() {
     return Boolean(this.apiKey && this.base);
+  },
+  /** True when the base is a RapidAPI host (use X-RapidAPI-* headers). */
+  get isRapidApi() {
+    return /rapidapi\.com$/.test(this.host) || this.base.includes('rapidapi.com');
   },
 };
 
@@ -214,6 +227,34 @@ export const QUICKBOOKS = {
   get configured(): boolean {
     return Boolean(this.clientId && this.clientSecret);
   },
+};
+
+/**
+ * Xero — real accounting sync (OAuth2 + Accounting API), same shape as QuickBooks.
+ * Each company connects its own Xero organisation; approved expenses post as
+ * Xero spend bank transactions against the mapped account codes.
+ *
+ * Secrets: XERO_CLIENT_ID, XERO_CLIENT_SECRET.
+ * Non-secret env: XERO_REDIRECT_URI (must match a Redirect URI on the Xero app).
+ */
+export const XERO = {
+  clientId: process.env.XERO_CLIENT_ID || '',
+  clientSecret: process.env.XERO_CLIENT_SECRET || '',
+  redirectUri:
+    process.env.XERO_REDIRECT_URI ||
+    'https://ent.stage.heyvacay.co/api/integrations/xero/callback',
+  authorizeUrl: process.env.XERO_OAUTH_AUTHORIZE || 'https://login.xero.com/identity/connect/authorize',
+  tokenUrl: process.env.XERO_OAUTH_TOKEN || 'https://identity.xero.com/connect/token',
+  // offline_access gives us a refresh token; the rest are the accounting scopes.
+  scope:
+    process.env.XERO_SCOPE ||
+    'offline_access accounting.transactions accounting.settings.read accounting.contacts',
+  apiBase: (process.env.XERO_API_BASE || 'https://api.xero.com').replace(/\/+$/, ''),
+  get configured(): boolean {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+  /** Xero is always "production" (it has no separate sandbox host — use a demo org). */
+  env: 'production',
 };
 
 /**

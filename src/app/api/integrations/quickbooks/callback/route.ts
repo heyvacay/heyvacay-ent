@@ -41,7 +41,7 @@ export async function GET(req: Request) {
   const base = appOrigin(req);
   const dest = (status: string, extra?: Record<string, string>) => {
     const to = new URL('/app/integrations/quickbooks', base || req.url);
-    to.searchParams.set('qbo', status);
+    to.searchParams.set('conn', status);
     for (const [k, v] of Object.entries(extra || {})) to.searchParams.set(k, v);
     return NextResponse.redirect(to);
   };

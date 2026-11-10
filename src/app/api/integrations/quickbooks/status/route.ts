@@ -19,6 +19,7 @@ export async function GET(req: Request) {
     status: conn?.status || 'disconnected',
     companyName: conn?.companyName || null,
     realmId: conn?.realmId || null,
+    orgId: conn?.realmId || null,
     connectedAt: conn?.connectedAt || null,
     accountMap: conn?.accountMap || {},
     paymentAccountId: conn?.paymentAccountId || null,
