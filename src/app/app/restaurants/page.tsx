@@ -24,6 +24,41 @@ import { todayISO, shortDate } from '@/lib/format';
 import { Check, Shield, MapPin, Sparkles, Calendar } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 
+/** 24h "HH:mm" → a clean 12-hour label like "7:00 PM". */
+function to12h(t: string): string {
+  const [h, m] = (t || '').split(':').map(Number);
+  if (Number.isNaN(h)) return t;
+  const ap = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 || 12;
+  return `${hr}:${String(m || 0).padStart(2, '0')} ${ap}`;
+}
+
+/**
+ * Restaurant photo with a clean branded fallback. OpenTable's directory returns
+ * some venues with no (or a dead) profile photo; rather than a broken-image
+ * icon we show a gradient tile with the restaurant's initial.
+ */
+function RestaurantImage({ src, name }: { src?: string; name: string }) {
+  const [failed, setFailed] = useState(!src);
+  const letter = name.trim()[0]?.toUpperCase() || '•';
+  if (failed || !src) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand/35 via-brand/10 to-slate-200 dark:to-slate-800">
+        <span className="font-display text-5xl font-bold text-brand-dark/60">{letter}</span>
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={name}
+      onError={() => setFailed(true)}
+      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+    />
+  );
+}
+
 export default function RestaurantsPage() {
   const { activeUser, state } = useStore();
   const scope = state.company.id;
@@ -69,11 +104,15 @@ export default function RestaurantsPage() {
   const [priceMax, setPriceMax] = useState(0); // 0 = any, else 1–4 ($–$$$$)
   const [sortBy, setSortBy] = useState<'rating' | 'price_low' | 'price_high'>('rating');
 
+  // The field displays the full "City, Region, Country" label, but OpenTable's
+  // directory is filtered by the city name only, so query by the first segment.
+  const cityQuery = city.split(',')[0].trim();
+
   const search = async (nameArg?: string) => {
-    if (city.trim().length < 2) return;
+    if (cityQuery.length < 2) return;
     setLoading(true);
     try {
-      setResults(await searchRestaurants(city, genre || undefined, nameArg));
+      setResults(await searchRestaurants(cityQuery, genre || undefined, nameArg));
     } finally {
       setLoading(false);
     }
@@ -139,7 +178,7 @@ export default function RestaurantsPage() {
                     setCityPicked(false);
                   }}
                   onPick={(p) => {
-                    setCity(p.label);
+                    setCity([p.label, p.sub].filter(Boolean).join(', '));
                     setCityPicked(true);
                   }}
                 />
@@ -329,12 +368,7 @@ export default function RestaurantsPage() {
               className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="relative h-44 w-full overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={r.image}
-                  alt={r.name}
-                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                />
+                <RestaurantImage src={r.image} name={r.name} />
                 <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2 py-0.5 text-xs font-bold text-slate-800 shadow-sm">
                   ★ {r.rating}
                 </span>
@@ -545,45 +579,66 @@ function BookingModal({
                   sure the restaurant takes great care of you — book with confidence.
                 </span>
               </div>
-              {avail && !avail.requestedAvailable && (
-                <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <span>
-                    <strong>{time} isn&apos;t available.</strong> Here are the closest open times —
-                    pick one to book.
-                  </span>
-                </div>
-              )}
-              {avail?.requestedAvailable && (
-                <p className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-                  <Check className="h-4 w-4" /> {time} is available.
-                </p>
-              )}
+              {(() => {
+                const times = avail?.requestedAvailable
+                  ? [{ time, available: true }, ...(avail?.slots ?? [])]
+                  : avail?.slots ?? [];
+                const none = !avail || (avail.slots.length === 0 && !avail.requestedAvailable);
+                return (
+                  <>
+                    {avail?.requestedAvailable ? (
+                      <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
+                        <Check className="h-4 w-4" /> {to12h(time)} is available
+                      </p>
+                    ) : !none ? (
+                      <p className="mb-3 text-sm text-slate-500">
+                        <span className="font-semibold text-slate-700">{to12h(time)}</span> is booked — here are the
+                        closest open tables.
+                      </p>
+                    ) : null}
 
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Choose a time
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {(avail?.requestedAvailable ? [{ time, available: true }, ...(avail?.slots ?? [])] : avail?.slots ?? []).map(
-                  (s) => (
-                    <button
-                      key={s.time}
-                      onClick={() => setChosenTime(s.time)}
-                      className={cn(
-                        'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                        chosenTime === s.time
-                          ? 'border-brand bg-brand/10 text-brand-dark'
-                          : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                      )}
-                    >
-                      {s.time}
-                    </button>
-                  )
-                )}
-                {(!avail || (avail.slots.length === 0 && !avail.requestedAvailable)) && (
-                  <p className="text-sm text-slate-400">No nearby times available.</p>
-                )}
-              </div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        {avail?.requestedAvailable ? 'Pick a time' : 'Nearest available'}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {shortDate(date)} · {party} {party === 1 ? 'guest' : 'guests'}
+                      </p>
+                    </div>
+                    {none ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
+                        No tables near {to12h(time)}. Try another time or date.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {times.map((s) => {
+                          const isReq = s.time === time;
+                          const isSel = chosenTime === s.time;
+                          return (
+                            <button
+                              key={s.time}
+                              onClick={() => setChosenTime(s.time)}
+                              className={cn(
+                                'relative rounded-xl border px-2 py-2.5 text-sm font-semibold transition',
+                                isSel
+                                  ? 'border-brand bg-brand text-navy shadow-sm'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-brand/50 hover:bg-brand/5 dark:border-white/10 dark:bg-white/5 dark:text-slate-200'
+                              )}
+                            >
+                              {to12h(s.time)}
+                              {isReq && !isSel && (
+                                <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">
+                                  yours
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               <div className="mt-4 space-y-2">
                 <div>

@@ -659,7 +659,7 @@ function DinnerPanel({
               [
                 ['1', 'RSVP', 'Everyone says whether they’re coming.'],
                 ['2', 'Pick cuisine', 'The group votes on a type of food.'],
-                ['3', 'Pick spot', `Vote between real restaurants in ${e.city}.`],
+                ['3', 'Pick spot', `Vote between restaurants in ${e.city}.`],
                 ['4', 'Booked', 'The winner is reserved and details go out.'],
               ] as [string, string, string][]
             ).map(([n, t, dsc]) => (

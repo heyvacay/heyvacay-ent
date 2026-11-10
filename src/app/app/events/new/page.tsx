@@ -509,7 +509,7 @@ export default function NewEventPage() {
             <div className="space-y-4">
               <h2 className="font-display text-lg font-bold text-slate-900">Allowed hotels</h2>
               <p className="text-sm text-slate-500">
-                Search real properties and add them. In event-only booking these are the only hotels
+                Search properties and add them. In event-only booking these are the only hotels
                 shown — and they book without approval, even if out of policy.
               </p>
               <HotelAllowPicker
