@@ -41,3 +41,68 @@ export async function pushWorkspace(
     return false;
   }
 }
+
+/* ----------------------------- events ----------------------------- */
+
+/** Load a company's events from the shared store. null = offline/none. */
+export async function fetchEvents<T>(companyId: string): Promise<T[] | null> {
+  try {
+    const res = await fetch(`/api/workspace/events?companyId=${encodeURIComponent(companyId)}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { events?: T[] };
+    return Array.isArray(json.events) ? json.events : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function pushEvents<T>(companyId: string, events: T[]): Promise<boolean> {
+  try {
+    const res = await fetch('/api/workspace/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId, events }),
+      keepalive: true,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/* ------------------------------ CRM ------------------------------- */
+
+export interface CrmPayload<C, R> {
+  companies: C[];
+  reps: R[];
+  commission: unknown;
+  commissionApprovals: unknown[];
+}
+
+/** Load the shared CRM book. null = nothing stored yet / offline. */
+export async function fetchCrm<C, R>(): Promise<CrmPayload<C, R> | null> {
+  try {
+    const res = await fetch('/api/crm', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: CrmPayload<C, R> | null };
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function pushCrm<C, R>(payload: CrmPayload<C, R>): Promise<boolean> {
+  try {
+    const res = await fetch('/api/crm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -18,8 +19,23 @@ import {
   type TravelEvent,
 } from './events';
 import { uid } from './format';
+import { fetchEvents, pushEvents } from './workspaceSync';
 
+// Legacy single-tenant key (default/demo workspace). Real companies use a
+// per-company key so events are isolated and sync to the shared server store.
 const KEY = 'hv_events_v1';
+const eventsKey = (companyId?: string | null) =>
+  companyId ? `hv_events_${companyId}` : KEY;
+
+function readActiveCompanyId(): string | undefined {
+  try {
+    const raw = localStorage.getItem('hv_ent_active_account');
+    const acct = raw ? (JSON.parse(raw) as { id?: string }) : null;
+    return acct?.id || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface EventsApi {
   events: TravelEvent[];
@@ -119,25 +135,70 @@ const Ctx = createContext<EventsApi | null>(null);
 export function EventsProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<TravelEvent[]>(seedEvents());
   const [hydrated, setHydrated] = useState(false);
+  const [companyId, setCompanyId] = useState<string | undefined>(undefined);
+  const loadedCompanyRef = useRef<string | null>(null);
+  const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Track the active company (same source the main workspace uses).
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setEvents(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-    setHydrated(true);
+    const read = () => setCompanyId(readActiveCompanyId());
+    read();
+    window.addEventListener('hv-account-change', read);
+    window.addEventListener('storage', read);
+    return () => {
+      window.removeEventListener('hv-account-change', read);
+      window.removeEventListener('storage', read);
+    };
   }, []);
 
+  // Load this company's events from localStorage (instant), then — for a real
+  // company — adopt the shared server copy.
+  useEffect(() => {
+    const key = eventsKey(companyId);
+    const switching = loadedCompanyRef.current !== key;
+    if (switching) {
+      try {
+        const raw = localStorage.getItem(key);
+        setEvents(raw ? (JSON.parse(raw) as TravelEvent[]) : companyId ? [] : seedEvents());
+      } catch {
+        setEvents(companyId ? [] : seedEvents());
+      }
+      loadedCompanyRef.current = key;
+      setHydrated(true);
+    }
+    if (!companyId) return; // demo workspace stays local-only
+    let live = true;
+    (async () => {
+      const remote = await fetchEvents<TravelEvent>(companyId);
+      if (!live || loadedCompanyRef.current !== key) return;
+      if (remote) {
+        setEvents((cur) =>
+          JSON.stringify(cur) !== JSON.stringify(remote) ? remote : cur
+        );
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [companyId]);
+
+  // Persist: localStorage cache + debounced write-through to the shared store.
   useEffect(() => {
     if (!hydrated) return;
+    const key = eventsKey(companyId);
+    if (loadedCompanyRef.current !== key) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify(events));
+      localStorage.setItem(key, JSON.stringify(events));
     } catch {
       /* ignore */
     }
-  }, [events, hydrated]);
+    if (companyId) {
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = setTimeout(() => {
+        if (loadedCompanyRef.current === key) void pushEvents(companyId, events);
+      }, 1200);
+    }
+  }, [events, hydrated, companyId]);
 
   const eventById = useCallback((id: string) => events.find((e) => e.id === id), [events]);
 

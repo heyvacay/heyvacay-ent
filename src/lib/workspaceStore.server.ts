@@ -252,31 +252,35 @@ function chunk<T>(arr: T[], n: number): T[][] {
   return out;
 }
 
+const prefixOf = (sk: string) => String(sk).split('#')[0];
+
 /**
- * Persist a workspace: write every current entity and delete any stored entity
- * that's no longer present (so storage stays in sync, normalized, per item).
+ * Core write: upsert `desired` rows and delete stored rows **only** under the
+ * `managedPrefixes` that are no longer present. Rows under any other prefix are
+ * left untouched, so independent writers (main workspace, events, CRM) can share
+ * the same partition without clobbering each other.
  */
-export async function saveWorkspace(
-  companyId: string,
-  data: WorkspaceData
+async function writeScoped(
+  pk: string,
+  desired: Row[],
+  managedPrefixes: Set<string>
 ): Promise<void> {
-  if (!companyId) return;
-  const desired = toRows(companyId, data);
   const desiredSks = new Set(desired.map((r) => r.sk));
 
-  // Figure out what to delete: stored sks not in the desired set.
   let existingSks: string[] = [];
   try {
-    const existing = await queryAll(companyId);
+    const existing = await queryAll(pk);
     existingSks = existing.map((r) => String(r.sk));
   } catch {
-    existingSks = [...memCompany(companyId).keys()];
+    existingSks = [...memCompany(pk).keys()];
   }
-  const toDelete = existingSks.filter((sk) => !desiredSks.has(sk));
+  const toDelete = existingSks.filter(
+    (sk) => managedPrefixes.has(prefixOf(sk)) && !desiredSks.has(sk)
+  );
 
-  // Update the in-process mirror regardless.
-  const bucket = memCompany(companyId);
-  bucket.clear();
+  // In-process mirror: replace only the managed-prefix rows.
+  const bucket = memCompany(pk);
+  for (const sk of toDelete) bucket.delete(sk);
   for (const r of desired) bucket.set(r.sk, r);
 
   const doc = await getDocClient();
@@ -284,7 +288,7 @@ export async function saveWorkspace(
 
   const requests = [
     ...desired.map((Item) => ({ PutRequest: { Item } })),
-    ...toDelete.map((sk) => ({ DeleteRequest: { Key: { pk: companyId, sk } } })),
+    ...toDelete.map((sk) => ({ DeleteRequest: { Key: { pk, sk } } })),
   ];
   try {
     for (const group of chunk(requests, 25)) {
@@ -292,6 +296,85 @@ export async function saveWorkspace(
     }
   } catch (err) {
     console.error('[workspace] save failed:', (err as Error)?.message);
-    // Best-effort: the in-process mirror still holds the latest.
   }
+}
+
+// Prefixes the main workspace owns (everything except events, which are synced
+// separately but live in the same company partition).
+const MAIN_PREFIXES = new Set<string>([
+  'settings',
+  ...Object.values(SK_PREFIX),
+]);
+
+/**
+ * Persist the main company workspace (settings + the normalized collections),
+ * leaving event rows (synced separately) untouched.
+ */
+export async function saveWorkspace(
+  companyId: string,
+  data: WorkspaceData
+): Promise<void> {
+  if (!companyId) return;
+  await writeScoped(companyId, toRows(companyId, data), MAIN_PREFIXES);
+}
+
+/* ------------------------------------------------------------------ */
+/* Generic per-prefix collection sync (events, CRM, …)                 */
+/* ------------------------------------------------------------------ */
+
+/** Load every item stored under `<prefix>#*` in a partition. */
+export async function loadCollection<T = unknown>(
+  pk: string,
+  prefix: string
+): Promise<T[]> {
+  if (!pk) return [];
+  let rows: Row[];
+  try {
+    rows = await queryAll(pk);
+  } catch {
+    rows = [...memCompany(pk).values()];
+  }
+  return rows.filter((r) => prefixOf(r.sk) === prefix).map((r) => r.data as T);
+}
+
+/** Replace the `<prefix>#*` items in a partition (puts + scoped deletes).
+ *  `keyOf` extracts each item's id — defaults to `item.id`. */
+export async function saveCollection<T>(
+  pk: string,
+  prefix: string,
+  items: T[],
+  keyOf: (item: T) => string = (it) => (it as unknown as { id: string }).id
+): Promise<void> {
+  if (!pk) return;
+  const desired: Row[] = items
+    .map((it) => ({ item: it, key: keyOf(it) }))
+    .filter((x) => typeof x.key === 'string' && x.key.length > 0)
+    .map((x) => ({ pk, sk: `${prefix}#${x.key}`, data: x.item }) as Row);
+  await writeScoped(pk, desired, new Set([prefix]));
+}
+
+/** Read a single settings-style record stored at `<name>#root`. */
+export async function loadRecord<T = unknown>(
+  pk: string,
+  name: string
+): Promise<T | null> {
+  if (!pk) return null;
+  let rows: Row[];
+  try {
+    rows = await queryAll(pk);
+  } catch {
+    rows = [...memCompany(pk).values()];
+  }
+  const row = rows.find((r) => r.sk === `${name}#root`);
+  return row ? (row.data as T) : null;
+}
+
+/** Write a single settings-style record at `<name>#root`. */
+export async function saveRecord(
+  pk: string,
+  name: string,
+  data: unknown
+): Promise<void> {
+  if (!pk) return;
+  await writeScoped(pk, [{ pk, sk: `${name}#root`, data } as Row], new Set([name]));
 }

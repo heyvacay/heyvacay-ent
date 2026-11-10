@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -37,6 +38,7 @@ import {
 } from './crm';
 import { todayISO, uid } from './format';
 import { sendEmail } from './email';
+import { fetchCrm, pushCrm } from './workspaceSync';
 
 const KEY = 'hv_crm_demo_v2';
 const REPS_KEY = 'hv_crm_reps_v1';
@@ -193,6 +195,30 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
+  // Adopt the shared CRM book from the server once, after the local load. The
+  // signed-in rep (currentRep) stays per-device and is never synced.
+  const crmPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    let live = true;
+    (async () => {
+      const remote = await fetchCrm<SalesCompany, Rep>();
+      if (!live || !remote) return;
+      if (Array.isArray(remote.companies) && remote.companies.length)
+        setCompanies(remote.companies.map(hydrateCompany));
+      if (Array.isArray(remote.reps) && remote.reps.length) setReps(remote.reps);
+      if (remote.commission && (remote.commission as CommissionState).starRules)
+        setCommissionState(remote.commission as CommissionState);
+      if (Array.isArray(remote.commissionApprovals))
+        setCommissionApprovals(remote.commissionApprovals as CommissionApproval[]);
+    })();
+    return () => {
+      live = false;
+    };
+    // Run once after hydration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   useEffect(() => {
     if (!hydrated) return;
     try {
@@ -203,7 +229,17 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [companies, reps, commission, currentRep, hydrated]);
+    // Debounced write-through of the shared CRM book (not currentRep).
+    if (crmPushTimer.current) clearTimeout(crmPushTimer.current);
+    crmPushTimer.current = setTimeout(() => {
+      void pushCrm<SalesCompany, Rep>({
+        companies,
+        reps,
+        commission,
+        commissionApprovals,
+      });
+    }, 1200);
+  }, [companies, reps, commission, currentRep, commissionApprovals, hydrated]);
 
   const setCurrentRep = useCallback((name: string) => setCurrentRepState(name), []);
   // The signed-in rep's role drives all gating (commission management, etc.).
