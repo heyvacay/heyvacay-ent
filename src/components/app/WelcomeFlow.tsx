@@ -71,7 +71,7 @@ export function WelcomeFlow({
     {
       selector: '[data-tour="nav-/app/book"]',
       title: 'Book your travel here',
-      body: 'Search flights and hotels at your company’s negotiated rates — everything shown is already in policy, so you can just book.',
+      body: 'Search flights and hotels at your company’s negotiated rates. Every option is clearly flagged against your travel policy, so you always know what’s in policy before you book.',
     },
     {
       selector: '[data-tour="nav-/app/plan"]',
@@ -178,7 +178,7 @@ export function WelcomeFlow({
             a whole lot <span className="text-brand">easier.</span>
           </>
         }
-        sub="Welcome to HeyVacay — below-market fares, everything in policy, and rewards on every trip. Let us show you around."
+        sub="Welcome to HeyVacay — below-market fares, clear policy guidance on every option, and rewards on every trip. Let us show you around."
         cta="Show me around →"
         onCta={() => setPhase('tour')}
         footnote="Takes about 30 seconds. You can skip anytime."

@@ -25,7 +25,7 @@ const SLIDES: Slide[] = [
     points: [
       'Free forever — no seat fees, no platform fees by default',
       '~15% below market on flights + hotels',
-      'Every booking in policy, on budget, and rewarded',
+      'Every booking policy-checked, on budget, and rewarded',
     ],
     live: { label: 'Open the marketing site', href: '/' },
   },
