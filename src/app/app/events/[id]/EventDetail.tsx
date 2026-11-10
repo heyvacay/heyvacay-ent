@@ -51,6 +51,7 @@ export default function EventDetail({ id }: { id: string }) {
     setEventBudget,
     resolveExtraStay,
     joinEvent,
+    cancelEvent,
     startDinner,
     joinDinner,
     setRsvp,
@@ -72,6 +73,7 @@ export default function EventDetail({ id }: { id: string }) {
   );
   const [booking, setBooking] = useState(false);
   const [availNote, setAvailNote] = useState('');
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const bookedRef = useRef(false);
 
   const isAttendee = !!e?.attendees.some((a) => a.userId === activeUser.id);
@@ -246,13 +248,27 @@ export default function EventDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {(role === 'admin' || isHost) && (
+            {(role === 'admin' || isHost) && e.status !== 'cancelled' && (
               <Link
                 href={`/app/events/new?edit=${e.id}`}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/20 hover:bg-white/20"
               >
                 Edit event
               </Link>
+            )}
+            {(role === 'admin' || isHost) && e.status !== 'cancelled' && (
+              <button
+                type="button"
+                onClick={() => setConfirmCancel(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-200 ring-1 ring-rose-300/30 hover:bg-rose-500/25"
+              >
+                Cancel event
+              </button>
+            )}
+            {e.status === 'cancelled' && (
+              <span className="rounded-full bg-rose-400/20 px-3 py-1 text-xs font-semibold text-rose-200">
+                Cancelled
+              </span>
             )}
             {d ? (
               <span
@@ -519,6 +535,54 @@ export default function EventDetail({ id }: { id: string }) {
           }}
           onBook={bookWinner}
         />
+      )}
+
+      {confirmCancel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirmCancel(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-bold text-slate-900">
+              Cancel this event?
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              We&apos;ll email all {e.attendees.length} attendee
+              {e.attendees.length === 1 ? '' : 's'} right away and post a notice in
+              the event chat. Event-only hotel allowances stop applying, and the
+              event drops off the dashboard in 48 hours. This can&apos;t be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirmCancel(false)}>
+                Keep event
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const recipients = cancelEvent(e.id, activeUser.name);
+                  const dates = `${shortDate(e.startDate)} – ${shortDate(e.endDate)}`;
+                  recipients.forEach((a) => {
+                    const email = emailById(a.userId);
+                    if (email)
+                      sendEmail('eventCancelled', email, {
+                        name: a.name,
+                        event: e.name,
+                        city: e.city,
+                        dates,
+                        host: activeUser.name,
+                      });
+                  });
+                  setConfirmCancel(false);
+                }}
+              >
+                Cancel event &amp; notify
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

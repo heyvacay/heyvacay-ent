@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
+import { isEventActive } from '@/lib/events';
 import { Button, Card, EmptyState, PageHeader } from '@/components/app/ui';
 import { shortDate } from '@/lib/format';
 import { Calendar, MapPin, Sparkles } from '@/components/icons';
@@ -31,7 +32,11 @@ export default function EventsPage() {
   }, [state.bookings, events]);
 
   const mine = events.filter((e) => e.attendees.some((a) => a.userId === activeUser.id));
-  const shown = role === 'admin' ? events : mine;
+  const scoped = role === 'admin' ? events : mine;
+  // Hide completed trips (ended before today) and cancelled events more than 48h
+  // old — the dashboard shows what's active and coming up.
+  const nowISO = new Date().toISOString();
+  const shown = scoped.filter((e) => isEventActive(e, nowISO));
 
   return (
     <div>

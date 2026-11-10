@@ -161,7 +161,27 @@ export interface TravelEvent {
   dinnerPlanMode?: 'now' | 'later' | 'none';
   /** For 'later': the date dinner planning should kick off (ISO yyyy-mm-dd). */
   dinnerPlanAt?: string;
+  /** Lifecycle. Undefined = active (legacy). A cancelled event is hidden from the
+   *  dashboard 48h after cancelledAt; everyone is notified when it's cancelled. */
+  status?: 'active' | 'cancelled';
+  cancelledAt?: string;
   createdAt: string;
+}
+
+/**
+ * Whether an event should still appear on the active dashboard list.
+ * - Cancelled events drop off 48h after they were cancelled.
+ * - Completed events (ended before today) drop off the active list.
+ */
+export function isEventActive(e: TravelEvent, nowISO: string): boolean {
+  const today = nowISO.slice(0, 10);
+  if (e.status === 'cancelled') {
+    if (!e.cancelledAt) return false;
+    const hrs = (Date.parse(nowISO) - Date.parse(e.cancelledAt)) / 3_600_000;
+    return hrs < 48;
+  }
+  // Completed = ended strictly before today.
+  return e.endDate >= today;
 }
 
 export interface DinnerScheduleOption {

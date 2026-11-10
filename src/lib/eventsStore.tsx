@@ -93,6 +93,9 @@ interface EventsApi {
   /** A manager grants / declines an extra-stay request. */
   resolveExtraStay: (eventId: string, userId: string, grant: boolean) => void;
   joinEvent: (eventId: string, userId: string, name: string) => void;
+  /** Cancel an event: marks it cancelled and posts a notice for everyone. The
+   *  list hides it 48h later. Returns the attendees to notify by email. */
+  cancelEvent: (eventId: string, byName: string) => EventAttendee[];
 
   startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
   joinDinner: (eventId: string, userId: string, name: string) => void;
@@ -357,6 +360,29 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const cancelEvent: EventsApi['cancelEvent'] = useCallback(
+    (eventId, byName) => {
+      const ev = events.find((e) => e.id === eventId);
+      const recipients = ev ? ev.attendees : [];
+      patch(eventId, (e) => ({
+        ...e,
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        messages: [
+          ...e.messages,
+          msg(
+            e.hostId,
+            byName,
+            `${byName} cancelled this event. Everyone has been notified by email; any event-only hotel allowances no longer apply.`,
+            true
+          ),
+        ],
+      }));
+      return recipients;
+    },
+    [events, patch]
+  );
+
   const startDinner: EventsApi['startDinner'] = useCallback(
     (eventId, hostId, date, time, expiresAt) =>
       patch(eventId, (e) => {
@@ -549,6 +575,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         requestExtraStay,
         resolveExtraStay,
         joinEvent,
+        cancelEvent,
         startDinner,
         joinDinner,
         setRsvp,

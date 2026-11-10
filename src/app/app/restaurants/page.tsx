@@ -60,7 +60,7 @@ function RestaurantImage({ src, name }: { src?: string; name: string }) {
 }
 
 export default function RestaurantsPage() {
-  const { activeUser, state } = useStore();
+  const { activeUser, state, updateUser } = useStore();
   const scope = state.company.id;
 
   // Warm the OpenTable directory cache in the background so the first search is
@@ -406,6 +406,15 @@ export default function RestaurantsPage() {
           guestName={activeUser.name}
           guestEmail={activeUser.email}
           guestPhone={activeUser.travelProfile?.phone}
+          onSaveContact={(phone) => {
+            // Remember the booker's mobile the first time they enter one, so it
+            // prefills next time here and anywhere else we need a contact number.
+            if (phone && phone !== activeUser.travelProfile?.phone) {
+              updateUser(activeUser.id, {
+                travelProfile: { ...(activeUser.travelProfile ?? {}), phone },
+              });
+            }
+          }}
           onBooked={(r) => {
             saveReservation(scope, r);
             refreshReservations();
@@ -427,6 +436,7 @@ function BookingModal({
   guestName,
   guestEmail,
   guestPhone,
+  onSaveContact,
   onBooked,
   onClose,
 }: {
@@ -439,6 +449,7 @@ function BookingModal({
   guestName: string;
   guestEmail?: string;
   guestPhone?: string;
+  onSaveContact?: (phone: string) => void;
   onBooked: (r: DiningReservation) => void;
   onClose: () => void;
 }) {
@@ -488,6 +499,7 @@ function BookingModal({
       });
       if (r) {
         setDone(r);
+        onSaveContact?.(phone.trim());
         onBooked({
           id: `dr_${Math.random().toString(36).slice(2, 10)}`,
           userId,

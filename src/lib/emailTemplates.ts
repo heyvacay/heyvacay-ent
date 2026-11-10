@@ -268,11 +268,35 @@ export function inviteEmail(d: {
   };
 }
 
+export function eventCancelledEmail(d: {
+  name: string;
+  event: string;
+  city: string;
+  dates: string;
+  host: string;
+}): { subject: string; html: string; text: string } {
+  const body = `
+    <p style="font-size:15px;color:#334155">Hi ${d.name}, ${d.host} has cancelled the company trip below.</p>
+    <div style="font-weight:700;font-size:16px;color:${NAVY};margin-top:8px">${d.event}</div>
+    ${kv([
+      ['Where', d.city],
+      ['When', d.dates],
+    ])}
+    <p style="font-size:14px;color:#334155">Any event-only hotel allowances for this trip no longer apply. If you already booked travel, review it in HeyVacay — you may need to cancel it.</p>
+    <a href="#" style="display:inline-block;margin-top:8px;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px">Review my trips</a>`;
+  return {
+    subject: `Cancelled: ${d.event}`,
+    html: wrap('An event was cancelled', body),
+    text: `${d.host} cancelled ${d.event} — ${d.city}, ${d.dates}. Event-only hotel allowances no longer apply.`,
+  };
+}
+
 export const TEMPLATES = {
   confirmation: confirmationEmail,
   approvalPending: approvalPendingEmail,
   approvalDecided: approvalDecidedEmail,
   eventAdded: eventAddedEmail,
+  eventCancelled: eventCancelledEmail,
   dinnerInvite: dinnerInviteEmail,
   dinnerReminder: dinnerReminderEmail,
   dinnerBooked: dinnerBookedEmail,
