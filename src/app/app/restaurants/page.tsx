@@ -12,13 +12,15 @@ import {
 } from '@/lib/restaurants';
 import { FOOD_GENRES } from '@/lib/events';
 import { Button, EmptyState, Field, Input, Select, PageHeader, cn } from '@/components/app/ui';
+import { CityPicker } from '@/components/app/CityPicker';
 import { todayISO } from '@/lib/format';
 import { Check, Shield, MapPin, Sparkles } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 
 export default function RestaurantsPage() {
   const { activeUser } = useStore();
-  const [city, setCity] = useState('San Francisco');
+  const [city, setCity] = useState('');
+  const [cityPicked, setCityPicked] = useState(false);
   const [genre, setGenre] = useState('');
   const [date, setDate] = useState(todayISO());
   const [time, setTime] = useState('19:00');
@@ -83,7 +85,19 @@ export default function RestaurantsPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="lg:col-span-2">
               <Field label="City">
-                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" />
+                <CityPicker
+                  value={city}
+                  selected={cityPicked}
+                  placeholder="Search a city…"
+                  onText={(v) => {
+                    setCity(v);
+                    setCityPicked(false);
+                  }}
+                  onPick={(p) => {
+                    setCity(p.label);
+                    setCityPicked(true);
+                  }}
+                />
               </Field>
             </div>
             <Field label="Cuisine">
@@ -130,7 +144,7 @@ export default function RestaurantsPage() {
           </div>
 
           <div className="mt-4">
-            <Button onClick={search} disabled={loading}>
+            <Button onClick={search} disabled={loading || city.trim().length < 2}>
               {loading ? 'Searching…' : 'Find tables'}
             </Button>
           </div>
@@ -242,6 +256,8 @@ export default function RestaurantsPage() {
           time={time}
           party={party}
           guestName={activeUser.name}
+          guestEmail={activeUser.email}
+          guestPhone={activeUser.travelProfile?.phone}
           onClose={() => setSelected(null)}
         />
       )}
@@ -255,6 +271,8 @@ function BookingModal({
   time,
   party,
   guestName,
+  guestEmail,
+  guestPhone,
   onClose,
 }: {
   restaurant: Restaurant;
@@ -262,6 +280,8 @@ function BookingModal({
   time: string;
   party: number;
   guestName: string;
+  guestEmail?: string;
+  guestPhone?: string;
   onClose: () => void;
 }) {
   const [avail, setAvail] = useState<Availability | null>(null);
@@ -269,6 +289,9 @@ function BookingModal({
   const [chosenTime, setChosenTime] = useState(time);
   const [booking, setBooking] = useState(false);
   const [done, setDone] = useState<ReservationResult | null>(null);
+  const [email, setEmail] = useState(guestEmail ?? '');
+  const [phone, setPhone] = useState(guestPhone ?? '');
+  const contactOk = /\S+@\S+\.\S+/.test(email) && phone.replace(/\D/g, '').length >= 10;
 
   // Load availability on open.
   useEffect(() => {
@@ -294,6 +317,8 @@ function BookingModal({
         time: chosenTime,
         partySize: party,
         name: guestName,
+        email: email.trim(),
+        phone: phone.trim(),
       });
       if (r) setDone(r);
     } finally {
@@ -333,6 +358,25 @@ function BookingModal({
                 {restaurant.name} · {date} at {done.time} · party of {party}
               </p>
               <p className="mt-1 text-xs text-slate-400">Confirmation {done.confirmation}</p>
+              {done.source === 'opentable' ? (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                  <Check className="h-3 w-3" /> Confirmed on OpenTable
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] text-amber-600">
+                  Held locally — not confirmed with the restaurant (OpenTable didn&apos;t accept it).
+                </p>
+              )}
+              {done.manageUrl && (
+                <a
+                  href={done.manageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 block text-xs font-semibold text-brand-dark hover:underline"
+                >
+                  Manage reservation →
+                </a>
+              )}
               <Button className="mt-4" onClick={onClose}>
                 Done
               </Button>
@@ -381,9 +425,42 @@ function BookingModal({
                 )}
               </div>
 
-              <Button className="mt-5 w-full" onClick={book} disabled={booking}>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">Email for the reservation</label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@company.com"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">Mobile</label>
+                  <Input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(512) 555-0142"
+                  />
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-400">
+                The restaurant uses these to confirm your table — booked for {guestName}.
+              </p>
+
+              <Button
+                className="mt-4 w-full"
+                onClick={book}
+                disabled={booking || !chosenTime || !contactOk}
+              >
                 {booking ? 'Booking…' : `Book ${chosenTime}`}
               </Button>
+              {!contactOk && (
+                <p className="mt-1 text-center text-[11px] text-slate-400">
+                  Add a valid email and mobile to confirm the reservation.
+                </p>
+              )}
               {avail?.source && avail.source.includes('mock') && (
                 <p className="mt-2 text-center text-[11px] text-slate-400">
                   Demo availability · live OpenTable data when keys are set.

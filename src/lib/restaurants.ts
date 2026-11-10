@@ -31,6 +31,7 @@ export interface Availability {
 
 export interface ReservationResult {
   confirmation: string;
+  manageUrl?: string;
   restaurantId: string;
   date: string;
   time: string;
@@ -74,6 +75,9 @@ export async function bookRestaurant(args: {
   time: string;
   partySize: number;
   name: string;
+  email?: string;
+  phone?: string;
+  specialRequest?: string;
 }): Promise<ReservationResult | null> {
   const res = await fetch('/api/restaurants/book', {
     method: 'POST',
