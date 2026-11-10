@@ -15,7 +15,6 @@ import {
   Gift,
   Globe,
   Leaf,
-  Lock,
   MapPin,
   Plane,
   Receipt,
@@ -262,6 +261,48 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ============================ THREE TAKEAWAYS ============================ */}
+      <section className="relative px-5 py-10 sm:px-8">
+        <Reveal>
+          <div className="mx-auto max-w-5xl">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                {
+                  stat: '12–15%',
+                  label: 'Lower hotel rates',
+                  desc: 'Typical savings vs. market on managed hotel stays — booked through HeyVacay inventory.',
+                },
+                {
+                  stat: '3.3M+',
+                  label: 'Hotels worldwide',
+                  desc: 'Plus global flights, with budgets, policy, and rewards woven into the same search and checkout.',
+                },
+                {
+                  stat: '$0',
+                  label: 'Expense suite, free',
+                  desc: 'A full enterprise expense product — receipts, reports, reimbursement — at no cost to your company.',
+                },
+              ].map((t) => (
+                <div
+                  key={t.label}
+                  className="rounded-2xl border border-line bg-surface/70 p-6 text-center backdrop-blur"
+                >
+                  <p className="font-display text-4xl font-extrabold text-gradient">
+                    {t.stat}
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-white">
+                    {t.label}
+                  </p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                    {t.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+      </section>
+
       {/* ============================ SAVINGS CALCULATOR ============================ */}
       <section id="calculator" className="relative px-5 py-14 sm:px-8">
         <Reveal>
@@ -497,8 +538,7 @@ export default function Home() {
               { icon: <Shield />, title: 'Real-time policy', desc: 'Travelers see spend against limits as they go, with warnings before they exceed.' },
               { icon: <Wallet />, title: 'Global reimbursement', desc: 'Pay out to bank or payroll — built for 49+ countries and ~30 currencies.' },
               { icon: <Check />, title: 'Auto-reconciliation', desc: 'Match card transactions to receipts and bookings, and itemize folios automatically.' },
-              { icon: <Lock />, title: 'Virtual purchase cards', desc: 'Issue single-use, merchant-locked virtual cards with limits — no card ever shared.' },
-              { icon: <ChartBar />, title: 'Per diems & limits', desc: 'Per-city, per-day caps that auto-enforce and eliminate overspending.' },
+              { icon: <ChartBar />, title: 'Spend caps & limits', desc: 'Per-city, per-day caps that auto-enforce and eliminate overspending.' },
               { icon: <Building />, title: 'ERP-ready export', desc: 'Clean, accounting-ready exports designed to sync with your books.' },
             ].map((c, i) => (
               <Reveal key={c.title} delay={(i % 4) * 70}>
