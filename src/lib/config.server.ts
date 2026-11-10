@@ -162,3 +162,77 @@ export const STRIPE = {
     return Boolean(this.publishableKey);
   },
 };
+
+/**
+ * QuickBooks Online — real accounting sync (OAuth2 + Accounting API).
+ *
+ * Unlike the single-secret integrations above, QBO is a full OAuth2
+ * authorization-code integration. Each company connects its own QuickBooks via
+ * Intuit's consent screen; we store the resulting per-company tokens
+ * server-side (DynamoDB) and post approved expenses as QuickBooks Purchases
+ * against the mapped chart-of-accounts.
+ *
+ * Secrets (set on the ECS task from Secrets Manager — never reach the browser):
+ *   QUICKBOOKS_CLIENT_ID      — Intuit app client id
+ *   QUICKBOOKS_CLIENT_SECRET  — Intuit app client secret
+ * Non-secret env (plain, on ent.tf):
+ *   QUICKBOOKS_ENV            — "sandbox" (default) or "production"; picks the API host
+ *   QUICKBOOKS_REDIRECT_URI   — must EXACTLY match a Redirect URI registered on the
+ *                               Intuit app (default: the stage callback below)
+ *
+ * When client id/secret are absent the Integrations UI shows QBO as needing the
+ * Intuit app wired — no fake "connected" state.
+ */
+export const QUICKBOOKS = {
+  clientId: process.env.QUICKBOOKS_CLIENT_ID || '',
+  clientSecret: process.env.QUICKBOOKS_CLIENT_SECRET || '',
+  /** "sandbox" | "production" — selects the Accounting API host. */
+  env: (process.env.QUICKBOOKS_ENV || 'sandbox').toLowerCase(),
+  redirectUri:
+    process.env.QUICKBOOKS_REDIRECT_URI ||
+    'https://ent.stage.heyvacay.co/api/integrations/quickbooks/callback',
+  /** Intuit's hosted consent screen. */
+  authorizeUrl:
+    process.env.QUICKBOOKS_OAUTH_AUTHORIZE ||
+    'https://appcenter.intuit.com/connect/oauth2',
+  /** OAuth2 token endpoint (code exchange + refresh). */
+  tokenUrl:
+    process.env.QUICKBOOKS_OAUTH_TOKEN ||
+    'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
+  scope: 'com.intuit.quickbooks.accounting',
+  /** Accounting API base, chosen by env (override with QUICKBOOKS_API_BASE). */
+  get apiBase(): string {
+    const override = process.env.QUICKBOOKS_API_BASE?.replace(/\/+$/, '');
+    if (override) return override;
+    return this.env === 'production'
+      ? 'https://quickbooks.api.intuit.com'
+      : 'https://sandbox-quickbooks.api.intuit.com';
+  },
+  /** QBO minorversion pinned so request/response shape is stable. */
+  minorVersion: process.env.QUICKBOOKS_MINOR_VERSION || '70',
+  /** True once the Intuit app credentials are wired (connect is possible). */
+  get configured(): boolean {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
+/**
+ * DynamoDB table holding per-company integration connections (OAuth tokens +
+ * account mappings). The ENT ECS task role is granted access to this one table.
+ * When unset / unreachable, tokenStore falls back to an in-process map so local
+ * dev and the build keep working (tokens just don't survive a restart).
+ */
+export const INTEGRATIONS_TABLE =
+  process.env.INTEGRATIONS_DDB_TABLE || 'stage-heyvacay-ent-integrations';
+
+export const AWS_REGION = process.env.AWS_REGION || 'us-west-2';
+
+/**
+ * Secret used to HMAC-sign the OAuth `state` parameter so the callback can
+ * trust the company id it carries. Defaults to the enterprise service token
+ * (already a per-env secret); override with QUICKBOOKS_STATE_SECRET.
+ */
+export const OAUTH_STATE_SECRET =
+  process.env.QUICKBOOKS_STATE_SECRET ||
+  process.env.ENT_BACKEND_SERVICE_TOKEN ||
+  'hv-ent-oauth-state-fallback';
