@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Select } from '@/components/app/ui';
 import { Check, Lock } from '@/components/icons';
 import { money2, shortDate } from '@/lib/format';
+import { recommendMappings } from '@/lib/integrations/quickbooksMapping';
 import type { ExpenseCategory, Integration } from '@/lib/types';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -61,6 +62,11 @@ export function QuickBooksPanel({ integration }: { integration: Integration }) {
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [savingMap, setSavingMap] = useState(false);
   const [mapSaved, setMapSaved] = useState(false);
+  // Categories filled by the recommendation engine and not yet hand-edited,
+  // with the reason to show on the row. Cleared per-row on manual change.
+  const [suggestedFor, setSuggestedFor] = useState<Record<string, string>>({});
+  const [paymentSuggested, setPaymentSuggested] = useState(false);
+  const [showSuggestBanner, setShowSuggestBanner] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResults, setSyncResults] = useState<SyncResultRow[] | null>(null);
   const [banner, setBanner] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -128,6 +134,40 @@ export function QuickBooksPanel({ integration }: { integration: Integration }) {
 
   const connect = () => {
     window.location.href = `/api/integrations/quickbooks/connect?companyId=${encodeURIComponent(companyId)}`;
+  };
+
+  // Fill empty rows with smart recommendations (only touches blanks, so it
+  // never clobbers a choice the admin already made). Flags each filled row as a
+  // suggestion to review and shows the review banner.
+  const applySuggestions = () => {
+    if (!accounts) return;
+    const rec = recommendMappings(accounts.expense, accounts.payment);
+    const nextMap = { ...map };
+    const nextSuggested: Record<string, string> = {};
+    for (const cat of CATEGORIES) {
+      if (!nextMap[cat] && rec.accountMap[cat]) {
+        nextMap[cat] = rec.accountMap[cat];
+        nextSuggested[cat] = rec.reasons[cat] || 'Recommended match';
+      }
+    }
+    setMap(nextMap);
+    setSuggestedFor((prev) => ({ ...prev, ...nextSuggested }));
+    if (!paymentAccountId && rec.paymentAccountId) {
+      setPaymentAccountId(rec.paymentAccountId);
+      setPaymentSuggested(true);
+    }
+    setShowSuggestBanner(true);
+  };
+
+  // Mark a category as hand-chosen (drops the "suggested" flag on it).
+  const setMapManual = (cat: string, value: string) => {
+    setMap((m) => ({ ...m, [cat]: value }));
+    setSuggestedFor((prev) => {
+      if (!prev[cat]) return prev;
+      const next = { ...prev };
+      delete next[cat];
+      return next;
+    });
   };
 
   const saveMapping = async () => {
@@ -298,13 +338,30 @@ export function QuickBooksPanel({ integration }: { integration: Integration }) {
           </Card>
 
           <Card>
-            <div className="mb-4">
-              <h2 className="font-display text-lg font-bold text-slate-900">Chart-of-accounts mapping</h2>
-              <p className="text-sm text-slate-400">
-                Route each expense category to a real QuickBooks account, and pick the
-                account purchases are paid from. Pulled live from your QuickBooks.
-              </p>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-display text-lg font-bold text-slate-900">Chart-of-accounts mapping</h2>
+                <p className="text-sm text-slate-400">
+                  Route each expense category to a real QuickBooks account, and pick the
+                  account purchases are paid from. Pulled live from your QuickBooks.
+                </p>
+              </div>
+              {accounts && (
+                <Button variant="outline" size="sm" onClick={applySuggestions}>
+                  ✨ Suggest mappings
+                </Button>
+              )}
             </div>
+
+            {showSuggestBanner && (
+              <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
+                <strong>These are suggestions, not final.</strong> We matched each category to the
+                closest QuickBooks account by its type and name — please <strong>review every row
+                carefully</strong> (hover a “Suggested” tag to see why it was picked) and adjust
+                anything that isn&apos;t right before you save. Nothing posts to QuickBooks until you
+                sync.
+              </div>
+            )}
 
             {accountsErr && (
               <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -325,8 +382,19 @@ export function QuickBooksPanel({ integration }: { integration: Integration }) {
             {accounts && (
               <div className="space-y-3">
                 <div className="grid items-center gap-3 sm:grid-cols-[200px_1fr]">
-                  <span className="text-sm font-semibold text-slate-700">Paid from (bank / card)</span>
-                  <Select value={paymentAccountId} onChange={(e) => setPaymentAccountId(e.target.value)}>
+                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    Paid from (bank / card)
+                    {paymentSuggested && paymentAccountId && (
+                      <Badge color="brand">Suggested</Badge>
+                    )}
+                  </span>
+                  <Select
+                    value={paymentAccountId}
+                    onChange={(e) => {
+                      setPaymentAccountId(e.target.value);
+                      setPaymentSuggested(false);
+                    }}
+                  >
                     <option value="">Select payment account…</option>
                     {accounts.payment.map((a) => (
                       <option key={a.id} value={a.id}>
@@ -338,10 +406,17 @@ export function QuickBooksPanel({ integration }: { integration: Integration }) {
                 <div className="my-2 border-t border-slate-100" />
                 {CATEGORIES.map((cat) => (
                   <div key={cat} className="grid items-center gap-3 sm:grid-cols-[200px_1fr]">
-                    <span className="text-sm font-medium text-slate-700">{cat}</span>
+                    <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      {cat}
+                      {suggestedFor[cat] && map[cat] && (
+                        <span title={suggestedFor[cat]} className="cursor-help">
+                          <Badge color="brand">Suggested</Badge>
+                        </span>
+                      )}
+                    </span>
                     <Select
                       value={map[cat] || ''}
-                      onChange={(e) => setMap((m) => ({ ...m, [cat]: e.target.value }))}
+                      onChange={(e) => setMapManual(cat, e.target.value)}
                     >
                       <option value="">Select GL account…</option>
                       {accounts.expense.map((a) => (
