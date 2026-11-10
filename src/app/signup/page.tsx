@@ -49,13 +49,16 @@ const INITIAL: Form = {
   annualSpend: 500000,
 };
 
-const STEPS = [
+// Base flow. The optional "Last year" details step is inserted right after
+// "How you travel" only when the user opts into sharing more detail.
+const BASE_STEPS = [
   { key: 'company', label: 'Company', icon: Building },
   { key: 'verify', label: 'Verify email', icon: Lock },
   { key: 'travel', label: 'How you travel', icon: Plane },
-  { key: 'history', label: 'Last year', icon: Receipt },
   { key: 'summary', label: 'Your savings', icon: Sparkles },
 ] as const;
+const HISTORY_STEP = { key: 'history', label: 'Last year', icon: Receipt } as const;
+type StepDef = { key: string; label: string; icon: typeof Building };
 
 const TEAM_SIZES = ['1–10', '11–50', '51–200', '201–1,000', '1,000+'];
 const TRIP_BANDS = ['Under 10', '10–50', '50–200', '200+'];
@@ -174,7 +177,17 @@ export default function SignupPage() {
   const [password2, setPassword2] = useState('');
   const [history, setHistory] = useState<TravelHistory>({});
   const [historyDetails, setHistoryDetails] = useState(false);
+  const [wantDetails, setWantDetails] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
+
+  // The step list: insert the optional "Last year" step after "How you travel"
+  // only when the user opts in. Keeps the default flow short.
+  const steps: StepDef[] = useMemo(() => {
+    const base = BASE_STEPS as readonly StepDef[];
+    if (!wantDetails) return [...base];
+    const i = base.findIndex((s) => s.key === 'travel');
+    return [...base.slice(0, i + 1), HISTORY_STEP, ...base.slice(i + 1)];
+  }, [wantDetails]);
 
   const pwLongEnough = password.length >= 8;
   const pwMatch = password.length > 0 && password === password2;
@@ -189,19 +202,19 @@ export default function SignupPage() {
   );
 
   const canContinue = () => {
-    if (STEPS[step].key === 'company')
+    if (steps[step].key === 'company')
       return (
         form.firstName.trim().length > 0 &&
         form.lastName.trim().length > 0 &&
         form.companyName.trim().length > 1 &&
         isWorkEmail(form.workEmail)
       );
-    if (STEPS[step].key === 'verify') return emailVerified && passwordReady;
-    if (STEPS[step].key === 'travel') return form.annualSpend > 0;
+    if (steps[step].key === 'verify') return emailVerified && passwordReady;
+    if (steps[step].key === 'travel') return form.annualSpend > 0;
     return true;
   };
 
-  const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
+  const next = () => setStep((s) => Math.min(steps.length - 1, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
 
   const finish = () => {
@@ -313,8 +326,8 @@ export default function SignupPage() {
     );
   }
 
-  const Icon = STEPS[step].icon;
-  const pct = Math.round(((step + 1) / STEPS.length) * 100);
+  const Icon = steps[step].icon;
+  const pct = Math.round(((step + 1) / steps.length) * 100);
 
   return (
     <div className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-[300px_1fr]">
@@ -325,7 +338,7 @@ export default function SignupPage() {
         </Link>
 
         <nav className="mt-9 flex-1 space-y-1">
-          {STEPS.map((s, i) => {
+          {steps.map((s, i) => {
             const SIcon = s.icon;
             const done = i < step;
             const active = i === step;
@@ -370,7 +383,7 @@ export default function SignupPage() {
         <div className="mb-8">
           <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-400">
             <span className="inline-flex items-center gap-1.5 text-brand-dark">
-              <Icon className="h-4 w-4" /> Step {step + 1} of {STEPS.length}
+              <Icon className="h-4 w-4" /> Step {step + 1} of {steps.length}
             </span>
             <span>{pct}%</span>
           </div>
@@ -384,7 +397,7 @@ export default function SignupPage() {
 
         <div className="flex-1">
           {/* STEP: company */}
-          {STEPS[step].key === 'company' && (
+          {steps[step].key === 'company' && (
             <StepShell
               eyebrow="About your company"
               title="Who are we setting up?"
@@ -435,7 +448,7 @@ export default function SignupPage() {
           )}
 
           {/* STEP: verify email */}
-          {STEPS[step].key === 'verify' && (
+          {steps[step].key === 'verify' && (
             <StepShell
               eyebrow="Confirm it's you"
               title="Verify your work email"
@@ -498,7 +511,7 @@ export default function SignupPage() {
           )}
 
           {/* STEP: travel */}
-          {STEPS[step].key === 'travel' && (
+          {steps[step].key === 'travel' && (
             <StepShell
               eyebrow="How your team travels"
               title="This is where your savings come from"
@@ -577,11 +590,50 @@ export default function SignupPage() {
                   with HeyVacay.
                 </p>
               </div>
+
+              {/* Opt-in to a deeper picture. Only when checked do we add the
+                  "Last year" step. The checkmark animates in when toggled on. */}
+              <button
+                type="button"
+                onClick={() => setWantDetails((v) => !v)}
+                aria-pressed={wantDetails}
+                className={
+                  'mt-5 flex w-full items-start gap-3 rounded-xl border p-4 text-left transition ' +
+                  (wantDetails
+                    ? 'border-brand bg-brand/5 ring-1 ring-brand/30'
+                    : 'border-slate-200 hover:border-slate-300')
+                }
+              >
+                <span
+                  className={
+                    'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-all duration-200 ' +
+                    (wantDetails
+                      ? 'scale-100 border-brand bg-brand text-white'
+                      : 'border-slate-300 bg-white text-transparent')
+                  }
+                >
+                  <Check
+                    className={
+                      'h-3.5 w-3.5 transition-all duration-200 ' +
+                      (wantDetails ? 'scale-100 opacity-100' : 'scale-50 opacity-0')
+                    }
+                  />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    Help us fine-tune your estimate with last year&apos;s numbers
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Optional and takes a little longer, but it sharpens your savings
+                    projection and sets smarter defaults. We&apos;ll add one quick step.
+                  </span>
+                </span>
+              </button>
             </StepShell>
           )}
 
           {/* STEP: last year's travel (optional) */}
-          {STEPS[step].key === 'history' && (
+          {steps[step].key === 'history' && (
             <StepShell
               eyebrow="A little history (optional)"
               title="What did last year's travel look like?"
@@ -604,7 +656,7 @@ export default function SignupPage() {
           )}
 
           {/* STEP: summary */}
-          {STEPS[step].key === 'summary' && (
+          {steps[step].key === 'summary' && (
             <StepShell
               eyebrow="Your program is ready"
               title={`Here's what ${form.companyName || 'your company'} will save`}
@@ -671,7 +723,7 @@ export default function SignupPage() {
             </Link>
           )}
 
-          {STEPS[step].key === 'summary' ? (
+          {steps[step].key === 'summary' ? (
             <Button onClick={finish}>
               Enter your dashboard <ArrowRight className="h-4 w-4" />
             </Button>

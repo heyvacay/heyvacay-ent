@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
 import {
   Badge,
@@ -15,10 +16,13 @@ import { Plane, Receipt } from '@/components/icons';
 export default function AdminDashboard() {
   const {
     state,
+    activeUser,
+    isSuperAdmin,
     companySpend,
     companySavings,
     spentForScope,
     userById,
+    directReportIds,
   } = useStore();
 
   const companyBudget =
@@ -30,9 +34,36 @@ export default function AdminDashboard() {
   const pending = state.bookings.filter((b) => b.status === 'pending_approval');
   const activeEmployees = state.users.filter((u) => u.status === 'active').length;
   const deptBudgets = state.budgets.filter((b) => b.scope === 'department');
-  const recent = [...state.bookings]
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-    .slice(0, 6);
+  // Recent bookings, split by who they belong to: mine, my team's (my direct
+  // and indirect reports), and — for a company-wide (super) admin — everyone's.
+  const sortedBookings = useMemo(
+    () =>
+      [...state.bookings].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    [state.bookings]
+  );
+  const teamIds = useMemo(
+    () => new Set([activeUser.id, ...directReportIds(activeUser.id)]),
+    [activeUser.id, directReportIds]
+  );
+  const scopes = useMemo(() => {
+    const base: { key: 'mine' | 'team' | 'company'; label: string }[] = [
+      { key: 'mine', label: 'My bookings' },
+      { key: 'team', label: "My team's" },
+    ];
+    if (isSuperAdmin) base.push({ key: 'company', label: "Company's" });
+    return base;
+  }, [isSuperAdmin]);
+  const [scope, setScope] = useState<'mine' | 'team' | 'company'>('mine');
+  const effectiveScope = scopes.some((s) => s.key === scope) ? scope : 'mine';
+  const recent = useMemo(() => {
+    const filtered =
+      effectiveScope === 'company'
+        ? sortedBookings
+        : effectiveScope === 'team'
+          ? sortedBookings.filter((b) => teamIds.has(b.travelerId))
+          : sortedBookings.filter((b) => b.travelerId === activeUser.id);
+    return filtered.slice(0, 6);
+  }, [effectiveScope, sortedBookings, teamIds, activeUser.id]);
 
   return (
     <div>
@@ -143,10 +174,30 @@ export default function AdminDashboard() {
 
       {/* recent activity */}
       <Card className="mt-6" pad={false}>
-        <div className="flex items-center justify-between px-5 pt-5 sm:px-6">
-          <h2 className="font-display text-lg font-bold text-slate-900">
-            Recent bookings
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-display text-lg font-bold text-slate-900">
+              Recent bookings
+            </h2>
+            {scopes.length > 1 && (
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-medium">
+                {scopes.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setScope(s.key)}
+                    className={
+                      effectiveScope === s.key
+                        ? 'rounded-md bg-white px-3 py-1 text-slate-800 shadow-sm'
+                        : 'rounded-md px-3 py-1 text-slate-500 hover:text-slate-700'
+                    }
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Button href="/app/bookings" variant="ghost" size="sm">
             View all
           </Button>
@@ -164,6 +215,17 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
+              {recent.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-400 sm:px-6">
+                    {effectiveScope === 'mine'
+                      ? 'No bookings of your own yet.'
+                      : effectiveScope === 'team'
+                        ? "No bookings from your team yet."
+                        : 'No bookings yet.'}
+                  </td>
+                </tr>
+              )}
               {recent.map((b) => (
                 <tr key={b.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-5 py-3 sm:px-6">
