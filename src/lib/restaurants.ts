@@ -57,6 +57,65 @@ export async function searchRestaurants(
   return Array.isArray(data?.restaurants) ? data.restaurants : [];
 }
 
+export interface MenuItem {
+  id: string;
+  name: string;
+  description?: string;
+  price?: number;
+}
+export interface MenuGroup {
+  name: string;
+  items: MenuItem[];
+}
+export interface RestaurantMenu {
+  name: string;
+  description?: string;
+  groups: MenuGroup[];
+}
+export interface RestaurantExperience {
+  id: string;
+  name: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  bookable?: boolean;
+}
+export interface RestaurantReview {
+  nickname?: string;
+  rating?: number;
+  text?: string;
+  dinedAt?: string;
+  recommended?: boolean;
+}
+export interface ReviewSummary {
+  overall?: number;
+  count?: number;
+  food?: number;
+  service?: number;
+  ambience?: number;
+  value?: number;
+  recommendPct?: number;
+}
+export interface RestaurantDetails {
+  rid: string;
+  live: boolean;
+  menus: RestaurantMenu[];
+  experiences: RestaurantExperience[];
+  reviews: RestaurantReview[];
+  reviewSummary: ReviewSummary | null;
+}
+
+/** Rich detail (menus, experiences, reviews, rating summary) for one venue. */
+export async function getRestaurantDetails(rid: string): Promise<RestaurantDetails | null> {
+  try {
+    const res = await fetch(`/api/restaurants/${encodeURIComponent(rid)}/details`);
+    const data = await res.json().catch(() => null);
+    return res.ok ? (data as RestaurantDetails) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getAvailability(args: {
   restaurantId: string;
   date: string;

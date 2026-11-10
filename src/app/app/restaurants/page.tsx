@@ -7,9 +7,11 @@ import {
   getAvailability,
   bookRestaurant,
   cancelRestaurant,
+  getRestaurantDetails,
   type Restaurant,
   type Availability,
   type ReservationResult,
+  type RestaurantDetails,
 } from '@/lib/restaurants';
 import {
   listReservations,
@@ -113,6 +115,7 @@ export default function RestaurantsPage() {
   const [results, setResults] = useState<Restaurant[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Restaurant | null>(null);
+  const [detailOf, setDetailOf] = useState<Restaurant | null>(null);
 
   // Result-side filters (work on the mock now, and on OpenTable results later).
   const [nameQuery, setNameQuery] = useState('');
@@ -409,9 +412,17 @@ export default function RestaurantsPage() {
                     ))}
                   </div>
                 )}
-                <div className="mt-auto pt-4">
-                  <Button size="sm" className="w-full" onClick={() => setSelected(r)}>
-                    Reserve a table
+                <div className="mt-auto flex gap-2 pt-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setDetailOf(r)}
+                  >
+                    Details &amp; menu
+                  </Button>
+                  <Button size="sm" className="flex-1" onClick={() => setSelected(r)}>
+                    Reserve
                   </Button>
                 </div>
               </div>
@@ -420,6 +431,18 @@ export default function RestaurantsPage() {
         </div>
         )}
         </>
+      )}
+
+      {detailOf && (
+        <DetailsModal
+          restaurant={detailOf}
+          onReserve={() => {
+            const r = detailOf;
+            setDetailOf(null);
+            setSelected(r);
+          }}
+          onClose={() => setDetailOf(null)}
+        />
       )}
 
       {selected && (
@@ -449,6 +472,218 @@ export default function RestaurantsPage() {
           onClose={() => setSelected(null)}
         />
       )}
+    </div>
+  );
+}
+
+function money2(n?: number): string {
+  if (n == null) return '';
+  return `$${n.toFixed(2).replace(/\.00$/, '')}`;
+}
+
+/**
+ * Rich restaurant detail — pulled live from OpenTable's Consumer/Online Booking
+ * API: the rating breakdown (highlights), recent diner reviews, the full menu,
+ * and bookable Experiences (shown at the bottom). Everything degrades
+ * gracefully: whatever doesn't load is simply hidden.
+ */
+function DetailsModal({
+  restaurant,
+  onReserve,
+  onClose,
+}: {
+  restaurant: Restaurant;
+  onReserve: () => void;
+  onClose: () => void;
+}) {
+  const [details, setDetails] = useState<RestaurantDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    getRestaurantDetails(restaurant.id)
+      .then((d) => live && setDetails(d))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [restaurant.id]);
+
+  const sum = details?.reviewSummary;
+  const highlights: { label: string; value: string }[] = [];
+  if (sum) {
+    if (sum.food != null) highlights.push({ label: 'Food', value: sum.food.toFixed(1) });
+    if (sum.service != null) highlights.push({ label: 'Service', value: sum.service.toFixed(1) });
+    if (sum.ambience != null) highlights.push({ label: 'Ambience', value: sum.ambience.toFixed(1) });
+    if (sum.value != null) highlights.push({ label: 'Value', value: sum.value.toFixed(1) });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="my-4 w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative h-48 w-full overflow-hidden rounded-t-2xl">
+          <RestaurantImage src={restaurant.image} name={restaurant.name} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white hover:bg-black/80"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-xl font-bold text-slate-900">{restaurant.name}</h2>
+              <p className="text-sm text-slate-500">{restaurant.cuisine}</p>
+              <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-400">
+                <MapPin className="h-3 w-3" /> {restaurant.neighborhood}, {restaurant.city}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-display text-2xl font-bold text-slate-900">
+                {sum?.overall?.toFixed(1) ?? restaurant.rating}
+                <span className="text-amber-400">★</span>
+              </p>
+              {sum?.count != null && (
+                <p className="text-xs text-slate-400">{sum.count} reviews</p>
+              )}
+            </div>
+          </div>
+
+          {sum?.recommendPct != null && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <Check className="h-3.5 w-3.5" /> {sum.recommendPct}% of diners recommend this restaurant
+            </p>
+          )}
+
+          {highlights.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {highlights.map((h) => (
+                <div key={h.label} className="rounded-xl bg-slate-50 px-3 py-2 text-center">
+                  <p className="font-display text-lg font-bold text-slate-800">{h.value}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">{h.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {loading && (
+            <div className="mt-5 flex items-center gap-2 text-sm text-slate-400">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+              Loading menu, reviews &amp; experiences…
+            </div>
+          )}
+
+          {/* Reviews */}
+          {details && details.reviews.length > 0 && (
+            <section className="mt-6">
+              <h3 className="mb-2 font-display text-base font-bold text-slate-900">What diners say</h3>
+              <div className="space-y-3">
+                {details.reviews.slice(0, 4).map((rv, i) => (
+                  <div key={i} className="rounded-xl border border-slate-100 p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">
+                        {rv.nickname || 'Verified diner'}
+                      </p>
+                      {rv.rating != null && (
+                        <p className="text-xs font-semibold text-amber-500">{rv.rating}★</p>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{rv.text}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Menu */}
+          {details && details.menus.length > 0 && (
+            <section className="mt-6">
+              <h3 className="mb-2 font-display text-base font-bold text-slate-900">Menu</h3>
+              <div className="space-y-5">
+                {details.menus.map((menu, mi) => (
+                  <div key={mi}>
+                    <p className="text-sm font-semibold text-slate-800">{menu.name}</p>
+                    {menu.description && (
+                      <p className="text-xs text-slate-400">{menu.description}</p>
+                    )}
+                    <div className="mt-2 space-y-4">
+                      {menu.groups.map((g, gi) => (
+                        <div key={gi}>
+                          {g.name && (
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                              {g.name}
+                            </p>
+                          )}
+                          <div className="space-y-1.5">
+                            {g.items.map((it) => (
+                              <div key={it.id} className="flex items-baseline justify-between gap-3">
+                                <div>
+                                  <span className="text-sm font-medium text-slate-700">{it.name}</span>
+                                  {it.description && (
+                                    <span className="block text-xs text-slate-400">{it.description}</span>
+                                  )}
+                                </div>
+                                {it.price != null && (
+                                  <span className="shrink-0 text-sm font-semibold text-slate-600">
+                                    {money2(it.price)}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Experiences — at the bottom, as requested */}
+          {details && details.experiences.length > 0 && (
+            <section className="mt-6">
+              <h3 className="mb-2 flex items-center gap-1.5 font-display text-base font-bold text-slate-900">
+                <Sparkles className="h-4 w-4 text-brand-dark" /> Experiences
+              </h3>
+              <div className="space-y-2">
+                {details.experiences.map((ex) => (
+                  <div key={ex.id} className="rounded-xl border border-brand/30 bg-brand/5 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-800">{ex.name}</p>
+                      {ex.price != null && (
+                        <p className="shrink-0 text-sm font-semibold text-brand-dark">
+                          {money2(ex.price)}
+                        </p>
+                      )}
+                    </div>
+                    {ex.description && (
+                      <p className="mt-0.5 text-xs text-slate-500">{ex.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button onClick={onReserve}>Reserve a table</Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

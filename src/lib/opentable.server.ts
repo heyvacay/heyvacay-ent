@@ -668,3 +668,189 @@ export async function bookReservation(args: {
     return null;
   }
 }
+
+/* ------------------------------------------------ Restaurant detail -------- */
+/*
+ * Rich restaurant content via the Online Booking / Consumer API (v2), all on
+ * platform.opentable.com with the same OAuth bearer token:
+ *   - Experiences:   GET /v2/experiences/{rid}/active
+ *   - Menus:         GET /v1/menus/rid/{rid}
+ *   - Reviews:       GET /v1/partnerreviews/allreviews?Rid={rid}&NumberOfReviews=
+ *   - Review summary GET /v1/partnerreviews/restaurantreviewsummary?Rids={rid}
+ * Each is best-effort: a failure returns null so the detail view degrades
+ * gracefully to whatever loaded.
+ */
+
+export interface OtMenuItem {
+  id: string;
+  name: string;
+  description?: string;
+  price?: number;
+}
+export interface OtMenuGroup {
+  name: string;
+  items: OtMenuItem[];
+}
+export interface OtMenu {
+  name: string;
+  description?: string;
+  groups: OtMenuGroup[];
+}
+export interface OtExperience {
+  id: string;
+  name: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  bookable?: boolean;
+}
+export interface OtReview {
+  nickname?: string;
+  rating?: number;
+  text?: string;
+  dinedAt?: string;
+  recommended?: boolean;
+}
+export interface OtReviewSummary {
+  overall?: number;
+  count?: number;
+  food?: number;
+  service?: number;
+  ambience?: number;
+  value?: number;
+  recommendPct?: number;
+}
+export interface OtRestaurantDetails {
+  rid: string;
+  menus: OtMenu[];
+  experiences: OtExperience[];
+  reviews: OtReview[];
+  reviewSummary: OtReviewSummary | null;
+}
+
+async function otGet(path: string, extra?: Record<string, string>): Promise<unknown | null> {
+  const headers = await authHeaders();
+  if (!headers) return null;
+  try {
+    const res = await fetch(`${OPENTABLE.base}${path}`, {
+      headers: { ...headers, ...(extra || {}) },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+export async function getActiveExperiences(rid: string): Promise<OtExperience[]> {
+  const data = (await otGet(`/v2/experiences/${encodeURIComponent(rid)}/active`, {
+    'Accept-Language': 'en-US',
+  })) as { data?: Array<Record<string, unknown>> } | null;
+  const rows = Array.isArray(data?.data) ? data!.data! : [];
+  return rows.map((e) => {
+    const pi = (e.price_info ?? {}) as { price?: { amount?: number }; amount?: number };
+    const amt =
+      (pi.price && typeof pi.price.amount === 'number' ? pi.price.amount : undefined) ??
+      (typeof pi.amount === 'number' ? pi.amount : undefined);
+    return {
+      id: String(e.experience_id ?? ''),
+      name: String(e.name ?? 'Experience'),
+      description: typeof e.description === 'string' ? e.description : undefined,
+      price: typeof amt === 'number' ? amt : undefined,
+      currency: typeof e.currency === 'string' ? e.currency : undefined,
+      bookable: e.bookable === true,
+    };
+  });
+}
+
+interface RawMenuItem { id?: string; name?: string; description?: string; price?: { amount?: number } }
+interface RawMenuGroup { id?: string; name?: string; ordinal?: number; items?: string[] }
+interface RawMenu {
+  menu?: { name?: string; description?: string; groups?: string[] };
+  groups?: RawMenuGroup[];
+  items?: RawMenuItem[];
+}
+
+export async function getRestaurantMenus(rid: string): Promise<OtMenu[]> {
+  const data = (await otGet(`/v1/menus/rid/${encodeURIComponent(rid)}`)) as
+    | { menus?: RawMenu[] }
+    | null;
+  const menus = Array.isArray(data?.menus) ? data!.menus! : [];
+  return menus.map((m) => {
+    const itemById = new Map<string, OtMenuItem>();
+    for (const it of m.items || []) {
+      if (!it.id) continue;
+      itemById.set(it.id, {
+        id: it.id,
+        name: it.name || 'Item',
+        description: it.description,
+        price: typeof it.price?.amount === 'number' ? it.price.amount : undefined,
+      });
+    }
+    const groups = (m.groups || [])
+      .slice()
+      .sort((a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0))
+      .map((g) => ({
+        name: g.name || '',
+        items: (g.items || []).map((id) => itemById.get(id)).filter(Boolean) as OtMenuItem[],
+      }))
+      .filter((g) => g.items.length > 0);
+    return {
+      name: m.menu?.name || 'Menu',
+      description: m.menu?.description,
+      groups,
+    };
+  });
+}
+
+export async function getRestaurantReviews(rid: string, count = 6): Promise<OtReview[]> {
+  const data = (await otGet(
+    `/v1/partnerreviews/allreviews?Rid=${encodeURIComponent(rid)}&NumberOfReviews=${count}`
+  )) as { Reviews?: Array<Record<string, unknown>> } | null;
+  const rows = Array.isArray(data?.Reviews) ? data!.Reviews! : [];
+  return rows.map((r) => {
+    const rating = (r.Rating ?? {}) as { Overall?: number };
+    return {
+      nickname: typeof r.CustomerNickname === 'string' ? r.CustomerNickname : undefined,
+      rating: typeof rating.Overall === 'number' ? rating.Overall : undefined,
+      text: typeof r.ReviewText === 'string' ? r.ReviewText : undefined,
+      dinedAt: typeof r.DinedDateTime === 'string' ? r.DinedDateTime : undefined,
+      recommended: r.Recommended === true,
+    };
+  }).filter((r) => r.text);
+}
+
+export async function getReviewSummary(rid: string): Promise<OtReviewSummary | null> {
+  const data = (await otGet(
+    `/v1/partnerreviews/restaurantreviewsummary?Rids=${encodeURIComponent(rid)}`
+  )) as { RestaurantReviewSummaries?: Array<Record<string, unknown>> } | null;
+  const s = (Array.isArray(data?.RestaurantReviewSummaries) && data!.RestaurantReviewSummaries![0]) || null;
+  if (!s) return null;
+  const ratings = (s.Ratings ?? {}) as Record<string, { Rating?: number; Count?: number }> & {
+    DinersRecommendations?: { Count?: number; Yes?: number };
+  };
+  const rec = ratings.DinersRecommendations;
+  const recPct =
+    rec && rec.Count ? Math.round(((rec.Yes || 0) / rec.Count) * 100) : undefined;
+  return {
+    overall: ratings.Overall?.Rating,
+    count: ratings.Overall?.Count,
+    food: ratings.Food?.Rating,
+    service: ratings.Service?.Rating,
+    ambience: ratings.Ambience?.Rating,
+    value: ratings.Value?.Rating,
+    recommendPct: recPct,
+  };
+}
+
+/** Aggregate all rich content for one restaurant (each part best-effort). */
+export async function getRestaurantDetails(rid: string): Promise<OtRestaurantDetails> {
+  const [menus, experiences, reviews, reviewSummary] = await Promise.all([
+    getRestaurantMenus(rid).catch(() => [] as OtMenu[]),
+    getActiveExperiences(rid).catch(() => [] as OtExperience[]),
+    getRestaurantReviews(rid).catch(() => [] as OtReview[]),
+    getReviewSummary(rid).catch(() => null),
+  ]);
+  return { rid, menus, experiences, reviews, reviewSummary };
+}
