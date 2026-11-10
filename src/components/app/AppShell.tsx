@@ -29,6 +29,7 @@ import {
   MapPin,
   Route,
   Lock,
+  Leaf,
 } from '@/components/icons';
 
 type NavItem = { href: string; label: string; icon: typeof ChartBar };
@@ -72,6 +73,7 @@ const ADMIN_NAV: NavSection[] = [
     title: 'Travel',
     items: [
       { href: '/app/bookings', label: 'Bookings', icon: Plane },
+      { href: '/app/map', label: 'Live map', icon: MapPin },
       { href: '/app/events', label: 'Events', icon: Calendar },
       { href: '/app/restaurants', label: 'Dining', icon: Receipt },
       { href: '/app/approvals', label: 'Approvals', icon: Bell },
@@ -81,6 +83,7 @@ const ADMIN_NAV: NavSection[] = [
     title: 'Spend',
     items: [
       { href: '/app/reports', label: 'Analytics', icon: TrendUp },
+      { href: '/app/sustainability', label: 'Sustainability', icon: Leaf },
       { href: '/app/budgets', label: 'Budgets', icon: Wallet },
       { href: '/app/expenses', label: 'Expenses', icon: Receipt },
       { href: '/app/billing', label: 'Billing', icon: Lock },

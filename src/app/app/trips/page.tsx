@@ -14,7 +14,8 @@ import {
 import { money, num, dateRange, daysUntil, todayISO } from '@/lib/format';
 import { BookingChat } from '@/components/app/BookingChat';
 import { CancelTripModal } from '@/components/app/CancelTripModal';
-import { Plane, Receipt, Sparkles, MapPin } from '@/components/icons';
+import { Plane, Receipt, Sparkles, MapPin, Calendar } from '@/components/icons';
+import { downloadICS } from '@/lib/ics';
 import type { Booking } from '@/lib/types';
 
 function TripCard({
@@ -225,7 +226,29 @@ export default function TripsPage() {
             ? `Bookings across ${fullAccess ? 'the company' : 'your team'}.`
             : "Everything you've booked, past and upcoming."
         }
-        actions={<Button href="/app/book">Book travel</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const items = mine
+                  .filter((b) => b.status !== 'cancelled')
+                  .map((b) => ({
+                    id: b.id,
+                    title: `${b.type === 'flight' ? '✈️' : '🏨'} ${b.title}`,
+                    location: b.destination,
+                    startDate: b.startDate,
+                    endDate: b.endDate,
+                    description: b.detail,
+                  }));
+                if (items.length) downloadICS(items);
+              }}
+            >
+              <Calendar className="h-4 w-4" /> Add to calendar
+            </Button>
+            <Button href="/app/book">Book travel</Button>
+          </div>
+        }
       />
 
       {/* admin: my vs team, with person / sub-team filters */}
