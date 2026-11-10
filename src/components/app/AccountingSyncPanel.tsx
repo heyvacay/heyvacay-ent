@@ -293,7 +293,7 @@ export function AccountingSyncPanel({
         <Card className="max-w-xl">
           <h2 className="font-display text-lg font-bold text-slate-900">Connect {integration.name}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            {provider.name} is a real OAuth connection, not a one-click demo. The {provider.appLabel}{' '}
+            {provider.name} uses a live OAuth connection, not a one-click demo. The {provider.appLabel}{' '}
             credentials aren&apos;t wired on the server yet — once they are, this turns into a live
             &ldquo;Connect to {provider.name}&rdquo; consent flow.
           </p>

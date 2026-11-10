@@ -465,12 +465,16 @@ export default function HotelDetail({ hid }: { hid: string }) {
             router.back();
             return;
           }
-          const keep = ['regionId', 'lat', 'lng', 'label', 'checkin', 'checkout', 'adults', 'travelerId', 'guestName', 'eventId', 'eventName'];
+          const keep = ['regionId', 'lat', 'lng', 'checkin', 'checkout', 'adults', 'travelerId', 'guestName', 'eventId', 'eventName'];
           const qs = new URLSearchParams();
           keep.forEach((k) => {
             const v = params.get(k);
             if (v) qs.set(k, v);
           });
+          // The destination label is carried as destLabel (label holds the hotel
+          // name on the detail page).
+          const destLabel = params.get('destLabel') || params.get('label');
+          if (destLabel) qs.set('label', destLabel);
           router.push(qs.toString() ? `/app/hotels?${qs.toString()}` : '/app/book');
         }}
         className="text-sm font-medium text-brand-dark hover:underline"
@@ -754,10 +758,17 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   <Check className="h-3.5 w-3.5" /> In your travel policy
                 </p>
               ) : (
-                <p className="inline-flex items-center gap-1 font-semibold text-amber-600">
-                  <Shield className="h-3.5 w-3.5" />{' '}
-                  {needsApproval ? 'Needs manager approval' : 'Policy note'}
-                </p>
+                <div>
+                  <p className="inline-flex items-center gap-1 font-semibold text-amber-600">
+                    <Shield className="h-3.5 w-3.5" />{' '}
+                    {needsApproval ? 'Needs manager approval' : 'Policy note'}
+                  </p>
+                  {flags.map((f, i) => (
+                    <p key={i} className="mt-0.5 text-slate-500">
+                      {f.message}
+                    </p>
+                  ))}
+                </div>
               )}
               {savings > 0 && (
                 <p className="font-semibold text-emerald-600">

@@ -48,34 +48,82 @@ function policySeverity(flags: PolicyFlag[]): 0 | 1 | 2 | 3 {
   return 0;
 }
 
+/**
+ * A policy badge that, when there are policy notes, reveals them on hover/focus
+ * in a small tooltip — so travelers can see *why* a stay is flagged (e.g. "Over
+ * the $300 nightly cap") right in the results, and on each room type.
+ */
+function PolicyBadge({
+  severity,
+  notes,
+}: {
+  severity: 0 | 1 | 2 | 3;
+  notes: string[];
+}) {
+  const label =
+    severity === 0
+      ? 'In policy'
+      : severity === 1
+        ? 'Policy note'
+        : severity === 2
+          ? 'Needs approval'
+          : 'Out of policy — blocked';
+  const color =
+    severity === 0
+      ? 'text-sky-600'
+      : severity === 1
+        ? 'text-lime-600'
+        : severity === 2
+          ? 'text-amber-600'
+          : 'text-red-600';
+  const hasNotes = notes.length > 0;
+  return (
+    <span className="group relative inline-flex">
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 font-semibold',
+          color,
+          hasNotes && 'cursor-help underline decoration-dotted underline-offset-2'
+        )}
+        tabIndex={hasNotes ? 0 : undefined}
+      >
+        {severity === 0 ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <Shield className="h-3.5 w-3.5" />
+        )}{' '}
+        {label}
+      </span>
+      {hasNotes && (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-56 rounded-lg bg-slate-900 px-3 py-2 text-left text-xs font-normal leading-snug text-white shadow-lg group-hover:block group-focus-within:block"
+        >
+          {notes.map((n, i) => (
+            <span key={i} className="block">
+              {n}
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Signals({
   savings,
   points,
   severity,
+  notes,
 }: {
   savings: number;
   points: number;
   severity: 0 | 1 | 2 | 3;
+  notes: string[];
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      {severity === 0 ? (
-        <span className="inline-flex items-center gap-1 font-semibold text-sky-600">
-          <Check className="h-3.5 w-3.5" /> In policy
-        </span>
-      ) : severity === 1 ? (
-        <span className="inline-flex items-center gap-1 font-semibold text-lime-600">
-          <Shield className="h-3.5 w-3.5" /> Policy note
-        </span>
-      ) : severity === 2 ? (
-        <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-          <Shield className="h-3.5 w-3.5" /> Needs approval
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-1 font-semibold text-red-600">
-          <Shield className="h-3.5 w-3.5" /> Out of policy — blocked
-        </span>
-      )}
+      <PolicyBadge severity={severity} notes={notes} />
       {savings > 0 && (
         <span className="font-semibold text-emerald-600">Saves company {money(savings)}</span>
       )}
@@ -291,6 +339,16 @@ export default function HotelsResults() {
     if (maxTier) q.set('maxTier', maxTier);
     if (overAction) q.set('overAction', overAction);
     if (params.get('forceApproval') === '1') q.set('forceApproval', '1');
+    // Carry the *search* context (region / geo + the destination label) so
+    // "Back to results" can always rebuild a valid search, even on a fresh load
+    // with no browser history. Without this the results page would re-run a
+    // search with no region or location and the API rejects it.
+    if (regionId) q.set('regionId', String(regionId));
+    else if (lat && lng) {
+      q.set('lat', String(lat));
+      q.set('lng', String(lng));
+    }
+    q.set('destLabel', label);
     return `/app/hotels/${opt.hid}?${q.toString()}`;
   };
 
@@ -653,6 +711,7 @@ export default function HotelsResults() {
                           savings={savings}
                           points={points}
                           severity={severity}
+                          notes={flags.map((f) => f.message)}
                         />
                       </div>
                       {opt.freeCancellation && (
