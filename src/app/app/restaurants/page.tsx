@@ -538,6 +538,13 @@ function BookingModal({
             <HvLoader className="py-8" />
           ) : (
             <>
+              <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
+                <Shield className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                <span>
+                  <strong>HeyVacay is an OpenTable Premier Booking Partner.</strong> We&apos;ll make
+                  sure the restaurant takes great care of you — book with confidence.
+                </span>
+              </div>
               {avail && !avail.requestedAvailable && (
                 <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
                   <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />

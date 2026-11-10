@@ -539,6 +539,45 @@ function splitName(full: string): { first: string; last: string } {
 }
 
 /**
+/**
+ * Max length for the OpenTable `special_request` note. Kept conservative so a
+ * long guest request never makes OpenTable reject the reservation; tunable via
+ * env if the account allows more.
+ */
+const OT_NOTE_MAX = Number(process.env.OPENTABLE_NOTE_MAX || '500');
+
+/**
+ * Build the note sent to the restaurant on every HeyVacay Enterprise booking.
+ * Always present (even with no guest request) so the restaurant knows it's a
+ * HeyVacay / OpenTable Premier Partner reservation. When a guest request is
+ * given it's embedded verbatim, truncated only if needed to keep the whole note
+ * under OT_NOTE_MAX while preserving the surrounding framing.
+ */
+export function formatReservationNote(specialRequest?: string): string {
+  const header = 'HEYVACAY ENTERPRISE RESERVATION';
+  const req = (specialRequest || '').trim();
+
+  if (!req) {
+    const note = `${header}\nThis reservation was booked through HeyVacay, an OpenTable Premier Booking Partner. Please ensure to take good care of our customer.`;
+    return note.length > OT_NOTE_MAX ? note.slice(0, OT_NOTE_MAX - 1).trimEnd() + '…' : note;
+  }
+
+  const prefix = `${header}\nThis reservation was booked through HeyVacay, an OpenTable Premier Booking Partner.\n\nGuest special request: `;
+  const suffix = `\n\nWe kindly ask that your team make every effort to accommodate this request. Thank you for taking excellent care of our guest.`;
+  // Fit the guest request into whatever room is left under the cap, keeping the
+  // framing intact.
+  const budget = OT_NOTE_MAX - prefix.length - suffix.length;
+  let reqText = req;
+  if (budget > 0 && reqText.length > budget) {
+    reqText = reqText.slice(0, Math.max(0, budget - 1)).trimEnd() + '…';
+  }
+  let note = `${prefix}${reqText}${suffix}`;
+  // Last-resort guard if even the framing alone exceeds the cap.
+  if (note.length > OT_NOTE_MAX) note = note.slice(0, OT_NOTE_MAX - 1).trimEnd() + '…';
+  return note;
+}
+
+/**
  * Two-step booking: acquire a slot lock (reservation_token), then commit the
  * reservation with the guest's details. Returns null on any failure so the
  * route can fall back to a local confirmation.
@@ -596,7 +635,9 @@ export async function bookReservation(args: {
         phone_type: 'mobile',
       };
     }
-    if (args.specialRequest) body.special_request = args.specialRequest;
+    // Always send the HeyVacay Enterprise note (frames the guest request, or a
+    // take-good-care note when there isn't one).
+    body.special_request = formatReservationNote(args.specialRequest);
 
     const resvRes = await fetch(
       `${OPENTABLE.base}/v2/booking/${encodeURIComponent(args.restaurantId)}/reservations`,
