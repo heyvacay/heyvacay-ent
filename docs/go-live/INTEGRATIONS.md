@@ -5,6 +5,27 @@ running container. Until a key is present, that feature runs on a built-in
 mock/fallback, so the app is always usable. This doc is the exact "few things"
 you do per integration.
 
+## Status at a glance
+
+| Integration | State | Your part to go live |
+|---|---|---|
+| **Live booking** (flights + hotels) | ✅ Live | — |
+| **Stripe** (payments) | ✅ Live | — |
+| **Veryfi** (receipt OCR) | ✅ Live | — |
+| **OpenTable** (dining) | ✅ Live | — |
+| **QuickBooks** (accounting) | ✅ Live (sandbox) | — (flip to production when ready) |
+| **Xero** (accounting) | 🟢 Key-ready | Register a Xero app → add 2 keys → uncomment tfvars → apply |
+| **BambooHR** (roster) | 🟢 Ready now | No server keys — admin enters subdomain + API key in the UI |
+| **Slack** (notifications) | 🟢 Ready now | No server keys — admin pastes an Incoming Webhook URL in the UI |
+| **OpenWeather** (forecast) | 🟢 Key-ready | Add `WEATHER_API_KEY` → uncomment tfvars → apply |
+| **Email / Resend** (transactional) | 🟢 Key-ready | Add `EMAIL_API_KEY` + verify domain → uncomment tfvars → apply |
+| **Flight status** (AeroDataBox) | 🟢 Key-ready | Add `FLIGHT_STATUS_API_KEY` (RapidAPI) → uncomment tfvars → apply |
+| **NetSuite / Workday / Rippling / Gusto / Expensify / Ramp / Brex / Okta / Google SSO** | 🟡 Roadmap | Each needs a real OAuth/API build — see the roadmap section |
+
+All integrations now show **real brand logos**. The ones marked 🟡 still display
+in the Integrations tab (with logos) but their connect flow is not wired to a live
+API yet — nothing fake is shown as "connected" for the ones that are built.
+
 ## The universal pattern (same for all)
 
 1. **Get the key** from the provider (links below).
@@ -114,19 +135,49 @@ only "your part" is registering the Intuit app and dropping its two keys in.
 - **Flip to production:** set `ent_quickbooks_env = "production"`, add a Production
   redirect URI on the Intuit app, and swap in the production client id/secret.
 
+### 6. Xero — real accounting sync (OAuth2) 🟢 key-ready
+Same shape as QuickBooks (shares the token store + mapping UI). Posts approved
+expenses as **spend bank transactions** against mapped account codes.
+- **Your part (Xero app):** developer.xero.com → New app → Web app → copy
+  **Client ID** + **Client Secret**; add Redirect URI exactly
+  `https://ent.stage.heyvacay.co/api/integrations/xero/callback`; scopes are
+  requested automatically (`accounting.transactions`, `accounting.settings.read`).
+- **Secret fields:** `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`.
+- **tfvars:** uncomment `ent_xero_client_id_arn` + `ent_xero_client_secret_arn`,
+  then the same targeted apply as QuickBooks (the DynamoDB table + IAM already exist).
+- **Verify:** diag `xero.configured:true`, then Integrations → Xero → Connect →
+  authorize your Xero org (use the Demo Company to test) → map accounts → post.
+- **Note:** Xero has no sandbox host — test against Xero's built-in **Demo Company**.
+
+### 7. BambooHR — roster sync 🟢 ready now (no server keys)
+Per-company: each BambooHR account issues its own API key, so there's nothing to
+wire in IaC. The admin connects it in the app.
+- **In the app:** Integrations → BambooHR → enter **subdomain** (`yourco`.bamboohr.com)
+  + an **API key** (BambooHR → profile → API Keys) → Connect → **Sync roster** imports
+  employees as people (deduped by email, safe to re-run).
+
+### 8. Slack — notifications 🟢 ready now (no server keys)
+Per-company Incoming Webhook; nothing to wire in IaC.
+- **In the app:** Integrations → Slack → paste an **Incoming Webhook URL**
+  (api.slack.com → your app → Incoming Webhooks → Add to Workspace) → Connect. A
+  hello message confirms it; approval requests + trip alerts post to that channel.
+  URLs are restricted to `hooks.slack.com` server-side.
+
 ---
 
-## Display-only today (roadmap — no live API wired yet)
-These show in **Integrations** as connect cards and drive the in-app accounting
-map, but there is **no live third-party sync** yet (they'd each need an OAuth app
-+ a sync service). **QuickBooks is now real** (above); still display-only:
-- **Xero / NetSuite** (accounting export — same shape as QBO, not yet built)
-- **BambooHR / Workday** (HR / employee + cost-center sync)
-- **Okta / Azure AD / Google Workspace SSO** (SAML/SCIM)
+## Display-only today (roadmap — real build still required)
+These show in **Integrations** with real logos, but their connect flow is **not
+wired to a live API yet** (each needs its own OAuth app + sync service). Not shown
+as "connected" — the UI keeps the existing placeholder flow:
+- **NetSuite** (accounting) — OAuth1 TBA / SuiteTalk; heavier than QBO/Xero.
+- **Workday** (HR) — enterprise SOAP/REST; large build.
+- **Rippling / Gusto** (HR) — OAuth2 employee sync; can reuse the BambooHR import shape.
+- **Expensify / Ramp / Brex** (expense & cards) — OAuth/API transaction sync.
+- **Okta / Google Workspace SSO** (identity) — SAML/SCIM; an auth project, not a data sync.
 
-Say which one matters first and I'll build the real OAuth + sync for it (each is
-its own project — OAuth app registration is the "your part"). Xero/NetSuite can
-reuse the QuickBooks token store + mapping UI, so they're faster now.
+Priority order to build next (fastest first, reusing what's built): **Ramp/Brex**
+(token + transactions), **Gusto/Rippling** (OAuth roster, like BambooHR),
+**NetSuite** (like Xero), then **Workday** and **SSO**.
 
 ---
 

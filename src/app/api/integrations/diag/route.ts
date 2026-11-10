@@ -8,6 +8,7 @@ import {
   STRIPE,
   RECEIPT_OCR,
   QUICKBOOKS,
+  XERO,
   INTEGRATIONS_TABLE,
   isLiveBooking,
   API_BASE_URL,
@@ -87,6 +88,29 @@ export function GET() {
       verify: '/app/integrations/quickbooks',
       env: QUICKBOOKS.env,
       tokenStore: INTEGRATIONS_TABLE,
+    },
+    {
+      key: 'xero',
+      name: 'Xero — accounting sync (OAuth2)',
+      configured: XERO.configured,
+      powers: 'Connect Xero, map accounts, post expenses as spend transactions',
+      verify: '/app/integrations/xero',
+    },
+    {
+      key: 'bamboohr',
+      name: 'BambooHR — roster sync (per-company API key)',
+      // Per-company: connected in the UI with the company's own key, so there's
+      // no global server flag — always "ready", connection state is per workspace.
+      configured: true,
+      powers: 'Import the employee directory into the workspace',
+      verify: '/app/integrations/bamboohr',
+    },
+    {
+      key: 'slack',
+      name: 'Slack — notifications (per-company webhook)',
+      configured: true,
+      powers: 'Approval requests + trip alerts to a Slack channel',
+      verify: '/app/integrations/slack',
     },
   ];
 
