@@ -35,14 +35,25 @@ export default function RestaurantsPage() {
   const [priceMax, setPriceMax] = useState(0); // 0 = any, else 1–4 ($–$$$$)
   const [sortBy, setSortBy] = useState<'rating' | 'price_low' | 'price_high'>('rating');
 
-  const search = async () => {
+  const search = async (nameArg?: string) => {
+    if (city.trim().length < 2) return;
     setLoading(true);
     try {
-      setResults(await searchRestaurants(city, genre || undefined));
+      setResults(await searchRestaurants(city, genre || undefined, nameArg));
     } finally {
       setLoading(false);
     }
   };
+
+  // Once an initial search exists, typing a specific restaurant name re-queries
+  // the full OpenTable directory for that city (debounced) — so the search bar
+  // finds a specific place, not just filters the loaded page.
+  useEffect(() => {
+    if (results === null || city.trim().length < 2) return;
+    const t = setTimeout(() => search(nameQuery.trim() || undefined), 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameQuery]);
 
   const shown = (() => {
     if (!results) return [];
@@ -144,7 +155,7 @@ export default function RestaurantsPage() {
           </div>
 
           <div className="mt-4">
-            <Button onClick={search} disabled={loading || city.trim().length < 2}>
+            <Button onClick={() => search(nameQuery.trim() || undefined)} disabled={loading || city.trim().length < 2}>
               {loading ? 'Searching…' : 'Find tables'}
             </Button>
           </div>

@@ -43,12 +43,13 @@ export interface ReservationResult {
 
 export async function searchRestaurants(
   city?: string,
-  genre?: string
+  genre?: string,
+  name?: string
 ): Promise<Restaurant[]> {
   const res = await fetch('/api/restaurants/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ city, genre }),
+    body: JSON.stringify({ city, genre, name }),
   });
   const data = await res.json().catch(() => null);
   return Array.isArray(data?.restaurants) ? data.restaurants : [];

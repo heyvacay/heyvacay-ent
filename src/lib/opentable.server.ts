@@ -197,12 +197,40 @@ function mapDirectoryItem(it: DirectoryItem): OtRestaurant | null {
  * number of pages so a cold search costs a bounded number of upstream calls.
  */
 const DIR_PAGE_SIZE = 100;
-const DIR_MAX_PAGES = 25; // up to ~2,500 venues cached per container
 const DIR_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+const DIR_MAX_PAGES = 800; // safety cap (~60,895 venues @ 100/page ≈ 609)
+const DIR_CONCURRENCY = 6; // parallel page fetches
 
 let dirCache: { items: OtRestaurant[]; loadedAt: number } | null = null;
 let dirLoading: Promise<OtRestaurant[]> | null = null;
 
+async function fetchDirPage(
+  headers: Record<string, string>,
+  limit: number,
+  offset: number
+): Promise<{ items: DirectoryItem[]; total: number } | null> {
+  try {
+    const res = await fetch(
+      `${OPENTABLE.base}/sync/directory?limit=${limit}&offset=${offset}`,
+      { headers, cache: 'no-store' }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as
+      | { items?: DirectoryItem[]; total_items?: number }
+      | null;
+    return { items: data?.items || [], total: Number(data?.total_items) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the ENTIRE OpenTable directory into an in-memory cache (per container,
+ * 6h TTL) so a city search returns every venue in that city — not just the
+ * first slice. The directory has no server-side city/name filter, so we page
+ * the whole thing once (page 0 tells us total_items; the rest fetch in parallel
+ * batches) and filter locally thereafter.
+ */
 async function loadDirectory(): Promise<OtRestaurant[]> {
   const fresh = dirCache && Date.now() - dirCache.loadedAt < DIR_TTL_MS;
   if (fresh) return dirCache!.items;
@@ -211,28 +239,39 @@ async function loadDirectory(): Promise<OtRestaurant[]> {
   dirLoading = (async () => {
     const headers = await authHeaders();
     if (!headers) return [];
-    const out: OtRestaurant[] = [];
     try {
-      for (let page = 0; page < DIR_MAX_PAGES; page++) {
-        const offset = page * DIR_PAGE_SIZE;
-        const res = await fetch(
-          `${OPENTABLE.base}/sync/directory?limit=${DIR_PAGE_SIZE}&offset=${offset}`,
-          { headers, cache: 'no-store' }
-        );
-        if (!res.ok) break;
-        const data = (await res.json().catch(() => null)) as
-          | { items?: DirectoryItem[]; total_items?: number }
-          | null;
-        const items = data?.items || [];
-        for (const it of items) {
-          const mapped = mapDirectoryItem(it);
-          if (mapped) out.push(mapped);
-        }
-        if (items.length < DIR_PAGE_SIZE) break; // reached the end
-        if (data?.total_items && offset + DIR_PAGE_SIZE >= data.total_items) break;
+      // Page 0 — establishes the effective page size and total count.
+      const first = await fetchDirPage(headers, DIR_PAGE_SIZE, 0);
+      if (!first || first.items.length === 0) return dirCache?.items || [];
+      const pageSize = first.items.length;
+      const total = first.total || pageSize;
+      const pages = Math.min(DIR_MAX_PAGES, Math.ceil(total / pageSize));
+
+      const out: OtRestaurant[] = [];
+      for (const it of first.items) {
+        const m = mapDirectoryItem(it);
+        if (m) out.push(m);
       }
+
+      // Remaining pages in parallel batches.
+      const offsets: number[] = [];
+      for (let p = 1; p < pages; p++) offsets.push(p * pageSize);
+      for (let i = 0; i < offsets.length; i += DIR_CONCURRENCY) {
+        const batch = offsets.slice(i, i + DIR_CONCURRENCY);
+        const results = await Promise.all(
+          batch.map((off) => fetchDirPage(headers, pageSize, off))
+        );
+        for (const r of results) {
+          if (!r) continue;
+          for (const it of r.items) {
+            const m = mapDirectoryItem(it);
+            if (m) out.push(m);
+          }
+        }
+      }
+
       if (out.length) dirCache = { items: out, loadedAt: Date.now() };
-      return out;
+      return out.length ? out : dirCache?.items || [];
     } catch {
       return dirCache?.items || [];
     } finally {
@@ -244,16 +283,19 @@ async function loadDirectory(): Promise<OtRestaurant[]> {
 }
 
 /**
- * Live directory search. Returns [] when credentials are missing/unreachable or
- * when no cached venue matches the city — the route then falls back to mock.
+ * Live directory search. Filters the cached full directory by city, genre, and
+ * an optional free-text name/cuisine query. Returns [] when credentials are
+ * missing/unreachable or nothing matches — the route then falls back to mock.
  */
 export async function searchDirectory(
   city?: string,
-  genre?: string
+  genre?: string,
+  nameQuery?: string
 ): Promise<OtRestaurant[]> {
   const all = await loadDirectory();
   if (!all.length) return [];
   const c = (city || '').trim().toLowerCase();
+  const q = (nameQuery || '').trim().toLowerCase();
   return all.filter((r) => {
     const cityOk =
       !c ||
@@ -261,8 +303,16 @@ export async function searchDirectory(
       c.includes(r.city.toLowerCase()) ||
       r.neighborhood.toLowerCase().includes(c);
     const genreOk = !genre || r.genre === genre;
-    return cityOk && genreOk;
+    const nameOk =
+      !q || r.name.toLowerCase().includes(q) || r.cuisine.toLowerCase().includes(q);
+    return cityOk && genreOk && nameOk;
   });
+}
+
+/** Expose the raw cached directory size (diagnostics). */
+export async function directoryStats(): Promise<{ cached: number }> {
+  const all = await loadDirectory();
+  return { cached: all.length };
 }
 
 /* ------------------------------------------------------------ Availability -- */
@@ -276,18 +326,98 @@ export interface OtAvailability {
   slots: { time: string; available: boolean; bookingUrl?: string }[];
 }
 
-interface AvailabilityTime {
-  time?: string; // ISO "2025-03-05T07:00"
-  availability_types?: {
-    type?: string;
-    diningArea?: { booking_url?: string; id?: string | number }[];
-  }[];
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+/**
+ * Extract bookable HH:mm slot times from whatever shape the availability
+ * response uses. OpenTable's live response doesn't always match a single
+ * documented shape, so we try the known containers in order and, as a last
+ * resort, deep-scan for any ISO date-times on the requested date.
+ */
+function extractSlots(
+  data: unknown,
+  date: string
+): { time: string; bookingUrl?: string }[] {
+  const out: { time: string; bookingUrl?: string }[] = [];
+  const seen = new Set<string>();
+  const push = (iso: unknown, bookingUrl?: string) => {
+    if (typeof iso !== 'string') return;
+    if (!iso.includes(date)) return; // only the requested date
+    const m = iso.match(/T(\d{2}:\d{2})/);
+    if (!m || seen.has(m[1])) return;
+    seen.add(m[1]);
+    out.push({ time: m[1], bookingUrl });
+  };
+  const d = data as Record<string, any>;
+
+  // 1) times_available: [{ time, availability_types:[{ diningArea:[{booking_url}] }] }]
+  if (Array.isArray(d?.times_available)) {
+    for (const t of d.times_available) {
+      const bu = t?.availability_types?.[0]?.diningArea?.[0]?.booking_url;
+      push(t?.time ?? t?.date_time, bu);
+    }
+  }
+  // 2) times: [iso…] or [{ time|date_time, booking_url }]
+  if (!out.length && Array.isArray(d?.times)) {
+    for (const t of d.times) {
+      if (typeof t === 'string') push(t);
+      else push(t?.date_time ?? t?.time ?? t?.datetime, t?.booking_url);
+    }
+  }
+  // 3) slots / availability / available_times arrays
+  for (const key of ['slots', 'availability', 'available_times', 'availabilities']) {
+    if (!out.length && Array.isArray(d?.[key])) {
+      for (const t of d[key]) {
+        if (typeof t === 'string') push(t);
+        else push(t?.date_time ?? t?.time ?? t?.datetime, t?.booking_url);
+      }
+    }
+  }
+  // 4) last resort: deep-scan for any YYYY-MM-DDThh:mm on the requested date.
+  if (!out.length) {
+    const scan = (v: unknown) => {
+      if (typeof v === 'string') push(v);
+      else if (Array.isArray(v)) v.forEach(scan);
+      else if (v && typeof v === 'object') Object.values(v).forEach(scan);
+    };
+    scan(data);
+  }
+  return out.sort((a, b) => a.time.localeCompare(b.time));
 }
 
-// "2025-03-05T19:00" -> "19:00"
-function isoToHm(iso: string): string {
-  const m = iso.match(/T(\d{2}:\d{2})/);
-  return m ? m[1] : iso;
+/** Build the availability request URL for a restaurant/date/time/party. */
+function availabilityUrl(args: {
+  restaurantId: string;
+  date: string;
+  time: string;
+  partySize: number;
+}): string {
+  const startDateTime = `${args.date}T${args.time}`;
+  return (
+    `${OPENTABLE.base}/v2/availability/${encodeURIComponent(args.restaurantId)}` +
+    `?start_date_time=${encodeURIComponent(startDateTime)}` +
+    `&backward_minutes=150&forward_minutes=150` +
+    `&party_size=${args.partySize}`
+  );
+}
+
+/** Raw upstream availability JSON (diagnostics only). */
+export async function getAvailabilityRaw(args: {
+  restaurantId: string;
+  date: string;
+  time: string;
+  partySize: number;
+}): Promise<{ status: number; url: string; body: unknown } | null> {
+  const headers = await authHeaders();
+  if (!headers) return null;
+  const url = availabilityUrl(args);
+  try {
+    const res = await fetch(url, { headers, cache: 'no-store' });
+    const body = await res.json().catch(() => null);
+    return { status: res.status, url, body };
+  } catch (e) {
+    return { status: 0, url, body: { error: String(e) } };
+  }
 }
 
 /**
@@ -304,29 +434,16 @@ export async function getAvailability(args: {
   const headers = await authHeaders();
   if (!headers) return null;
 
-  const startDateTime = `${args.date}T${args.time}`;
-  const url =
-    `${OPENTABLE.base}/v2/availability/${encodeURIComponent(args.restaurantId)}` +
-    `?start_date_time=${encodeURIComponent(startDateTime)}` +
-    `&backward_minutes=120&forward_minutes=120` +
-    `&party_size=${args.partySize}`;
+  const url = availabilityUrl(args);
 
   try {
     const res = await fetch(url, { headers, cache: 'no-store' });
     if (!res.ok) return null;
-    const data = (await res.json().catch(() => null)) as
-      | { times_available?: AvailabilityTime[] }
-      | null;
+    const data = await res.json().catch(() => null);
     if (!data) return null;
 
-    const times = data.times_available || [];
-    const slots: { time: string; available: boolean; bookingUrl?: string }[] = [];
-    for (const t of times) {
-      const hm = t.time ? isoToHm(t.time) : '';
-      if (!hm) continue;
-      const bookingUrl = t.availability_types?.[0]?.diningArea?.[0]?.booking_url;
-      slots.push({ time: hm, available: true, bookingUrl });
-    }
+    const found = extractSlots(data, args.date);
+    const slots = found.map((f) => ({ time: f.time, available: true, bookingUrl: f.bookingUrl }));
 
     const requestedAvailable = slots.some((s) => s.time === args.time);
     return {
