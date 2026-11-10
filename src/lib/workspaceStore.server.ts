@@ -1,0 +1,297 @@
+import 'server-only';
+
+/**
+ * Per-company workspace store — the enterprise app's shared, multi-device data
+ * layer. Where `tokenStore.server.ts` holds integration tokens, this holds the
+ * actual company workspace: users, policies, budgets, bookings, expenses, points,
+ * trip plans, policy-change requests, and a settings record (company profile,
+ * billing, onboarding, accounting map, history, approval modes, …).
+ *
+ * Storage is NORMALIZED: one DynamoDB item per entity.
+ *   pk = companyId
+ *   sk = "<type>#<id>"   e.g. "user#u_123", "booking#bk_9", "settings#root"
+ * A Query on pk returns the whole company, so a fresh device loads the live
+ * shared workspace instead of per-browser localStorage.
+ *
+ * When DynamoDB is unconfigured/unreachable (local dev, build, missing IAM) we
+ * fall back to an in-process Map so nothing crashes — data just doesn't survive
+ * a restart in that mode.
+ */
+
+import { WORKSPACE_TABLE, AWS_REGION } from '@/lib/config.server';
+import type {
+  AppState,
+  Booking,
+  Budget,
+  Expense,
+  PointsEntry,
+  Policy,
+  PolicyChangeRequest,
+  TripPlan,
+  User,
+} from '@/lib/types';
+
+export type Role = 'admin' | 'booker' | 'employee';
+
+export interface WorkspaceData {
+  state: AppState;
+  role: Role;
+}
+
+/** The collection fields stored as one item each, keyed by the entity `id`. */
+const COLLECTIONS = [
+  'users',
+  'budgets',
+  'policies',
+  'bookings',
+  'expenses',
+  'points',
+  'tripPlans',
+  'policyChangeRequests',
+] as const;
+type CollectionField = (typeof COLLECTIONS)[number];
+
+// sk prefix per collection field.
+const SK_PREFIX: Record<CollectionField, string> = {
+  users: 'user',
+  budgets: 'budget',
+  policies: 'policy',
+  bookings: 'booking',
+  expenses: 'expense',
+  points: 'points',
+  tripPlans: 'tripplan',
+  policyChangeRequests: 'pcr',
+};
+const PREFIX_TO_FIELD: Record<string, CollectionField> = Object.fromEntries(
+  Object.entries(SK_PREFIX).map(([field, prefix]) => [prefix, field as CollectionField])
+) as Record<string, CollectionField>;
+
+const SETTINGS_SK = 'settings#root';
+
+/** Everything that isn't one of the normalized collections lives in settings. */
+interface SettingsRecord {
+  company: AppState['company'];
+  billing?: AppState['billing'];
+  onboarding?: AppState['onboarding'];
+  accountingMap: AppState['accountingMap'];
+  history: AppState['history'];
+  departmentApprovalModes?: AppState['departmentApprovalModes'];
+  guestBookingMode?: AppState['guestBookingMode'];
+  integrations: AppState['integrations'];
+  activeUserId: string;
+  role: Role;
+}
+
+/* ------------------------------------------------------------------ */
+/* In-process fallback                                                 */
+/* ------------------------------------------------------------------ */
+
+type Row = Record<string, unknown> & { pk: string; sk: string };
+const mem: Map<string, Map<string, Row>> = (() => {
+  const g = globalThis as unknown as { __hvEntWorkspace?: Map<string, Map<string, Row>> };
+  if (!g.__hvEntWorkspace) g.__hvEntWorkspace = new Map();
+  return g.__hvEntWorkspace;
+})();
+const memCompany = (id: string) => {
+  if (!mem.has(id)) mem.set(id, new Map());
+  return mem.get(id)!;
+};
+
+/* ------------------------------------------------------------------ */
+/* DynamoDB document client (lazy)                                     */
+/* ------------------------------------------------------------------ */
+
+type DocClient = {
+  query: (args: unknown) => Promise<{ Items?: Row[]; LastEvaluatedKey?: unknown }>;
+  batchWrite: (args: unknown) => Promise<unknown>;
+};
+
+let docClientPromise: Promise<DocClient | null> | null = null;
+
+async function getDocClient(): Promise<DocClient | null> {
+  if (!WORKSPACE_TABLE) return null;
+  if (docClientPromise) return docClientPromise;
+  docClientPromise = (async () => {
+    try {
+      const [{ DynamoDBClient }, lib] = await Promise.all([
+        import('@aws-sdk/client-dynamodb'),
+        import('@aws-sdk/lib-dynamodb'),
+      ]);
+      const base = new DynamoDBClient({ region: AWS_REGION });
+      const doc = lib.DynamoDBDocumentClient.from(base, {
+        marshallOptions: { removeUndefinedValues: true },
+      });
+      return {
+        query: (args: unknown) =>
+          doc.send(new lib.QueryCommand(args as never)) as Promise<{
+            Items?: Row[];
+            LastEvaluatedKey?: unknown;
+          }>,
+        batchWrite: (args: unknown) => doc.send(new lib.BatchWriteCommand(args as never)),
+      };
+    } catch (err) {
+      console.warn('[workspace] DynamoDB unavailable, using in-memory store:', (err as Error)?.message);
+      return null;
+    }
+  })();
+  return docClientPromise;
+}
+
+/* ------------------------------------------------------------------ */
+/* Serialization                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Turn a full workspace into the set of rows it should be stored as. */
+function toRows(companyId: string, data: WorkspaceData): Row[] {
+  const { state, role } = data;
+  const rows: Row[] = [];
+  const settings: SettingsRecord = {
+    company: state.company,
+    billing: state.billing,
+    onboarding: state.onboarding,
+    accountingMap: state.accountingMap,
+    history: state.history,
+    departmentApprovalModes: state.departmentApprovalModes,
+    guestBookingMode: state.guestBookingMode,
+    integrations: state.integrations,
+    activeUserId: state.activeUserId,
+    role,
+  };
+  rows.push({ pk: companyId, sk: SETTINGS_SK, data: settings } as Row);
+  for (const field of COLLECTIONS) {
+    const arr = (state[field] as Array<{ id: string }> | undefined) || [];
+    for (const item of arr) {
+      if (!item || typeof item.id !== 'string') continue;
+      rows.push({ pk: companyId, sk: `${SK_PREFIX[field]}#${item.id}`, data: item } as Row);
+    }
+  }
+  return rows;
+}
+
+/** Rebuild a workspace from its stored rows. Returns null if there's no data. */
+function fromRows(rows: Row[]): WorkspaceData | null {
+  const settingsRow = rows.find((r) => r.sk === SETTINGS_SK);
+  if (!settingsRow) return null;
+  const settings = settingsRow.data as SettingsRecord;
+
+  const collections: Record<CollectionField, unknown[]> = {
+    users: [],
+    budgets: [],
+    policies: [],
+    bookings: [],
+    expenses: [],
+    points: [],
+    tripPlans: [],
+    policyChangeRequests: [],
+  };
+  for (const r of rows) {
+    if (r.sk === SETTINGS_SK) continue;
+    const prefix = String(r.sk).split('#')[0];
+    const field = PREFIX_TO_FIELD[prefix];
+    if (field) collections[field].push(r.data);
+  }
+
+  const state: AppState = {
+    company: settings.company,
+    users: collections.users as User[],
+    budgets: collections.budgets as Budget[],
+    policies: collections.policies as Policy[],
+    bookings: collections.bookings as Booking[],
+    expenses: collections.expenses as Expense[],
+    points: collections.points as PointsEntry[],
+    integrations: settings.integrations,
+    billing: settings.billing,
+    onboarding: settings.onboarding,
+    accountingMap: settings.accountingMap,
+    history: settings.history,
+    departmentApprovalModes: settings.departmentApprovalModes,
+    guestBookingMode: settings.guestBookingMode,
+    policyChangeRequests: collections.policyChangeRequests as PolicyChangeRequest[],
+    tripPlans: collections.tripPlans as TripPlan[],
+    activeUserId: settings.activeUserId,
+  };
+  return { state, role: settings.role || 'admin' };
+}
+
+/* ------------------------------------------------------------------ */
+/* Public API                                                          */
+/* ------------------------------------------------------------------ */
+
+async function queryAll(companyId: string): Promise<Row[]> {
+  const doc = await getDocClient();
+  if (!doc) return [...memCompany(companyId).values()];
+  const out: Row[] = [];
+  let startKey: unknown = undefined;
+  do {
+    const res = await doc.query({
+      TableName: WORKSPACE_TABLE,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': companyId },
+      ExclusiveStartKey: startKey,
+    });
+    out.push(...(res.Items || []));
+    startKey = res.LastEvaluatedKey;
+  } while (startKey);
+  return out;
+}
+
+export async function loadWorkspace(companyId: string): Promise<WorkspaceData | null> {
+  if (!companyId) return null;
+  try {
+    const rows = await queryAll(companyId);
+    return fromRows(rows);
+  } catch (err) {
+    console.error('[workspace] load failed:', (err as Error)?.message);
+    return fromRows([...memCompany(companyId).values()]);
+  }
+}
+
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
+/**
+ * Persist a workspace: write every current entity and delete any stored entity
+ * that's no longer present (so storage stays in sync, normalized, per item).
+ */
+export async function saveWorkspace(
+  companyId: string,
+  data: WorkspaceData
+): Promise<void> {
+  if (!companyId) return;
+  const desired = toRows(companyId, data);
+  const desiredSks = new Set(desired.map((r) => r.sk));
+
+  // Figure out what to delete: stored sks not in the desired set.
+  let existingSks: string[] = [];
+  try {
+    const existing = await queryAll(companyId);
+    existingSks = existing.map((r) => String(r.sk));
+  } catch {
+    existingSks = [...memCompany(companyId).keys()];
+  }
+  const toDelete = existingSks.filter((sk) => !desiredSks.has(sk));
+
+  // Update the in-process mirror regardless.
+  const bucket = memCompany(companyId);
+  bucket.clear();
+  for (const r of desired) bucket.set(r.sk, r);
+
+  const doc = await getDocClient();
+  if (!doc) return;
+
+  const requests = [
+    ...desired.map((Item) => ({ PutRequest: { Item } })),
+    ...toDelete.map((sk) => ({ DeleteRequest: { Key: { pk: companyId, sk } } })),
+  ];
+  try {
+    for (const group of chunk(requests, 25)) {
+      await doc.batchWrite({ RequestItems: { [WORKSPACE_TABLE]: group } });
+    }
+  } catch (err) {
+    console.error('[workspace] save failed:', (err as Error)?.message);
+    // Best-effort: the in-process mirror still holds the latest.
+  }
+}

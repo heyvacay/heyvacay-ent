@@ -304,6 +304,11 @@ export const GOOGLE_WS = {
 export const INTEGRATIONS_TABLE =
   process.env.INTEGRATIONS_DDB_TABLE || 'stage-heyvacay-ent-integrations';
 
+/** Per-company workspace table (users, policies, budgets, bookings, expenses,
+ *  events and settings — one normalized item per entity). */
+export const WORKSPACE_TABLE =
+  process.env.WORKSPACE_DDB_TABLE || 'stage-heyvacay-ent-workspace';
+
 export const AWS_REGION = process.env.AWS_REGION || 'us-west-2';
 
 /**

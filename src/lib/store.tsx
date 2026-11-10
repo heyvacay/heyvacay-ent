@@ -40,6 +40,7 @@ import { uid, todayISO } from './format';
 import { rewardsFor } from './rewards';
 import { sendEmail } from './email';
 import { computeDunning, invoicePeriodPaid, type DunningState } from './dunning';
+import { fetchWorkspace, pushWorkspace } from './workspaceSync';
 
 const STORAGE_KEY = 'hv_ent_demo_v2';
 
@@ -332,6 +333,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // The storage key that's currently loaded into `state`, so the persist
   // effect never writes one account's data under another's key mid-switch.
   const loadedKeyRef = useRef<string | null>(null);
+  // Debounce timer for pushing the workspace to the shared server store.
+  const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Read the active account + rep-viewing flag from storage.
   useEffect(() => {
@@ -400,7 +403,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (switching) setHydrated(true);
   }, [activeAccount]);
 
-  // Persist to the CURRENTLY loaded account's key only.
+  // Multi-device sync: for a real company (has an id), the server workspace is
+  // the source of truth. After the fast local load above, fetch the shared
+  // workspace and adopt it if present; if there's none yet (first device for
+  // this company), our local state is pushed up by the persist effect below.
+  useEffect(() => {
+    const id = activeAccount?.id;
+    if (!id) return; // default/demo workspace stays local-only
+    const key = acctKey(id);
+    let live = true;
+    (async () => {
+      const remote = await fetchWorkspace(id);
+      if (!live || loadedKeyRef.current !== key) return; // account switched meanwhile
+      if (remote?.state) {
+        const merged = mergeLoaded(remote.state);
+        setState((cur) => (JSON.stringify(cur) !== JSON.stringify(merged) ? merged : cur));
+        if (remote.role) setRole((r) => (r !== remote.role ? remote.role : r));
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount?.id]);
+
+  // Persist to the CURRENTLY loaded account's key only — localStorage for an
+  // instant local cache, and (for a real company) a debounced write-through to
+  // the shared server workspace so other devices pick it up.
   useEffect(() => {
     if (!hydrated) return;
     const key = acctKey(activeAccount?.id);
@@ -409,6 +438,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(key, JSON.stringify({ state, role }));
     } catch {
       /* ignore */
+    }
+    const id = activeAccount?.id;
+    if (id) {
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = setTimeout(() => {
+        // Guard again at fire time: don't write one account under another.
+        if (loadedKeyRef.current === key) void pushWorkspace(id, state, role);
+      }, 1200);
     }
   }, [state, role, hydrated, activeAccount]);
 
