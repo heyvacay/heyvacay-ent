@@ -42,6 +42,9 @@ interface SyncResultRow {
   qboId?: string;
   viewUrl?: string;
   error?: string;
+  verified?: boolean;
+  verifyNote?: string;
+  duplicate?: boolean;
 }
 
 /**
@@ -486,14 +489,26 @@ export function QuickBooksPanel({ integration }: { integration: Integration }) {
                           </td>
                           <td className="px-4 py-2.5">
                             {r.ok ? (
-                              <a
-                                className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:underline"
-                                href={r.viewUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <Check className="h-4 w-4" /> Posted{r.qboId ? ` (#${r.qboId})` : ''}
-                              </a>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <a
+                                  className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:underline"
+                                  href={r.viewUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <Check className="h-4 w-4" /> View in QuickBooks
+                                </a>
+                                <span className="text-xs text-slate-400">HV-{r.id}</span>
+                                {r.duplicate ? (
+                                  <Badge color="slate">Already posted</Badge>
+                                ) : r.verified ? (
+                                  <Badge color="green">Verified</Badge>
+                                ) : (
+                                  <span title={r.verifyNote} className="cursor-help">
+                                    <Badge color="amber">Review</Badge>
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-rose-700">{r.error}</span>
                             )}

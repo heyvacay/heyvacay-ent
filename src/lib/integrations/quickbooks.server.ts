@@ -266,6 +266,9 @@ export async function listAccounts(companyId: string): Promise<QboAccount[]> {
 }
 
 export interface CreatePurchaseInput {
+  /** HeyVacay expense id — stamped as the QuickBooks DocNumber for a visible,
+   *  searchable reference and to make the post idempotent. */
+  expenseId: string;
   /** Expense GL account id (AccountBasedExpenseLineDetail.AccountRef). */
   expenseAccountId: string;
   /** Bank / credit-card account the purchase is paid from (Purchase.AccountRef). */
@@ -284,22 +287,79 @@ export interface CreatePurchaseResult {
   id: string;
   docNumber?: string;
   viewUrl: string;
+  /** True when the stored transaction read back with the amount + account we sent. */
+  verified: boolean;
+  /** Set when verification found a discrepancy, for display. */
+  verifyNote?: string;
+  /** True when an identical DocNumber already existed (idempotent no-op). */
+  duplicate?: boolean;
 }
 
-/** Post an approved expense to QuickBooks as a Purchase. */
+/** QuickBooks DocNumber has a 21-char limit; stamp a stable HeyVacay reference. */
+export function docNumberFor(expenseId: string): string {
+  return `HV-${expenseId}`.slice(0, 21);
+}
+
+function viewUrlFor(id: string): string {
+  const host =
+    QUICKBOOKS.env === 'production'
+      ? 'https://app.qbo.intuit.com'
+      : 'https://app.sandbox.qbo.intuit.com';
+  // Single-transaction expense view (not /app/exprs, which is the list).
+  return `${host}/app/expense?txnId=${id}`;
+}
+
+/**
+ * Look up an already-posted Purchase by its HeyVacay DocNumber, so we never
+ * post the same expense twice (idempotency across lost local state / retries).
+ */
+export async function findPurchaseByDocNumber(
+  companyId: string,
+  docNumber: string
+): Promise<{ id: string; docNumber: string } | null> {
+  const { accessToken, realmId } = await getValidAccessToken(companyId);
+  const safe = docNumber.replace(/'/g, "\\'");
+  const query = `select Id, DocNumber, TotalAmt from Purchase where DocNumber = '${safe}'`;
+  const data = (await qboFetch(
+    accessToken,
+    realmId,
+    `query?query=${encodeURIComponent(query)}`
+  )) as { QueryResponse?: { Purchase?: Array<{ Id: string; DocNumber?: string }> } };
+  const hit = data?.QueryResponse?.Purchase?.[0];
+  return hit ? { id: hit.Id, docNumber: hit.DocNumber || docNumber } : null;
+}
+
+/** Post an approved expense to QuickBooks as a Purchase (idempotent + verified). */
 export async function createPurchase(
   companyId: string,
   input: CreatePurchaseInput
 ): Promise<CreatePurchaseResult> {
   const { accessToken, realmId } = await getValidAccessToken(companyId);
+  const docNumber = docNumberFor(input.expenseId);
+  const amount = Number(input.amount.toFixed(2));
+
+  // Idempotency: if this expense already posted (same DocNumber), return it
+  // instead of creating a duplicate.
+  const existing = await findPurchaseByDocNumber(companyId, docNumber);
+  if (existing) {
+    return {
+      id: existing.id,
+      docNumber,
+      viewUrl: viewUrlFor(existing.id),
+      verified: true,
+      duplicate: true,
+    };
+  }
+
   const body: Record<string, unknown> = {
     PaymentType: input.paymentType || 'CreditCard',
     AccountRef: { value: input.paymentAccountId },
     TxnDate: input.txnDate,
-    PrivateNote: `HeyVacay expense — ${input.merchant}${input.description ? ` · ${input.description}` : ''}`,
+    DocNumber: docNumber,
+    PrivateNote: `HeyVacay expense ${docNumber} — ${input.merchant}${input.description ? ` · ${input.description}` : ''}`,
     Line: [
       {
-        Amount: Number(input.amount.toFixed(2)),
+        Amount: amount,
         DetailType: 'AccountBasedExpenseLineDetail',
         Description: `${input.merchant}${input.description ? ` — ${input.description}` : ''}`.slice(0, 1000),
         AccountBasedExpenseLineDetail: {
@@ -314,16 +374,34 @@ export async function createPurchase(
   const data = (await qboFetch(accessToken, realmId, 'purchase', {
     method: 'POST',
     body: JSON.stringify(body),
-  })) as { Purchase?: { Id: string; DocNumber?: string } };
-  const id = data?.Purchase?.Id || '';
-  // Deep link to view the transaction in QBO (sandbox vs prod host).
-  const host =
-    QUICKBOOKS.env === 'production'
-      ? 'https://app.qbo.intuit.com'
-      : 'https://app.sandbox.qbo.intuit.com';
+  })) as {
+    Purchase?: {
+      Id: string;
+      DocNumber?: string;
+      TotalAmt?: number;
+      Line?: Array<{ AccountBasedExpenseLineDetail?: { AccountRef?: { value?: string } } }>;
+    };
+  };
+  const p = data?.Purchase;
+  const id = p?.Id || '';
+
+  // Read-back verification: confirm the stored transaction carries the amount
+  // and expense account we sent, rather than trusting the create blindly.
+  const issues: string[] = [];
+  if (typeof p?.TotalAmt === 'number' && Math.abs(p.TotalAmt - amount) > 0.005) {
+    issues.push(`amount posted as ${p.TotalAmt}, expected ${amount}`);
+  }
+  const postedAcct = p?.Line?.find((l) => l.AccountBasedExpenseLineDetail)
+    ?.AccountBasedExpenseLineDetail?.AccountRef?.value;
+  if (postedAcct && postedAcct !== input.expenseAccountId) {
+    issues.push('posted to a different account than mapped');
+  }
+
   return {
     id,
-    docNumber: data?.Purchase?.DocNumber,
-    viewUrl: `${host}/app/exprs?txnId=${id}`,
+    docNumber: p?.DocNumber || docNumber,
+    viewUrl: viewUrlFor(id),
+    verified: issues.length === 0,
+    verifyNote: issues.length ? issues.join('; ') : undefined,
   };
 }

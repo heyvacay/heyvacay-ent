@@ -60,6 +60,9 @@ export async function POST(req: Request) {
     qboId?: string;
     viewUrl?: string;
     error?: string;
+    verified?: boolean;
+    verifyNote?: string;
+    duplicate?: boolean;
   }> = [];
 
   // Sequential on purpose: QBO rate-limits and a batch here is small (approved,
@@ -76,6 +79,7 @@ export async function POST(req: Request) {
     }
     try {
       const r = await createPurchase(companyId, {
+        expenseId: e.id,
         expenseAccountId,
         paymentAccountId: conn.paymentAccountId,
         amount: Number(e.amount) || 0,
@@ -84,7 +88,15 @@ export async function POST(req: Request) {
         description: e.note,
         paymentType: e.paidWith === 'personal' ? 'Cash' : 'CreditCard',
       });
-      results.push({ id: e.id, ok: true, qboId: r.id, viewUrl: r.viewUrl });
+      results.push({
+        id: e.id,
+        ok: true,
+        qboId: r.id,
+        viewUrl: r.viewUrl,
+        verified: r.verified,
+        verifyNote: r.verifyNote,
+        duplicate: r.duplicate,
+      });
     } catch (err) {
       results.push({ id: e.id, ok: false, error: (err as Error).message.slice(0, 200) });
     }
