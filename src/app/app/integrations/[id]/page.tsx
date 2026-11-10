@@ -20,6 +20,8 @@ import { Check, Lock, Receipt, Users } from '@/components/icons';
 import { IntegrationLogo } from '@/components/app/IntegrationLogo';
 import { QuickBooksPanel } from '@/components/app/QuickBooksPanel';
 import { XeroPanel } from '@/components/app/XeroPanel';
+import { BambooHRPanel } from '@/components/app/BambooHRPanel';
+import { SlackPanel } from '@/components/app/SlackPanel';
 import type { ExpenseCategory } from '@/lib/types';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -81,7 +83,11 @@ export default function IntegrationDetailPage() {
   // so the generic simulated flows below are skipped for them.
   const isQuickBooks = integration.id === 'quickbooks';
   const isXero = integration.id === 'xero';
+  const isBambooHR = integration.id === 'bamboohr';
+  const isSlack = integration.id === 'slack';
   const isRealAccounting = isQuickBooks || isXero;
+  // Any integration with its own real panel (owns its connect/disconnect).
+  const isRealIntegration = isRealAccounting || isBambooHR || isSlack;
 
   const connect = () => {
     setConnecting(true);
@@ -104,7 +110,7 @@ export default function IntegrationDetailPage() {
         title={integration.name}
         subtitle={integration.blurb}
         actions={
-          connected && !isRealAccounting ? (
+          connected && !isRealIntegration ? (
             <Button
               variant="ghost"
               size="sm"
@@ -134,12 +140,14 @@ export default function IntegrationDetailPage() {
         </div>
       </div>
 
-      {/* ---- QuickBooks / Xero: real OAuth + account mapping + posting ---- */}
+      {/* ---- Real integrations: own OAuth / connect + sync panels ---- */}
       {isQuickBooks && <QuickBooksPanel integration={integration} />}
       {isXero && <XeroPanel integration={integration} />}
+      {isBambooHR && <BambooHRPanel integration={integration} />}
+      {isSlack && <SlackPanel integration={integration} />}
 
       {/* ---- not connected: connect panel ---- */}
-      {!isRealAccounting && !connected && (
+      {!isRealIntegration && !connected && (
         <Card className="max-w-xl">
           <h2 className="font-display text-lg font-bold text-slate-900">
             Connect {integration.name}
@@ -170,7 +178,7 @@ export default function IntegrationDetailPage() {
       )}
 
       {/* ---- connected: accounting ---- */}
-      {!isRealAccounting && connected && isAccounting && (
+      {!isRealIntegration && connected && isAccounting && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard label="Ready to post" value={postable.length} sub="Approved, not yet synced" />
@@ -259,7 +267,7 @@ export default function IntegrationDetailPage() {
       )}
 
       {/* ---- connected: HR ---- */}
-      {!isRealAccounting && connected && isHr && (
+      {!isRealIntegration && connected && isHr && (
         <Card className="max-w-xl">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand/12 text-brand-dark">
@@ -296,7 +304,7 @@ export default function IntegrationDetailPage() {
       )}
 
       {/* ---- connected: other ---- */}
-      {!isRealAccounting && connected && !isAccounting && !isHr && (
+      {!isRealIntegration && connected && !isAccounting && !isHr && (
         <Card className="max-w-xl">
           <div className="flex items-center gap-2 text-emerald-700">
             <Check className="h-5 w-5" />
