@@ -18,6 +18,7 @@ import { money2, shortDate } from '@/lib/format';
 import { ACCOUNTING_IDS } from '@/lib/seed';
 import { Check, Lock, Receipt, Users } from '@/components/icons';
 import { IntegrationLogo } from '@/components/app/IntegrationLogo';
+import { QuickBooksPanel } from '@/components/app/QuickBooksPanel';
 import type { ExpenseCategory } from '@/lib/types';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -37,7 +38,6 @@ export default function IntegrationDetailPage() {
     state,
     setIntegrationStatus,
     setGlMapping,
-    syncExpense,
     syncAllApproved,
   } = useStore();
 
@@ -75,6 +75,10 @@ export default function IntegrationDetailPage() {
   const connected = integration.status === 'connected';
   const isAccounting = ACCOUNTING_IDS.includes(integration.id);
   const isHr = HR_IDS.includes(integration.id);
+  // QuickBooks is a REAL OAuth integration with its own panel (connect, live
+  // account mapping, posting). It owns its connect/disconnect, so the generic
+  // simulated flows below are skipped for it.
+  const isQuickBooks = integration.id === 'quickbooks';
 
   const connect = () => {
     setConnecting(true);
@@ -97,7 +101,7 @@ export default function IntegrationDetailPage() {
         title={integration.name}
         subtitle={integration.blurb}
         actions={
-          connected ? (
+          connected && !isQuickBooks ? (
             <Button
               variant="ghost"
               size="sm"
@@ -127,8 +131,11 @@ export default function IntegrationDetailPage() {
         </div>
       </div>
 
+      {/* ---- QuickBooks: real OAuth + account mapping + posting ---- */}
+      {isQuickBooks && <QuickBooksPanel integration={integration} />}
+
       {/* ---- not connected: connect panel ---- */}
-      {!connected && (
+      {!isQuickBooks && !connected && (
         <Card className="max-w-xl">
           <h2 className="font-display text-lg font-bold text-slate-900">
             Connect {integration.name}
@@ -159,7 +166,7 @@ export default function IntegrationDetailPage() {
       )}
 
       {/* ---- connected: accounting ---- */}
-      {connected && isAccounting && (
+      {!isQuickBooks && connected && isAccounting && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard label="Ready to post" value={postable.length} sub="Approved, not yet synced" />
@@ -248,7 +255,7 @@ export default function IntegrationDetailPage() {
       )}
 
       {/* ---- connected: HR ---- */}
-      {connected && isHr && (
+      {!isQuickBooks && connected && isHr && (
         <Card className="max-w-xl">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand/12 text-brand-dark">
@@ -285,7 +292,7 @@ export default function IntegrationDetailPage() {
       )}
 
       {/* ---- connected: other ---- */}
-      {connected && !isAccounting && !isHr && (
+      {!isQuickBooks && connected && !isAccounting && !isHr && (
         <Card className="max-w-xl">
           <div className="flex items-center gap-2 text-emerald-700">
             <Check className="h-5 w-5" />
