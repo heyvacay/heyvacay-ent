@@ -276,6 +276,11 @@ export interface Booking {
   reviewNote?: string;
   /** Whether the reviewer's comment is shown to the traveler (default true). */
   reviewNoteVisible?: boolean;
+  /** True when a manager declined this request (vs the traveler cancelling).
+   *  reviewNote carries the required reason. The traveler can resubmit. */
+  rejected?: boolean;
+  /** When the manager declined (ISO date). */
+  rejectedAt?: string;
   /** A note the traveler adds when submitting for approval. */
   travelerNote?: string;
   /** Hotel rate was free-cancellation (relevant to the approval window). */

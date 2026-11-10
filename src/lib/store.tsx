@@ -237,6 +237,11 @@ export interface StoreApi {
   guestBookingMode: GuestBookingMode;
   setGuestBookingMode: (mode: GuestBookingMode) => void;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
+  /** Manager declines a pending request. A reason is required and always shown
+   *  to the traveler, who can then resubmit. */
+  declineBooking: (id: string, reason: string) => void;
+  /** Traveler resubmits a previously-declined request for approval again. */
+  resubmitBooking: (id: string, travelerNote?: string) => void;
   /** Cancel a trip through the refund flow: records the reason + refund. */
   cancelTrip: (
     id: string,
@@ -1260,6 +1265,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const declineBooking: StoreApi['declineBooking'] = useCallback((id, reason) => {
+    setState((s) => ({
+      ...s,
+      bookings: s.bookings.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              status: 'cancelled',
+              rejected: true,
+              rejectedAt: new Date().toISOString().slice(0, 10),
+              reviewNote: reason,
+              // A decline reason is always shown to the traveler.
+              reviewNoteVisible: true,
+            }
+          : b
+      ),
+      points: s.points.filter((p) => p.bookingId !== id),
+    }));
+  }, []);
+
+  const resubmitBooking: StoreApi['resubmitBooking'] = useCallback((id, travelerNote) => {
+    setState((s) => ({
+      ...s,
+      bookings: s.bookings.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              status: 'pending_approval',
+              rejected: false,
+              rejectedAt: undefined,
+              // Keep the prior reviewNote as history is noisy on resubmit; clear
+              // it so the request looks fresh, and carry the traveler's note.
+              reviewNote: undefined,
+              reviewNoteVisible: undefined,
+              travelerNote: travelerNote?.trim() || b.travelerNote,
+            }
+          : b
+      ),
+    }));
+  }, []);
+
   const cancelTrip: StoreApi['cancelTrip'] = useCallback((id, details) => {
     setState((s) => ({
       ...s,
@@ -1854,6 +1900,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     resolvePolicyChange,
     book,
     cancelBooking,
+    declineBooking,
+    resubmitBooking,
     cancelTrip,
     attachBookingToEvent,
     savePlan,

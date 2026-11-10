@@ -41,11 +41,12 @@ function roomAllIn(room: UiRoom): { title: string; price: number; image?: string
 }
 
 export default function ApprovalDetail({ id }: { id: string }) {
-  const { state, userById, spentForScope, approveBookingLive, cancelBooking, proposeChange, activeUser } =
+  const { state, userById, spentForScope, approveBookingLive, declineBooking, proposeChange, activeUser } =
     useStore();
   const [note, setNote] = useState('');
   const [noteVisible, setNoteVisible] = useState(true);
   const [done, setDone] = useState<null | 'approved' | 'declined' | 'offered'>(null);
+  const [declineError, setDeclineError] = useState<string | null>(null);
   const [autoBooking, setAutoBooking] = useState(false);
   const [outcome, setOutcome] = useState<AutoBookResult | null>(null);
   // "Approve if changed" counter-offer form.
@@ -114,14 +115,20 @@ export default function ApprovalDetail({ id }: { id: string }) {
   const decide = async (kind: 'approved' | 'declined') => {
     const comment = note.trim() || undefined;
     if (kind === 'declined') {
-      cancelBooking(b.id, comment, noteVisible);
+      // A decline must carry a reason — the traveler always sees it.
+      const reason = note.trim();
+      if (!reason) {
+        setDeclineError('Please add a reason for declining. The traveler will see it so they know what to change.');
+        return;
+      }
+      declineBooking(b.id, reason);
       setDone('declined');
       if (traveler?.email) {
         sendEmail('approvalDecided', traveler.email, {
           travelerName: travelerName ?? traveler.name,
           title: b.title,
           approved: false,
-          note: noteVisible ? comment : undefined,
+          note: reason,
         });
       }
       return;
@@ -544,15 +551,29 @@ export default function ApprovalDetail({ id }: { id: string }) {
               {pending && !done ? (
                 <>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Add a comment
+                    Add a comment{' '}
+                    <span className="font-normal text-slate-400">
+                      (required to decline)
+                    </span>
                   </label>
                   <textarea
                     value={note}
-                    onChange={(e) => setNote(e.target.value)}
+                    onChange={(e) => {
+                      setNote(e.target.value);
+                      if (declineError) setDeclineError(null);
+                    }}
                     rows={3}
-                    placeholder="Optional note to the traveler…"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                    placeholder="Optional for approve · required to decline — tell the traveler why and what to change…"
+                    className={
+                      'w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 ' +
+                      (declineError
+                        ? 'border-red-300 focus:border-red-400 focus:ring-red-200'
+                        : 'border-slate-300 focus:border-brand focus:ring-brand/25')
+                    }
                   />
+                  {declineError && (
+                    <p className="mt-1 text-xs font-medium text-red-600">{declineError}</p>
+                  )}
                   <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                     <input
                       type="checkbox"
@@ -569,6 +590,7 @@ export default function ApprovalDetail({ id }: { id: string }) {
                     <Button
                       variant="danger"
                       className="flex-1"
+                      disabled={!note.trim()}
                       onClick={() => decide('declined')}
                     >
                       Decline

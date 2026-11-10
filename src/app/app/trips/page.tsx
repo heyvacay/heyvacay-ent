@@ -22,11 +22,13 @@ function TripCard({
   b,
   onCancel,
   onDetails,
+  onResubmit,
   travelerName,
 }: {
   b: Booking;
   onCancel: (b: Booking) => void;
   onDetails: (b: Booking) => void;
+  onResubmit?: (b: Booking) => void;
   travelerName?: string;
 }) {
   const savings = b.savings;
@@ -50,7 +52,12 @@ function TripCard({
           {b.status === 'pending_approval' && (
             <Badge color="amber">Pending approval</Badge>
           )}
-          {b.status === 'cancelled' && <Badge color="slate">Cancelled</Badge>}
+          {b.status === 'cancelled' && b.rejected && (
+            <Badge color="red">Rejected</Badge>
+          )}
+          {b.status === 'cancelled' && !b.rejected && (
+            <Badge color="slate">Cancelled</Badge>
+          )}
           {b.status === 'confirmed' && !past && (
             <Badge color="brand">{days <= 0 ? 'In progress' : `in ${days}d`}</Badge>
           )}
@@ -62,13 +69,24 @@ function TripCard({
         <p className="mt-1 text-xs text-slate-400">
           {dateRange(b.startDate, b.endDate)}
         </p>
-        {b.reviewNote && b.reviewNoteVisible && (
-          <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">
-              {b.status === 'cancelled' ? 'Declined' : 'Approved'} with a note:
-            </span>{' '}
+        {b.rejected && b.reviewNote ? (
+          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800">
+            <span className="font-semibold">Your manager declined this request:</span>{' '}
             “{b.reviewNote}”
-          </p>
+            <span className="mt-1 block text-red-600">
+              Update the trip to address this, then resubmit for approval.
+            </span>
+          </div>
+        ) : (
+          b.reviewNote &&
+          b.reviewNoteVisible && (
+            <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">
+                {b.status === 'cancelled' ? 'Declined' : 'Approved'} with a note:
+              </span>{' '}
+              “{b.reviewNote}”
+            </p>
+          )
         )}
       </div>
       <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
@@ -86,6 +104,11 @@ function TripCard({
           <Button size="sm" variant="outline" onClick={() => onDetails(b)}>
             View details
           </Button>
+          {b.rejected && onResubmit && (
+            <Button size="sm" onClick={() => onResubmit(b)}>
+              Resubmit
+            </Button>
+          )}
           {b.status !== 'cancelled' && !past && (
             <Button size="sm" variant="ghost" onClick={() => onCancel(b)}>
               Cancel
@@ -168,7 +191,7 @@ function Row({ k, v, tone }: { k: string; v: string; tone?: 'emerald' | 'brand' 
 }
 
 export default function TripsPage() {
-  const { state, role, activeUser, fullAccess, directReportIds, userById, cancelTrip } = useStore();
+  const { state, role, activeUser, fullAccess, directReportIds, userById, cancelTrip, resubmitBooking } = useStore();
   const [details, setDetails] = useState<Booking | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const isAdmin = role === 'admin';
@@ -208,11 +231,14 @@ export default function TripsPage() {
       ((b.type === 'hotel' && b.startDate <= today && b.endDate >= today) ||
         (b.type === 'flight' && b.startDate === today))
   );
+  // Rejected requests surface in their own action-needed section so the
+  // traveler sees why and can resubmit, instead of being buried in "past".
+  const rejected = mine.filter((b) => b.rejected);
   const upcoming = mine.filter(
     (b) => b.status !== 'cancelled' && daysUntil(b.endDate) >= 0 && !activeNow.includes(b)
   );
   const past = mine.filter(
-    (b) => b.status === 'cancelled' || daysUntil(b.endDate) < 0
+    (b) => !b.rejected && (b.status === 'cancelled' || daysUntil(b.endDate) < 0)
   );
   const expensesForTrip = (id: string) =>
     state.expenses.filter((e) => e.tripId === id);
@@ -356,6 +382,29 @@ export default function TripsPage() {
                     </div>
                   );
                 })}
+              </div>
+            </section>
+          )}
+
+          {rejected.length > 0 && (
+            <section>
+              <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                Needs attention
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                  {rejected.length} rejected
+                </span>
+              </h2>
+              <div className="space-y-3">
+                {rejected.map((b) => (
+                  <TripCard
+                    key={b.id}
+                    b={b}
+                    onCancel={setCancelTarget}
+                    onDetails={setDetails}
+                    onResubmit={viewingTeam ? undefined : (bk) => resubmitBooking(bk.id)}
+                    travelerName={b.guestName || (viewingTeam ? nameOf(b.travelerId) : undefined)}
+                  />
+                ))}
               </div>
             </section>
           )}

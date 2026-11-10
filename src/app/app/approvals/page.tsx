@@ -102,7 +102,7 @@ export default function ApprovalsPage() {
       {!clear && (
         <p className="mt-6 flex items-center gap-1.5 text-xs text-slate-400">
           <Check className="h-3.5 w-3.5" /> Approving a trip awards its points;
-          declining cancels it.
+          declining asks for a reason and lets the traveler revise and resubmit.
         </p>
       )}
     </div>
