@@ -1,8 +1,33 @@
 import { NextResponse } from 'next/server';
+import { QUICKBOOKS } from '@/lib/config.server';
 import { verifyState, exchangeCode } from '@/lib/integrations/quickbooks.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+/**
+ * The public origin to send the browser back to. Behind the ALB, req.url carries
+ * the container's internal address (0.0.0.0:3000), so we must use the forwarded
+ * host header — and fall back to the configured public callback origin — rather
+ * than req.url, or the post-OAuth redirect lands on an unreachable host.
+ */
+function appOrigin(req: Request): string {
+  const first = (name: string) => (req.headers.get(name) || '').split(',')[0].trim();
+  const host = first('x-forwarded-host') || first('host');
+  const proto = first('x-forwarded-proto') || 'https';
+  const isInternal = /^(0\.0\.0\.0|127\.0\.0\.1|localhost)(:|$)/.test(host);
+  if (host && !isInternal) return `${proto}://${host}`;
+  // Fall back to the public origin we registered as the OAuth redirect URI.
+  try {
+    return new URL(QUICKBOOKS.redirectUri).origin;
+  } catch {
+    try {
+      return new URL(req.url).origin;
+    } catch {
+      return '';
+    }
+  }
+}
 
 /**
  * Intuit redirects the user's browser here after consent with ?code, ?realmId,
@@ -13,8 +38,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const params = url.searchParams;
+  const base = appOrigin(req);
   const dest = (status: string, extra?: Record<string, string>) => {
-    const to = new URL('/app/integrations/quickbooks', req.url);
+    const to = new URL('/app/integrations/quickbooks', base || req.url);
     to.searchParams.set('qbo', status);
     for (const [k, v] of Object.entries(extra || {})) to.searchParams.set(k, v);
     return NextResponse.redirect(to);
