@@ -15,6 +15,7 @@ import {
   StatCard,
 } from '@/components/app/ui';
 import { money, money2, shortDate, todayISO } from '@/lib/format';
+import { evaluateExpense, hasExpensePolicies } from '@/lib/expensePolicy';
 import { ACCOUNTING_IDS } from '@/lib/seed';
 import { Check, Globe, Receipt, Shield } from '@/components/icons';
 import { CameraCapture } from '@/components/app/CameraCapture';
@@ -60,6 +61,7 @@ export default function ExpensesPage() {
   const [open, setOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [receiptView, setReceiptView] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null); // camera (capture)
   const uploadRef = useRef<HTMLInputElement>(null); // file upload
   const scanTripRef = useRef('');
@@ -208,6 +210,7 @@ export default function ExpensesPage() {
       amount: Number(form.amount) || 0,
       date: form.date,
       hasReceipt: form.hasReceipt,
+      receiptImage: receiptPreview || undefined,
       note: form.note || undefined,
       tripId: form.tripId || undefined,
     });
@@ -606,6 +609,33 @@ export default function ExpensesPage() {
                         {!e.hasReceipt && (
                           <p className="text-xs text-amber-600">No receipt</p>
                         )}
+                        {e.receiptImage && (
+                          <button
+                            type="button"
+                            onClick={() => setReceiptView(e.receiptImage!)}
+                            className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+                          >
+                            <Receipt className="h-3 w-3" /> View receipt
+                          </button>
+                        )}
+                        {hasExpensePolicies(state.policies) &&
+                          (() => {
+                            const pol = evaluateExpense(e, state.policies);
+                            if (pol.status === 'in')
+                              return <p className="text-xs font-medium text-emerald-600">✓ In policy</p>;
+                            return (
+                              <p
+                                className={
+                                  pol.status === 'out'
+                                    ? 'text-xs font-semibold text-red-600'
+                                    : 'text-xs font-semibold text-amber-600'
+                                }
+                              >
+                                {pol.status === 'out' ? 'Out of policy' : 'Policy flag'}
+                                {pol.notes.length ? ` — ${pol.notes.join('; ')}` : ''}
+                              </p>
+                            );
+                          })()}
                         {e.reviewNote && (
                           <p className="mt-0.5 text-xs text-slate-500">
                             <span className="font-semibold">
@@ -767,6 +797,32 @@ export default function ExpensesPage() {
                 {decide.kind === 'approved' ? 'Approve' : 'Reject'}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {receiptView && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setReceiptView(null)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-lg overflow-auto rounded-2xl bg-white p-2 shadow-2xl"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={receiptView}
+              alt="Receipt"
+              className="h-auto w-full rounded-xl"
+            />
+            <button
+              type="button"
+              onClick={() => setReceiptView(null)}
+              className="absolute right-3 top-3 rounded-full bg-black/60 px-2 py-1 text-xs font-medium text-white hover:bg-black/80"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

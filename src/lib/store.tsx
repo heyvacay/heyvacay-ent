@@ -290,6 +290,7 @@ export interface StoreApi {
     amount: number;
     date: string;
     hasReceipt: boolean;
+    receiptImage?: string;
     note?: string;
     tripId?: string;
     reimbursable?: boolean;

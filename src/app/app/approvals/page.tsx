@@ -2,7 +2,6 @@
 
 import { useStore } from '@/lib/store';
 import {
-  Avatar,
   Badge,
   Button,
   Card,
@@ -10,29 +9,27 @@ import {
   PageHeader,
   StatCard,
 } from '@/components/app/ui';
-import { money, money2, dateRange, shortDate } from '@/lib/format';
+import { money, dateRange } from '@/lib/format';
 import { Plane, Receipt, Shield, Check } from '@/components/icons';
 
 export default function ApprovalsPage() {
-  const { state, userById, setExpenseStatus } = useStore();
+  const { state, userById } = useStore();
 
+  // Travel approvals are for bookings only — hotels, flights and car rentals.
+  // Expense review lives in the Expenses section.
   const trips = state.bookings.filter((b) => b.status === 'pending_approval');
-  const expenses = state.expenses.filter((e) => e.status === 'submitted');
-  const awaiting =
-    trips.reduce((s, b) => s + b.price, 0) +
-    expenses.reduce((s, e) => s + e.amount, 0);
-  const clear = trips.length === 0 && expenses.length === 0;
+  const awaiting = trips.reduce((s, b) => s + b.price, 0);
+  const clear = trips.length === 0;
 
   return (
     <div>
       <PageHeader
-        title="Approvals"
-        subtitle="Everything waiting on you — trips and expenses, in one place."
+        title="Travel approvals"
+        subtitle="Hotels, flights and car rentals waiting on your approval. Expenses are reviewed in the Expenses section."
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <StatCard label="Trips to review" value={trips.length} />
-        <StatCard label="Expenses to review" value={expenses.length} />
         <StatCard accent label="Value awaiting" value={money(awaiting)} />
       </div>
 
@@ -40,7 +37,7 @@ export default function ApprovalsPage() {
         <div className="mt-6">
           <EmptyState
             title="You're all caught up"
-            sub="No trips or expenses are waiting on your approval."
+            sub="No trips are waiting on your approval. Expenses are reviewed in Expenses."
           />
         </div>
       ) : (
@@ -99,70 +96,13 @@ export default function ApprovalsPage() {
             </section>
           )}
 
-          {expenses.length > 0 && (
-            <section>
-              <h2 className="mb-3 font-display text-lg font-bold text-slate-900">
-                Expenses awaiting review
-              </h2>
-              <div className="space-y-3">
-                {expenses.map((e) => (
-                  <Card
-                    key={e.id}
-                    className="flex flex-col gap-4 sm:flex-row sm:items-center"
-                  >
-                    <Avatar name={userById(e.userId)?.name ?? '?'} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-slate-800">
-                          {e.merchant}
-                        </p>
-                        <Badge color="slate">{e.category}</Badge>
-                        {!e.hasReceipt && (
-                          <span className="text-xs font-medium text-amber-600">
-                            No receipt
-                          </span>
-                        )}
-                      </div>
-                      {e.note && (
-                        <p className="mt-0.5 text-sm text-slate-400">{e.note}</p>
-                      )}
-                      <p className="mt-1 text-xs text-slate-400">
-                        {userById(e.userId)?.name} · {shortDate(e.date)}
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
-                      <p className="font-display text-lg font-bold text-slate-900">
-                        {money2(e.amount)}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => setExpenseStatus(e.id, 'approved')}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => setExpenseStatus(e.id, 'rejected')}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
         </div>
       )}
 
       {!clear && (
         <p className="mt-6 flex items-center gap-1.5 text-xs text-slate-400">
           <Check className="h-3.5 w-3.5" /> Approving a trip awards its points;
-          declining cancels it. Approved expenses post to your accounting
-          integration automatically.
+          declining cancels it.
         </p>
       )}
     </div>

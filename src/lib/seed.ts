@@ -140,6 +140,8 @@ const policies = [
     ],
   },
   { id: 'p_advance', name: 'Book 7+ days ahead', type: 'advance_days' as const, value: 7, action: 'warn' as const, enabled: true },
+  { id: 'p_meal', name: 'Meals cap', type: 'max_meal_daily' as const, value: 100, action: 'warn' as const, enabled: true },
+  { id: 'p_receipt', name: 'Receipt required', type: 'receipt_required_over' as const, value: 25, action: 'warn' as const, enabled: true },
 ];
 
 const bookings: Booking[] = [

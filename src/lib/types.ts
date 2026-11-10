@@ -95,7 +95,26 @@ export type PolicyType =
   | 'max_nightly'
   | 'max_cabin'
   | 'flight_cabin_by_duration'
-  | 'advance_days';
+  | 'advance_days'
+  // --- expense policies (evaluated against submitted expenses) ---
+  | 'max_meal_daily' // meals cap, $ per person per day
+  | 'max_dinner' // single dinner cap, $ per person
+  | 'max_client_meal' // client/business meal cap, $ per person
+  | 'max_car_daily' // car-rental cap, $ per day
+  | 'max_ground_transport' // taxi/rideshare cap, $ per ride
+  | 'max_expense_other' // catch-all expense cap, $
+  | 'receipt_required_over'; // receipt required above $X
+
+/** Expense PolicyTypes, in the order shown in the Policies UI. */
+export const EXPENSE_POLICY_TYPES: PolicyType[] = [
+  'max_meal_daily',
+  'max_dinner',
+  'max_client_meal',
+  'max_car_daily',
+  'max_ground_transport',
+  'max_expense_other',
+  'receipt_required_over',
+];
 
 export type PolicyAction = 'allow' | 'warn' | 'approve' | 'block';
 
@@ -348,6 +367,8 @@ export interface Expense {
   date: string;
   status: ExpenseStatus;
   hasReceipt: boolean;
+  /** The uploaded/scanned receipt image (data URL), so a manager can view it. */
+  receiptImage?: string;
   note?: string;
   /** A reviewer's comment when approved/rejected (shown to the submitter). */
   reviewNote?: string;

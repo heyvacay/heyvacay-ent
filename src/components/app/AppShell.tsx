@@ -75,12 +75,12 @@ const ADMIN_NAV: NavSection[] = [
       { href: '/app/events', label: 'Events', icon: Calendar },
       { href: '/app/restaurants', label: 'Dining', icon: Receipt },
       { href: '/app/approvals', label: 'Approvals', icon: Bell },
-      { href: '/app/reports', label: 'Analytics', icon: TrendUp },
     ],
   },
   {
     title: 'Spend',
     items: [
+      { href: '/app/reports', label: 'Analytics', icon: TrendUp },
       { href: '/app/budgets', label: 'Budgets', icon: Wallet },
       { href: '/app/expenses', label: 'Expenses', icon: Receipt },
       { href: '/app/billing', label: 'Billing', icon: Lock },

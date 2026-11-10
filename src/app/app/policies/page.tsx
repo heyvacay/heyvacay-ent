@@ -11,6 +11,7 @@ import type {
   GuestBookingMode,
   Policy,
   PolicyAction,
+  PolicyType,
 } from '@/lib/types';
 
 const APPROVAL_MODES: { value: BookingApprovalMode; label: string; desc: string }[] = [
@@ -315,7 +316,7 @@ export default function PoliciesPage() {
 
   // Multiple nightly-rate rules (e.g. >$400 approve, >$1000 block, per city).
   const nightlyRules = state.policies.filter((p) => p.type === 'max_nightly');
-  const star = byType('max_hotel_star');
+  const starRules = state.policies.filter((p) => p.type === 'max_hotel_star');
   const flight = byType('flight_cabin_by_duration');
   const advance = byType('advance_days');
 
@@ -327,6 +328,31 @@ export default function PoliciesPage() {
       action: 'approve',
       enabled: true,
     });
+
+  const addStarRule = () =>
+    addPolicy({
+      name: 'Hotel star cap',
+      type: 'max_hotel_star',
+      value: 4,
+      action: 'warn',
+      enabled: true,
+    });
+
+  // Expense policies (evaluated against submitted expenses in the Expenses view).
+  const EXPENSE_RULE_META: { type: PolicyType; label: string; unit: string; default: number; name: string }[] = [
+    { type: 'max_meal_daily', label: 'Meals over', unit: 'per person / day', default: 100, name: 'Meals cap' },
+    { type: 'max_dinner', label: 'Dinner over', unit: 'per person', default: 75, name: 'Dinner cap' },
+    { type: 'max_client_meal', label: 'Client meals over', unit: 'per person', default: 150, name: 'Client meal cap' },
+    { type: 'max_car_daily', label: 'Car rental over', unit: 'per day', default: 90, name: 'Car rental cap' },
+    { type: 'max_ground_transport', label: 'Taxi / rideshare over', unit: 'per ride', default: 60, name: 'Ground transport cap' },
+    { type: 'max_expense_other', label: 'Any other expense over', unit: '', default: 250, name: 'Other expense cap' },
+    { type: 'receipt_required_over', label: 'Receipt required over', unit: '', default: 25, name: 'Receipt required' },
+  ];
+  const expenseRules = state.policies.filter((p) =>
+    EXPENSE_RULE_META.some((m) => m.type === p.type)
+  );
+  const addExpenseRule = (m: { type: PolicyType; default: number; name: string }) =>
+    addPolicy({ name: m.name, type: m.type, value: m.default, action: 'warn', enabled: true });
 
   const setTiers = (tiers: FlightCabinTier[]) =>
     flight && updatePolicy(flight.id, { tiers });
@@ -718,8 +744,9 @@ export default function PoliciesPage() {
           <Button variant="ghost" size="sm" onClick={addNightlyRule}>
             + Add nightly-rate rule
           </Button>
-          {star && (
+          {starRules.map((star) => (
             <Rule
+              key={star.id}
               enabled={star.enabled}
               onToggle={() => togglePolicy(star.id)}
               action={star.action}
@@ -731,7 +758,7 @@ export default function PoliciesPage() {
                   value={String(star.value)}
                   onChange={(e) => updatePolicy(star.id, { value: Number(e.target.value) })}
                 >
-                  {[3, 4, 5].map((s) => (
+                  {[2, 3, 4, 5].map((s) => (
                     <option key={s} value={s}>
                       {s}★
                     </option>
@@ -739,8 +766,27 @@ export default function PoliciesPage() {
                 </Select>
               </span>
               <span>stars</span>
+              <span className="text-slate-400">in</span>
+              <div className="w-44">
+                <CityPicker
+                  value={star.city ?? ''}
+                  selected={!!star.city}
+                  placeholder="any city"
+                  onText={(v) => updatePolicy(star.id, { city: v || undefined })}
+                  onPick={(p) => updatePolicy(star.id, { city: p.label })}
+                />
+              </div>
+              <button
+                onClick={() => removePolicy(star.id)}
+                className="ml-1 rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700"
+              >
+                Remove
+              </button>
             </Rule>
-          )}
+          ))}
+          <Button variant="ghost" size="sm" onClick={addStarRule}>
+            + Add star-rating rule
+          </Button>
         </SectionCard>
 
         {/* Flights */}
@@ -864,6 +910,50 @@ export default function PoliciesPage() {
               <span>days ahead</span>
             </Rule>
           )}
+        </SectionCard>
+
+        {/* Expenses */}
+        <SectionCard
+          icon={<Receipt className="h-5 w-5" />}
+          title="Expenses"
+          sub="Caps for meals, dinners, client meals, car rentals and more. Submitted expenses are flagged in or out of policy for approvers."
+        >
+          {expenseRules.length === 0 && (
+            <p className="text-sm text-slate-400">No expense caps yet — add one below.</p>
+          )}
+          {expenseRules.map((r) => {
+            const meta = EXPENSE_RULE_META.find((m) => m.type === r.type);
+            return (
+              <Rule
+                key={r.id}
+                enabled={r.enabled}
+                onToggle={() => togglePolicy(r.id)}
+                action={r.action}
+                onAction={(a) => updatePolicy(r.id, { action: a })}
+              >
+                <span>{meta?.label ?? 'Expense over'}</span>
+                <NumInput
+                  prefix="$"
+                  value={Number(r.value)}
+                  onChange={(n) => updatePolicy(r.id, { value: n })}
+                />
+                {meta?.unit && <span className="text-slate-400">{meta.unit}</span>}
+                <button
+                  onClick={() => removePolicy(r.id)}
+                  className="ml-1 rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </Rule>
+            );
+          })}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {EXPENSE_RULE_META.filter((m) => !expenseRules.some((r) => r.type === m.type)).map((m) => (
+              <Button key={m.type} variant="ghost" size="sm" onClick={() => addExpenseRule(m)}>
+                + {m.name}
+              </Button>
+            ))}
+          </div>
         </SectionCard>
 
         <p className="flex items-center gap-1.5 text-xs text-slate-400">
