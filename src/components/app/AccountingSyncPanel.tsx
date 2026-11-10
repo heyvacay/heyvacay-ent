@@ -96,12 +96,38 @@ export function AccountingSyncPanel({
   const [banner, setBanner] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  // Posting scope — a real, per-company setting controlling which approved
+  // expenses get posted: everything, only company-card charges, or only
+  // personal/reimbursable ones. Persisted per company + provider.
+  const scopeKey = `hv_post_scope_${companyId}_${provider.id}`;
+  const [postScope, setPostScope] = useState<'all' | 'company' | 'personal'>('all');
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(scopeKey);
+      if (v === 'all' || v === 'company' || v === 'personal') setPostScope(v);
+    } catch {
+      /* ignore */
+    }
+  }, [scopeKey]);
+  const changeScope = (v: 'all' | 'company' | 'personal') => {
+    setPostScope(v);
+    try {
+      localStorage.setItem(scopeKey, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const postable = useMemo(
     () =>
-      state.expenses.filter(
-        (e) => (e.status === 'approved' || e.status === 'reimbursed') && !e.synced
-      ),
-    [state.expenses]
+      state.expenses.filter((e) => {
+        if (!((e.status === 'approved' || e.status === 'reimbursed') && !e.synced)) return false;
+        const personal = e.paidWith === 'personal' || e.reimbursable;
+        if (postScope === 'company') return !personal;
+        if (postScope === 'personal') return !!personal;
+        return true;
+      }),
+    [state.expenses, postScope]
   );
   const synced = useMemo(() => state.expenses.filter((e) => e.synced), [state.expenses]);
 
@@ -460,12 +486,23 @@ export function AccountingSyncPanel({
                     : 'Everything approved has been posted.'}
                 </p>
               </div>
-              <Button
-                onClick={runSync}
-                disabled={syncing || postable.length === 0 || !paymentAccountId || mappedCount === 0}
-              >
-                {syncing ? 'Posting…' : `Post ${postable.length || ''} to ${provider.name}`}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={postScope}
+                  onChange={(e) => changeScope(e.target.value as 'all' | 'company' | 'personal')}
+                  className="sm:w-48"
+                >
+                  <option value="all">All approved expenses</option>
+                  <option value="company">Company-card only</option>
+                  <option value="personal">Personal / reimbursable only</option>
+                </Select>
+                <Button
+                  onClick={runSync}
+                  disabled={syncing || postable.length === 0 || !paymentAccountId || mappedCount === 0}
+                >
+                  {syncing ? 'Posting…' : `Post ${postable.length || ''} to ${provider.name}`}
+                </Button>
+              </div>
             </div>
             {(!paymentAccountId || mappedCount === 0) && postable.length > 0 && (
               <p className="mt-2 text-xs text-amber-600">
