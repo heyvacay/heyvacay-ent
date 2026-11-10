@@ -79,18 +79,54 @@ you do per integration.
 - **Verify:** diag `email.configured:true`, then trigger an approval and check the inbox.
 - **Note:** tell me which provider you choose — the send call in `src/app/api/email/send/route.ts` may need the provider's exact endpoint/shape finalized (Resend vs SendGrid differ). I've left it provider-agnostic with a TODO.
 
+### 5. QuickBooks Online — real accounting sync (OAuth2) ✅ wired
+Unlike the single-secret integrations above, QBO is a **full OAuth2** integration
+(per-company tokens), not a key flip. The code, token store, and UI are built; the
+only "your part" is registering the Intuit app and dropping its two keys in.
+
+- **Powers:** the Integrations → QuickBooks page — real "Connect to QuickBooks"
+  consent, live chart-of-accounts mapping (category → GL account + payment
+  account), and posting approved expenses as QuickBooks **Purchases**.
+- **Where tokens live:** DynamoDB table `stage-heyvacay-ent-integrations` (the
+  ENT app's first real server-side store — expenses post *after* approval, so
+  tokens must persist and auto-refresh). Created with the ENT stack; the task
+  role gets scoped Get/Put/Update/Delete on just that table.
+- **Your part (Intuit app):**
+  1. developer.intuit.com → Create an app → *QuickBooks Online and Payments*.
+  2. Copy the **Development** keys: **Client ID** + **Client Secret**.
+  3. Add Redirect URI **exactly**: `https://ent.stage.heyvacay.co/api/integrations/quickbooks/callback`
+  4. A free **sandbox company** is auto-created under Dashboard → Sandbox (what we test against).
+- **Secret fields:** `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET` (in the
+  ENT secret `stage/heyvacay-ent/stripe`).
+- **tfvars:** `ent_quickbooks_client_id_arn` + `ent_quickbooks_client_secret_arn`
+  (uncomment); `ent_quickbooks_env` stays `"sandbox"` until the Intuit app is
+  approved for production. Targeted apply must include the new resources:
+  ```bash
+  terraform apply -var-file=envs/stage/terraform.tfvars \
+    -target=aws_dynamodb_table.ent_integrations \
+    -target=aws_iam_role_policy.ent_task_dynamodb \
+    -target=aws_iam_role_policy.ent_task_secrets \
+    -target=aws_ecs_task_definition.ent
+  ```
+- **Verify:** diag `quickbooks` shows the server configured; then Integrations →
+  QuickBooks → **Connect to QuickBooks** → authorize the sandbox company → map
+  accounts → **Post to QuickBooks** and the Purchase appears in QBO.
+- **Flip to production:** set `ent_quickbooks_env = "production"`, add a Production
+  redirect URI on the Intuit app, and swap in the production client id/secret.
+
 ---
 
 ## Display-only today (roadmap — no live API wired yet)
 These show in **Integrations** as connect cards and drive the in-app accounting
 map, but there is **no live third-party sync** yet (they'd each need an OAuth app
-+ a sync service):
-- **QuickBooks / Xero / NetSuite** (accounting export)
++ a sync service). **QuickBooks is now real** (above); still display-only:
+- **Xero / NetSuite** (accounting export — same shape as QBO, not yet built)
 - **BambooHR / Workday** (HR / employee + cost-center sync)
 - **Okta / Azure AD / Google Workspace SSO** (SAML/SCIM)
 
 Say which one matters first and I'll build the real OAuth + sync for it (each is
-its own project — OAuth app registration is the "your part").
+its own project — OAuth app registration is the "your part"). Xero/NetSuite can
+reuse the QuickBooks token store + mapping UI, so they're faster now.
 
 ---
 

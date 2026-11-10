@@ -7,6 +7,8 @@ import {
   VERYFI,
   STRIPE,
   RECEIPT_OCR,
+  QUICKBOOKS,
+  INTEGRATIONS_TABLE,
   isLiveBooking,
   API_BASE_URL,
 } from '@/lib/config.server';
@@ -73,6 +75,18 @@ export function GET() {
       name: 'Generic receipt OCR (fallback provider)',
       configured: RECEIPT_OCR.live,
       powers: 'Alternate OCR provider (Veryfi preferred)',
+    },
+    {
+      key: 'quickbooks',
+      name: 'QuickBooks Online — accounting sync (OAuth2)',
+      // "configured" here means the Intuit APP is wired (connect is possible);
+      // each company still connects its own QuickBooks via OAuth on the
+      // Integrations page. Per-company connection state isn't a global flag.
+      configured: QUICKBOOKS.configured,
+      powers: 'Connect QuickBooks, map GL accounts, post expenses as Purchases',
+      verify: '/app/integrations/quickbooks',
+      env: QUICKBOOKS.env,
+      tokenStore: INTEGRATIONS_TABLE,
     },
   ];
 
