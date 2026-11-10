@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Button, Card, Input, PageHeader, Select, cn } from '@/components/app/ui';
+import { CityPicker } from '@/components/app/CityPicker';
 import { Plane, Receipt, Shield, Check, Calendar, Users } from '@/components/icons';
 import type {
   BookingApprovalMode,
@@ -688,15 +689,27 @@ export default function PoliciesPage() {
               />
               <span>per night</span>
               <span className="text-slate-400">in</span>
-              <input
-                value={nightly.city ?? ''}
-                onChange={(e) => updatePolicy(nightly.id, { city: e.target.value || undefined })}
-                placeholder="any city"
-                className="w-28 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
-              />
+              <div className="w-44">
+                <CityPicker
+                  value={nightly.city ?? ''}
+                  selected={!!nightly.city}
+                  placeholder="any city"
+                  onText={(v) => updatePolicy(nightly.id, { city: v || undefined })}
+                  onPick={(p) => updatePolicy(nightly.id, { city: p.label })}
+                />
+              </div>
+              {nightly.city && (
+                <button
+                  onClick={() => updatePolicy(nightly.id, { city: undefined })}
+                  className="rounded-md px-1.5 py-1 text-xs text-slate-400 hover:text-slate-700"
+                  title="Clear city — applies everywhere"
+                >
+                  any city
+                </button>
+              )}
               <button
                 onClick={() => removePolicy(nightly.id)}
-                className="ml-1 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                className="ml-1 rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700"
               >
                 Remove
               </button>

@@ -246,6 +246,14 @@ export default function EventDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {(role === 'admin' || isHost) && (
+              <Link
+                href={`/app/events/new?edit=${e.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/20 hover:bg-white/20"
+              >
+                Edit event
+              </Link>
+            )}
             {d ? (
               <span
                 className={cn(

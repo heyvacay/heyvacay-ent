@@ -47,6 +47,31 @@ interface EventsApi {
     /** For 'later': the date planning should kick off (ISO yyyy-mm-dd). */
     dinnerPlanAt?: string;
   }) => TravelEvent;
+  /** Edit an existing event's core details (name, city, dates, attendees,
+   *  hotels, flights, budget). Dinner setup is managed from the Dinner tab. */
+  updateEvent: (
+    id: string,
+    data: {
+      name: string;
+      city: string;
+      startDate: string;
+      endDate: string;
+      allowHotels: string[];
+      allowHotelList?: { hid: string; name: string }[];
+      whitelistOnly?: boolean;
+      allowFlights: string[];
+      attendees: EventAttendee[];
+      regionId?: number;
+      lat?: number;
+      lng?: number;
+      roomTierPolicy?: RoomTierPolicy;
+      budget?: number;
+      smartPlanning?: boolean;
+      /** Who made the edit, for the event thread note. */
+      editorId?: string;
+      editorName?: string;
+    }
+  ) => void;
   addMessage: (
     eventId: string,
     authorId: string,
@@ -189,6 +214,40 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     setEvents((es) => [ev, ...es]);
     return ev;
   }, []);
+
+  const updateEvent: EventsApi['updateEvent'] = useCallback(
+    (id, data) =>
+      patch(id, (e) => ({
+        ...e,
+        name: data.name,
+        city: data.city,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        allowHotels: data.allowHotels,
+        allowHotelList: data.allowHotelList,
+        whitelistOnly: data.whitelistOnly,
+        allowFlights: data.allowFlights,
+        attendees: data.attendees.length > 0 ? data.attendees : e.attendees,
+        regionId: data.regionId,
+        lat: data.lat,
+        lng: data.lng,
+        roomTierPolicy: data.roomTierPolicy,
+        budget: data.budget,
+        smartPlanning: data.smartPlanning,
+        messages: data.editorId
+          ? [
+              ...e.messages,
+              msg(
+                data.editorId,
+                data.editorName ?? 'An admin',
+                `Updated the event details for "${data.name}".`,
+                true
+              ),
+            ]
+          : e.messages,
+      })),
+    [patch]
+  );
 
   const addMessage: EventsApi['addMessage'] = useCallback(
     (eventId, authorId, author, text, replyTo) =>
@@ -480,6 +539,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         events,
         eventById,
         createEvent,
+        updateEvent,
         addMessage,
         toggleReaction,
         setHotelAllowList,

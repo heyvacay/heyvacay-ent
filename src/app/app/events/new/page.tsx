@@ -39,9 +39,15 @@ const STEPS = [
 
 export default function NewEventPage() {
   const { state, activeUser, role } = useStore();
-  const { createEvent } = useEvents();
+  const { events, createEvent, updateEvent } = useEvents();
   const router = useRouter();
   const params = useSearchParams();
+
+  // Edit mode: /app/events/new?edit=<id> loads an existing event into the same
+  // wizard and saves with updateEvent instead of creating a new one.
+  const editId = params.get('edit');
+  const editEvent = editId ? events.find((e) => e.id === editId) : null;
+  const isEdit = !!editEvent;
 
   const toISO = (d: Date) => fmtDate(d, 'yyyy-MM-dd');
   const [step, setStep] = useState(0);
@@ -66,6 +72,46 @@ export default function NewEventPage() {
   // Group dinner: start now, schedule for later, or skip.
   const [dinnerMode, setDinnerMode] = useState<'now' | 'later' | 'none'>('now');
   const [dinnerWhen, setDinnerWhen] = useState('');
+
+  // Prefill the wizard from the event being edited (once).
+  const [prefilled, setPrefilled] = useState(false);
+  useEffect(() => {
+    if (!editEvent || prefilled) return;
+    setName(editEvent.name);
+    setCity(editEvent.city);
+    setCityPlace(
+      editEvent.regionId != null || editEvent.lat != null
+        ? {
+            type: 'region',
+            label: editEvent.city,
+            sub: '',
+            regionId: editEvent.regionId,
+            lat: editEvent.lat,
+            lng: editEvent.lng,
+          }
+        : null
+    );
+    setStart(editEvent.startDate);
+    setEnd(editEvent.endDate);
+    setAttendeeIds(editEvent.attendees.map((a) => a.userId));
+    setAllowHotelList(
+      editEvent.allowHotelList ??
+        editEvent.allowHotels.map((n) => ({ hid: '', name: n }))
+    );
+    setWhitelistOnly(!!editEvent.whitelistOnly);
+    setRoutes(editEvent.allowFlights ?? []);
+    if (editEvent.roomTierPolicy) {
+      setRoomTierBase(editEvent.roomTierPolicy.base);
+      setOverAction(editEvent.roomTierPolicy.overAction);
+      setPositionRules(editEvent.roomTierPolicy.byPosition ?? []);
+    }
+    if (editEvent.budget != null) {
+      setBudgetOn(true);
+      setBudgetAmt(editEvent.budget);
+      setSmartPlanning(!!editEvent.smartPlanning);
+    }
+    setPrefilled(true);
+  }, [editEvent, prefilled]);
 
   // Dinner "later" schedule options with enough lead time, computed from the
   // trip's start date. 1 week is the baseline; 2 weeks / 1 month appear only
@@ -220,6 +266,37 @@ export default function NewEventPage() {
     // Always include the host.
     if (!attendees.some((a) => a.userId === activeUser.id))
       attendees.push({ userId: activeUser.id, name: activeUser.name });
+
+    // Edit: update the existing event in place (dinner setup is left to the
+    // Dinner tab), then return to its page.
+    if (editEvent) {
+      updateEvent(editEvent.id, {
+        name: name.trim(),
+        city: city.trim(),
+        startDate: start,
+        endDate: end,
+        allowHotels: allowHotelList.map((h) => h.name),
+        allowHotelList,
+        whitelistOnly: whitelistOnly && allowHotelList.length > 0,
+        allowFlights: routes,
+        attendees,
+        regionId: cityPlace?.regionId,
+        lat: cityPlace?.lat,
+        lng: cityPlace?.lng,
+        roomTierPolicy: {
+          base: smart ? smart.tier : roomTierBase,
+          byPosition: positionRules,
+          overAction,
+        },
+        budget: budgetOn ? budgetAmt : undefined,
+        smartPlanning: budgetOn && smartPlanning,
+        editorId: activeUser.id,
+        editorName: activeUser.name,
+      });
+      router.push(`/app/events/${editEvent.id}`);
+      return;
+    }
+
     const ev = createEvent({
       name: name.trim(),
       city: city.trim(),
@@ -275,7 +352,7 @@ export default function NewEventPage() {
       <section className="relative mt-3 overflow-hidden rounded-3xl bg-gradient-to-br from-navy via-surface to-navy-deep p-6 text-white ring-1 ring-white/10 sm:p-8">
         <span className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand/25 blur-3xl" />
         <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand">New event</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand">{isEdit ? 'Edit event' : 'New event'}</p>
           <h1 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">
             {name.trim() || 'Plan a company trip'}
           </h1>
@@ -435,7 +512,18 @@ export default function NewEventPage() {
                 Search real properties and add them. In event-only booking these are the only hotels
                 shown — and they book without approval, even if out of policy.
               </p>
-              <HotelAllowPicker value={allowHotelList} onChange={setAllowHotelList} />
+              <HotelAllowPicker
+                value={allowHotelList}
+                onChange={setAllowHotelList}
+                searchCtx={{
+                  city: city.trim(),
+                  regionId: cityPlace?.regionId,
+                  lat: cityPlace?.lat,
+                  lng: cityPlace?.lng,
+                  checkin: start,
+                  checkout: end,
+                }}
+              />
               <label
                 className={cn(
                   'mt-4 flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors',
@@ -835,7 +923,7 @@ export default function NewEventPage() {
               </Button>
             ) : (
               <Button onClick={create} disabled={!basicsValid}>
-                Create event
+                {isEdit ? 'Save changes' : 'Create event'}
               </Button>
             )}
           </div>
