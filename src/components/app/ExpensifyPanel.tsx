@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Input } from '@/components/app/ui';
 import { Check, Lock } from '@/components/icons';
+import { SetupGuide } from '@/components/app/SetupGuide';
 import type { Integration } from '@/lib/types';
 
 interface Field { key: string; label: string; placeholder?: string; type?: 'text' | 'password' }
@@ -103,11 +104,12 @@ export function ExpensifyPanel({ integration }: { integration: Integration }) {
       )}
 
       {!status.connected && (
-        <Card className="max-w-xl">
+        <div className="max-w-xl space-y-5">
+        <SetupGuide id={integration.id} name={integration.name} />
+        <Card>
           <h2 className="font-display text-lg font-bold text-slate-900">Connect {integration.name}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Create Integration Server credentials at expensify.com → Settings → Account → API, then
-            paste the partner User ID + secret.
+            Paste the partner User ID + secret from the steps above.
           </p>
           <div className="mt-4 space-y-3">
             {status.fields.map((f) => (
@@ -124,6 +126,7 @@ export function ExpensifyPanel({ integration }: { integration: Integration }) {
             {busy ? 'Connecting…' : 'Connect Expensify'}
           </Button>
         </Card>
+        </div>
       )}
 
       {status.connected && (

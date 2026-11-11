@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Button, Card, Input } from '@/components/app/ui';
 import { Check, Lock } from '@/components/icons';
+import { SetupGuide } from '@/components/app/SetupGuide';
 import type { Integration } from '@/lib/types';
 
 /**
@@ -119,12 +120,13 @@ export function SlackPanel({ integration }: { integration: Integration }) {
       )}
 
       {!connected && (
-        <Card className="max-w-xl">
+        <div className="max-w-xl space-y-5">
+        <SetupGuide id={integration.id} name={integration.name} />
+        <Card>
           <h2 className="font-display text-lg font-bold text-slate-900">Connect {integration.name}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Paste an <strong>Incoming Webhook URL</strong> from your Slack app and we&apos;ll post
-            approval requests and trip alerts to that channel. Create one at api.slack.com → your app
-            → Incoming Webhooks → Add New Webhook to Workspace.
+            Paste the <strong>Incoming Webhook URL</strong> from the steps above and we&apos;ll post
+            approval requests and trip alerts to that channel.
           </p>
           <div className="mt-4">
             <label className="mb-1 block text-xs font-semibold text-slate-500">Webhook URL</label>
@@ -142,6 +144,7 @@ export function SlackPanel({ integration }: { integration: Integration }) {
             {busy ? 'Connecting…' : 'Connect Slack'}
           </Button>
         </Card>
+        </div>
       )}
 
       {connected && (

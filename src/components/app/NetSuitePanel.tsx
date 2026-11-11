@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Input, Select } from '@/components/app/ui';
 import { Check, Lock } from '@/components/icons';
+import { SetupGuide } from '@/components/app/SetupGuide';
 import { money2 } from '@/lib/format';
 import { recommendMappings } from '@/lib/integrations/quickbooksMapping';
 import type { ExpenseCategory, Integration } from '@/lib/types';
@@ -198,12 +199,12 @@ export function NetSuitePanel({ integration }: { integration: Integration }) {
       )}
 
       {!status.connected && (
-        <Card className="max-w-xl">
+        <div className="max-w-xl space-y-5">
+        <SetupGuide id={integration.id} name={integration.name} />
+        <Card>
           <h2 className="font-display text-lg font-bold text-slate-900">Connect {integration.name}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            NetSuite uses Token-Based Auth. In NetSuite, enable TBA + REST Web Services, create an
-            integration record (consumer key/secret) and an access token (token id/secret), then
-            paste the five values below.
+            Enter the five Token-Based Auth values from the steps above.
           </p>
           <div className="mt-4 space-y-3">
             {status.fields.map((f) => (
@@ -220,6 +221,7 @@ export function NetSuitePanel({ integration }: { integration: Integration }) {
             {busy ? 'Connecting…' : 'Connect NetSuite'}
           </Button>
         </Card>
+        </div>
       )}
 
       {status.connected && (

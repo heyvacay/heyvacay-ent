@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Input } from '@/components/app/ui';
 import { Check, Lock, Users } from '@/components/icons';
+import { SetupGuide } from '@/components/app/SetupGuide';
 import type { Integration } from '@/lib/types';
 
 interface Field {
@@ -201,7 +202,9 @@ export function RosterImportPanel({ integration }: { integration: Integration })
 
       {/* API-key provider form */}
       {!status.connected && status.kind === 'apikey' && (
-        <Card className="max-w-xl">
+        <div className="max-w-xl space-y-5">
+          <SetupGuide id={integration.id} name={integration.name} />
+          <Card>
           <h2 className="font-display text-lg font-bold text-slate-900">Connect {integration.name}</h2>
           <p className="mt-1 text-sm text-slate-500">
             {status.help || `Enter your ${integration.name} credentials to import your roster.`}
@@ -229,7 +232,8 @@ export function RosterImportPanel({ integration }: { integration: Integration })
           >
             {busy ? 'Connecting…' : `Connect ${integration.name}`}
           </Button>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {/* Connected */}

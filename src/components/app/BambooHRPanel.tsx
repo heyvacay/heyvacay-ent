@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Input } from '@/components/app/ui';
 import { Check, Lock, Users } from '@/components/icons';
+import { SetupGuide } from '@/components/app/SetupGuide';
 import type { Integration } from '@/lib/types';
 
 interface DirPerson {
@@ -157,7 +158,9 @@ export function BambooHRPanel({ integration }: { integration: Integration }) {
       )}
 
       {!connected && (
-        <Card className="max-w-xl">
+        <div className="max-w-xl space-y-5">
+        <SetupGuide id={integration.id} name={integration.name} />
+        <Card>
           <h2 className="font-display text-lg font-bold text-slate-900">Connect {integration.name}</h2>
           <p className="mt-1 text-sm text-slate-500">
             Paste your BambooHR subdomain and an API key — we&apos;ll read your employee directory so
@@ -185,6 +188,7 @@ export function BambooHRPanel({ integration }: { integration: Integration }) {
             {busy ? 'Connecting…' : 'Connect BambooHR'}
           </Button>
         </Card>
+        </div>
       )}
 
       {connected && (
