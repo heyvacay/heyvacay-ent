@@ -287,3 +287,33 @@ export async function createSpend(
     verifyNote: issues.length ? issues.join('; ') : undefined,
   };
 }
+
+export interface DeleteSpendResult {
+  removed: boolean;
+  id?: string;
+  reference: string;
+  notFound?: boolean;
+}
+
+/**
+ * Remove an expense from Xero — used when a posted expense is later rejected.
+ * Finds the SPEND bank transaction by its HeyVacay Reference and marks it
+ * DELETED. Idempotent: a no-op when nothing matches.
+ */
+export async function deleteSpend(
+  companyId: string,
+  expenseId: string
+): Promise<DeleteSpendResult> {
+  const reference = referenceFor(expenseId);
+  const existing = await findByReference(companyId, reference);
+  if (!existing) {
+    return { removed: false, notFound: true, reference };
+  }
+  await xeroFetch(companyId, 'BankTransactions', {
+    method: 'POST',
+    body: JSON.stringify({
+      BankTransactions: [{ BankTransactionID: existing.id, Status: 'DELETED' }],
+    }),
+  });
+  return { removed: true, id: existing.id, reference };
+}

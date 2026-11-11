@@ -9,6 +9,7 @@ import { Avatar, cn } from './ui';
 import { ThemeToggle } from './ThemeToggle';
 import { Logo } from './Logo';
 import { DinnerRsvpPrompt } from './DinnerRsvpPrompt';
+import { AccountingAutoSync } from './AccountingAutoSync';
 import { WelcomeFlow } from './WelcomeFlow';
 import { HomeCityGate } from './HomeCityGate';
 import { clearSignedIn } from '@/lib/session';
@@ -481,6 +482,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
           onSave={(city, lat, lng) => setHomeCity(activeUser.id, city, lat, lng)}
         />
       )}
+
+      {/* Headless engine: auto-posts approved expenses to the connected
+          accounting system and removes rejected ones. Admin-only (self-gated). */}
+      <AccountingAutoSync />
     </div>
   );
 }

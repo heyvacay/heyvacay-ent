@@ -405,3 +405,43 @@ export async function createPurchase(
     verifyNote: issues.length ? issues.join('; ') : undefined,
   };
 }
+
+export interface DeletePurchaseResult {
+  /** True if a matching Purchase was found and deleted (or already gone). */
+  removed: boolean;
+  id?: string;
+  docNumber: string;
+  /** True when there was nothing to delete (never posted / already removed). */
+  notFound?: boolean;
+}
+
+/**
+ * Remove an expense from QuickBooks — used when an approved-and-posted expense
+ * is later rejected. Looks the Purchase up by its stable HeyVacay DocNumber,
+ * reads the current SyncToken, then issues a hard delete. Idempotent: if the
+ * transaction isn't there (never posted, or already deleted) it's a no-op.
+ */
+export async function deletePurchase(
+  companyId: string,
+  expenseId: string
+): Promise<DeletePurchaseResult> {
+  const { accessToken, realmId } = await getValidAccessToken(companyId);
+  const docNumber = docNumberFor(expenseId);
+  const safe = docNumber.replace(/'/g, "\\'");
+  // Need the SyncToken to delete, so query it alongside Id.
+  const query = `select Id, SyncToken from Purchase where DocNumber = '${safe}'`;
+  const data = (await qboFetch(
+    accessToken,
+    realmId,
+    `query?query=${encodeURIComponent(query)}`
+  )) as { QueryResponse?: { Purchase?: Array<{ Id: string; SyncToken?: string }> } };
+  const hit = data?.QueryResponse?.Purchase?.[0];
+  if (!hit) {
+    return { removed: false, notFound: true, docNumber };
+  }
+  await qboFetch(accessToken, realmId, 'purchase?operation=delete', {
+    method: 'POST',
+    body: JSON.stringify({ Id: hit.Id, SyncToken: hit.SyncToken ?? '0' }),
+  });
+  return { removed: true, id: hit.Id, docNumber };
+}

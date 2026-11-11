@@ -309,6 +309,9 @@ export interface StoreApi {
   setIntegrationStatus: (id: string, status: IntegrationStatus) => void;
   setGlMapping: (category: string, account: string) => void;
   syncExpense: (id: string) => void;
+  /** Mark an expense as no longer posted (e.g. after it was removed from the
+   *  accounting system when rejected). */
+  markExpenseUnsynced: (id: string) => void;
   syncAllApproved: () => void;
   reset: () => void;
 }
@@ -1816,6 +1819,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const markExpenseUnsynced: StoreApi['markExpenseUnsynced'] = useCallback((id) => {
+    setState((s) => ({
+      ...s,
+      expenses: s.expenses.map((e) =>
+        e.id === id ? { ...e, synced: false } : e
+      ),
+    }));
+  }, []);
+
   const syncAllApproved: StoreApi['syncAllApproved'] = useCallback(() => {
     setState((s) => ({
       ...s,
@@ -1922,6 +1934,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setIntegrationStatus,
     setGlMapping,
     syncExpense,
+    markExpenseUnsynced,
     syncAllApproved,
     reset,
   };

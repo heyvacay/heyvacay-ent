@@ -118,6 +118,35 @@ export function AccountingSyncPanel({
     }
   };
 
+  // Posting mode — when expenses flow into the accounting system automatically.
+  //   on_approval : posts the moment an expense is approved (default)
+  //   on_submit   : posts as soon as it's submitted, before approval
+  //   manual      : nothing posts until someone clicks "Post"
+  // When an already-posted expense is later rejected, it's pulled back out of
+  // the accounting system automatically (both auto modes). Persisted per
+  // company + provider; the background engine (AccountingAutoSync) reads it.
+  type PostMode = 'on_approval' | 'on_submit' | 'manual';
+  const modeKey = `hv_post_mode_${companyId}_${provider.id}`;
+  const [postMode, setPostMode] = useState<PostMode>('on_approval');
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(modeKey);
+      if (v === 'on_approval' || v === 'on_submit' || v === 'manual') setPostMode(v);
+    } catch {
+      /* ignore */
+    }
+  }, [modeKey]);
+  const changeMode = (v: PostMode) => {
+    setPostMode(v);
+    try {
+      localStorage.setItem(modeKey, v);
+      // Let the background sync engine react immediately in this tab.
+      window.dispatchEvent(new CustomEvent('hv-post-mode-changed'));
+    } catch {
+      /* ignore */
+    }
+  };
+
   const postable = useMemo(
     () =>
       state.expenses.filter((e) => {
@@ -473,6 +502,47 @@ export function AccountingSyncPanel({
                   </span>
                 </div>
               </div>
+            )}
+          </Card>
+
+          <Card>
+            <div className="mb-3">
+              <h2 className="font-display text-lg font-bold text-slate-900">Automatic posting</h2>
+              <p className="text-sm text-slate-400">
+                Decide when expenses flow into {provider.name}. In either automatic mode, an expense
+                that&apos;s <strong>rejected after it was posted</strong> is pulled back out of {provider.name} for you.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {([
+                { v: 'on_approval', title: 'When approved', desc: `Posts to ${provider.name} the moment an expense is approved. Recommended.` },
+                { v: 'on_submit', title: 'When submitted', desc: `Posts as soon as it's submitted — even before approval. Removed if it's later rejected.` },
+                { v: 'manual', title: 'Manually', desc: `Nothing posts on its own. You click "Post" below when you're ready.` },
+              ] as { v: PostMode; title: string; desc: string }[]).map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => changeMode(opt.v)}
+                  className={
+                    'rounded-xl border p-4 text-left transition ' +
+                    (postMode === opt.v
+                      ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:bg-brand-950/30'
+                      : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900')
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{opt.title}</span>
+                    {postMode === opt.v && <Check className="h-4 w-4 text-brand-600" />}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+            {postMode !== 'manual' && (!paymentAccountId || mappedCount === 0) && (
+              <p className="mt-3 text-xs text-amber-600">
+                Automatic posting won&apos;t run until the mapping above is finished (payment account +
+                at least one category).
+              </p>
             )}
           </Card>
 

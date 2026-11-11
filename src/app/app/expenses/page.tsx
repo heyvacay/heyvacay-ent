@@ -15,6 +15,7 @@ import {
   StatCard,
 } from '@/components/app/ui';
 import { money, money2, shortDate, todayISO } from '@/lib/format';
+import { compressImageDataUrl } from '@/lib/imageCompress';
 import { evaluateExpense, hasExpensePolicies } from '@/lib/expensePolicy';
 import { ACCOUNTING_IDS } from '@/lib/seed';
 import { Check, Globe, Receipt, Shield } from '@/components/icons';
@@ -165,17 +166,21 @@ export default function ExpensesPage() {
     setOpen(true);
     setScanning(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
+      const rawUrl = await new Promise<string>((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve(String(r.result));
         r.onerror = reject;
         r.readAsDataURL(file);
       });
+      // Compress before storing — a full-size phone photo is several MB, which
+      // overflows the per-record size limit and breaks workspace sync. The scan
+      // still runs on the original below.
+      const dataUrl = await compressImageDataUrl(rawUrl);
       setReceiptPreview(dataUrl);
       const res = await fetch('/api/expenses/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl, filename: file.name }),
+        body: JSON.stringify({ image: rawUrl, filename: file.name }),
       }).then((r) => r.json());
       // Only treat it as a real read when it actually came from Veryfi. Never
       // present the demo parser's made-up merchant/amount as a scan result —
