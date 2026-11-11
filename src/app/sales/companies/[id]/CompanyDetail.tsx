@@ -934,7 +934,7 @@ export default function CompanyDetail({ id }: { id: string }) {
                 setAccessReason(e.target.value);
                 if (accessErr) setAccessErr(null);
               }}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
             >
               <option value="">Select a reason…</option>
               <option value="Customer support request">Customer support request</option>
@@ -954,7 +954,7 @@ export default function CompanyDetail({ id }: { id: string }) {
               onChange={(e) => setAccessComment(e.target.value)}
               rows={2}
               placeholder="Context, ticket number, what you'll do…"
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
             />
             {accessErr && <p className="mt-1 text-xs font-medium text-red-600">{accessErr}</p>}
 
