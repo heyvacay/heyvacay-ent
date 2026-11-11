@@ -299,6 +299,47 @@ async function writeScoped(
   }
 }
 
+/** Append a single row without deleting anything (for append-only logs). */
+async function putOne(pk: string, sk: string, data: unknown): Promise<void> {
+  memCompany(pk).set(sk, { pk, sk, data } as Row);
+  const doc = await getDocClient();
+  if (!doc) return;
+  try {
+    await doc.batchWrite({ RequestItems: { [WORKSPACE_TABLE]: [{ PutRequest: { Item: { pk, sk, data } } }] } });
+  } catch (err) {
+    console.error('[workspace] putOne failed:', (err as Error)?.message);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Access audit log — every time a rep enters a customer account       */
+/* ------------------------------------------------------------------ */
+
+const AUDIT_PK = 'audit';
+
+export interface AccessLogEntry {
+  id: string;
+  companyId: string;
+  companyName: string;
+  repName: string;
+  reason: string;
+  comment?: string;
+  /** ISO timestamp. */
+  at: string;
+}
+
+/** Record one account-access event (append-only, internal). */
+export async function appendAccessLog(entry: AccessLogEntry): Promise<void> {
+  await putOne(AUDIT_PK, `access#${entry.id}`, entry);
+}
+
+/** Read the access log, newest first — all, or just one company's. */
+export async function loadAccessLog(companyId?: string): Promise<AccessLogEntry[]> {
+  const all = await loadCollection<AccessLogEntry>(AUDIT_PK, 'access');
+  const rows = companyId ? all.filter((e) => e.companyId === companyId) : all;
+  return rows.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
 // Prefixes the main workspace owns (everything except events, which are synced
 // separately but live in the same company partition).
 const MAIN_PREFIXES = new Set<string>([

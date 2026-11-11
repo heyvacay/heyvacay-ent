@@ -106,3 +106,51 @@ export async function pushCrm<C, R>(payload: CrmPayload<C, R>): Promise<boolean>
     return false;
   }
 }
+
+/* -------------------------- access audit -------------------------- */
+
+export interface AccessLogEntry {
+  id: string;
+  companyId: string;
+  companyName: string;
+  repName: string;
+  reason: string;
+  comment?: string;
+  at: string;
+}
+
+/** Record a rep entering a customer account (internal audit log). */
+export async function logAccountAccess(input: {
+  companyId: string;
+  companyName: string;
+  repName: string;
+  reason: string;
+  comment?: string;
+}): Promise<AccessLogEntry | null> {
+  try {
+    const res = await fetch('/api/audit/access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      keepalive: true,
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { entry?: AccessLogEntry };
+    return json.entry ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the access history for one company (or all when omitted). */
+export async function fetchAccessLog(companyId?: string): Promise<AccessLogEntry[]> {
+  try {
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    const res = await fetch(`/api/audit/access${qs}`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { entries?: AccessLogEntry[] };
+    return Array.isArray(json.entries) ? json.entries : [];
+  } catch {
+    return [];
+  }
+}

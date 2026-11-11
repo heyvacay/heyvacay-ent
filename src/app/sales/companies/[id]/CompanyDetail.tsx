@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCrm } from '@/lib/crmStore';
@@ -53,7 +53,13 @@ import {
   ArrowRight,
   Sparkles,
   Receipt,
+  Shield,
 } from '@/components/icons';
+import {
+  logAccountAccess,
+  fetchAccessLog,
+  type AccessLogEntry,
+} from '@/lib/workspaceSync';
 
 type Tab = 'overview' | 'deals' | 'contracts' | 'commission' | 'tasks' | 'notes';
 const TABS: { key: Tab; label: string }[] = [
@@ -86,6 +92,7 @@ export default function CompanyDetail({ id }: { id: string }) {
     setCompanyCustomCommission,
     setCompanyStarRate,
     commissionApprovals,
+    currentRep,
   } = useCrm();
   const router = useRouter();
   const logoInput = useRef<HTMLInputElement>(null);
@@ -117,6 +124,23 @@ export default function CompanyDetail({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>('overview');
   const [wizard, setWizard] = useState(false);
 
+  // Account-access audit: a reason is required before entering a customer's
+  // workspace; every access is logged internally.
+  const [accessPrompt, setAccessPrompt] = useState(false);
+  const [accessReason, setAccessReason] = useState('');
+  const [accessComment, setAccessComment] = useState('');
+  const [accessErr, setAccessErr] = useState<string | null>(null);
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [accessLog, setAccessLog] = useState<AccessLogEntry[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    fetchAccessLog(id).then((rows) => live && setAccessLog(rows));
+    return () => {
+      live = false;
+    };
+  }, [id]);
+
   if (!c) {
     return (
       <div>
@@ -133,7 +157,7 @@ export default function CompanyDetail({ id }: { id: string }) {
   // Drop into the customer's workspace as their account manager. Set the
   // persistent active account (which workspace loads — shared with the actual
   // user's login) AND the rep-viewing overlay flag (Nova powers).
-  const openWorkspace = () => {
+  const doEnter = () => {
     try {
       const ctx = { id: c.id, name: c.name, domain: c.domain };
       localStorage.setItem('hv_ent_active_account', JSON.stringify(ctx));
@@ -145,6 +169,29 @@ export default function CompanyDetail({ id }: { id: string }) {
       /* ignore */
     }
     router.push('/app');
+  };
+
+  // Entering a customer workspace requires a logged reason (internal audit).
+  const confirmAccess = async () => {
+    const reason = accessReason.trim();
+    if (!reason) {
+      setAccessErr('A reason is required to enter a customer account.');
+      return;
+    }
+    setAccessBusy(true);
+    const entry = await logAccountAccess({
+      companyId: c.id,
+      companyName: c.name,
+      repName: currentRep,
+      reason,
+      comment: accessComment.trim() || undefined,
+    });
+    if (entry) setAccessLog((l) => [entry, ...l]);
+    setAccessBusy(false);
+    setAccessPrompt(false);
+    setAccessReason('');
+    setAccessComment('');
+    doEnter();
   };
 
   // A lead has no account yet — prompt the rep to create one first. Anything
@@ -165,7 +212,10 @@ export default function CompanyDetail({ id }: { id: string }) {
       setProvisionPrompt(true);
       return;
     }
-    openWorkspace();
+    setAccessErr(null);
+    setAccessReason('');
+    setAccessComment('');
+    setAccessPrompt(true);
   };
 
   const toggleIntakeIntegration = (key: string) =>
@@ -191,7 +241,15 @@ export default function CompanyDetail({ id }: { id: string }) {
       notes: notes || undefined,
     });
     setProvisionPrompt(false);
-    openWorkspace();
+    // Provisioning is itself an access event — log it (no prompt; the rep just
+    // created the account), then drop into the new workspace.
+    void logAccountAccess({
+      companyId: c.id,
+      companyName: c.name,
+      repName: currentRep,
+      reason: 'Account provisioning / first setup',
+    });
+    doEnter();
   };
 
   const intakeValid = intake.championName.trim().length > 0;
@@ -664,6 +722,42 @@ export default function CompanyDetail({ id }: { id: string }) {
               ))}
             </div>
           </Card>
+
+          {/* Internal account-access audit log */}
+          <Card>
+            <div className="mb-3 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-slate-400" />
+              <h2 className="font-display text-lg font-bold text-slate-900">
+                Access history
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                internal
+              </span>
+            </div>
+            {accessLog.length === 0 ? (
+              <p className="text-sm text-slate-400">
+                No one has entered this account&apos;s workspace yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {accessLog.slice(0, 20).map((e) => (
+                  <div key={e.id} className="border-l-2 border-amber-300 pl-3">
+                    <p className="text-sm text-slate-700">
+                      <span className="font-semibold">{e.repName}</span> entered the
+                      workspace
+                    </p>
+                    <p className="text-xs text-slate-500">{e.reason}</p>
+                    {e.comment && (
+                      <p className="text-xs text-slate-400">“{e.comment}”</p>
+                    )}
+                    <p className="text-xs text-slate-400">
+                      {new Date(e.at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
 
@@ -807,6 +901,74 @@ export default function CompanyDetail({ id }: { id: string }) {
       )}
 
       {wizard && <ContractWizard company={c} onClose={() => setWizard(false)} />}
+
+      {accessPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => !accessBusy && setAccessPrompt(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-amber-100 text-amber-700">
+                <Shield className="h-5 w-5" />
+              </span>
+              <h3 className="font-display text-lg font-bold text-slate-900">
+                Enter {c.name}&apos;s workspace
+              </h3>
+            </div>
+            <p className="mt-2 text-sm text-slate-500">
+              You&apos;re about to access a customer&apos;s live account. This is
+              recorded in the internal access log with your name, the time, and the
+              reason below. The customer does not see this.
+            </p>
+
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Reason for access <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={accessReason}
+              onChange={(e) => {
+                setAccessReason(e.target.value);
+                if (accessErr) setAccessErr(null);
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+            >
+              <option value="">Select a reason…</option>
+              <option value="Customer support request">Customer support request</option>
+              <option value="Onboarding / setup assistance">Onboarding / setup assistance</option>
+              <option value="Troubleshooting a reported issue">Troubleshooting a reported issue</option>
+              <option value="Billing / invoicing question">Billing / invoicing question</option>
+              <option value="Policy or budget configuration">Policy or budget configuration</option>
+              <option value="Booking assistance">Booking assistance</option>
+              <option value="Other (add a comment)">Other (add a comment)</option>
+            </select>
+
+            <label className="mt-3 block text-sm font-medium text-slate-700">
+              Comment <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <textarea
+              value={accessComment}
+              onChange={(e) => setAccessComment(e.target.value)}
+              rows={2}
+              placeholder="Context, ticket number, what you'll do…"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+            />
+            {accessErr && <p className="mt-1 text-xs font-medium text-red-600">{accessErr}</p>}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setAccessPrompt(false)} disabled={accessBusy}>
+                Cancel
+              </Button>
+              <Button onClick={confirmAccess} disabled={accessBusy || !accessReason.trim()}>
+                {accessBusy ? 'Logging…' : 'Log & enter'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
