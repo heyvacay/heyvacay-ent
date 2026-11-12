@@ -328,8 +328,29 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   );
 
   const provisionAccount: CrmApi['provisionAccount'] = useCallback(
-    (id, intake) =>
-      patch(id, (c) => {
+    (id, intake) => {
+      // Side effect: email the account owner (the champion) an invite so THEY
+      // can access the account and run their own integration setup. Fired once,
+      // only when provisioning a lead with an owner email on file.
+      const target = companies.find((c) => c.id === id);
+      const ownerEmail = (intake?.championEmail ?? '').trim();
+      const ownerName = (intake?.championName ?? '').trim();
+      if (target && target.status === 'lead' && ownerEmail) {
+        try {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          const joinUrl = `${origin}/join?email=${encodeURIComponent(ownerEmail)}&company=${encodeURIComponent(target.id)}`;
+          void sendEmail('invite', ownerEmail, {
+            name: ownerName || 'there',
+            company: target.name,
+            inviter: currentRep,
+            role: 'Account owner (Admin)',
+            joinUrl,
+          });
+        } catch {
+          /* non-fatal — provisioning still proceeds */
+        }
+      }
+      return patch(id, (c) => {
         // Only a lead needs provisioning; anything further along already has an
         // account. Moving to "onboarding" creates the workspace the rep enters.
         if (c.status !== 'lead') return c;
@@ -406,8 +427,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             intake?.championName ? ` · champion ${intake.championName}` : ''
           }`
         );
-      }),
-    [patch, currentRep]
+      });
+    },
+    [patch, currentRep, companies]
   );
 
   const toggleStep: CrmApi['toggleStep'] = useCallback(

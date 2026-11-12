@@ -841,6 +841,10 @@ export default function CompanyDetail({ id }: { id: string }) {
                     );
                   })}
                 </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  We&apos;ll email the account owner an invite to access their account and
+                  connect these themselves (you can help, but they authorize their own systems).
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

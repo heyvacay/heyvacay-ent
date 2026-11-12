@@ -145,6 +145,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // First-login welcome flow (password → confetti → role-aware tour). Shown
   // once per (account, user) to the actual user — never to a rep viewing-as.
   const [welcome, setWelcome] = useState(false);
+  // The Nova (sales console) link only shows on the Nova hostname (and local dev).
+  // On the customer app host (e.g. ent.stage.heyvacay.co) it is hidden, and the
+  // /sales routes are redirected to the Nova host by middleware.
+  const [novaHost, setNovaHost] = useState(false);
+  useEffect(() => {
+    try {
+      const h = window.location.hostname;
+      setNovaHost(/^nova\./i.test(h) || h === 'localhost' || h === '127.0.0.1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const welcomeKey = () => {
     try {
       const active = localStorage.getItem('hv_ent_active_account');
@@ -286,7 +298,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="border-t border-slate-200 p-3">
-        {role === 'admin' && (
+        {role === 'admin' && novaHost && (
           <Link
             href="/sales"
             className="block rounded-lg px-3 py-2 text-xs font-semibold text-brand-dark hover:bg-brand/10"

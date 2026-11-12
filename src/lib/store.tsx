@@ -110,6 +110,10 @@ function seedAccount(ctx: { id?: string; name: string; domain: string }): AppSta
     bookings: [],
     expenses: [],
     points: [],
+    // A brand-new company has no history yet — don't inherit the demo's seeded
+    // 6-month savings curve, or analytics would show spend/savings with zero
+    // bookings. Reports derive the monthly series from real bookings anyway.
+    history: [],
   };
 }
 

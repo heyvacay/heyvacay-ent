@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { fetchWorkspace } from '@/lib/workspaceSync';
 
 /**
  * CRM ↔ customer-workspace link.
@@ -35,37 +36,44 @@ export interface LinkedStats {
   netKycStatus?: 'sent' | 'submitted' | 'approved';
 }
 
+/** Derive CRM-facing stats from a workspace AppState (local or server). */
+function statsFromState(state: {
+  bookings?: unknown;
+  billing?: { netRequested?: boolean; mode?: string; netKyc?: { status?: string } };
+}): LinkedStats {
+  const all = Array.isArray(state.bookings) ? state.bookings : [];
+  const live = all.filter((b: { status?: string }) => b.status !== 'cancelled');
+  const savings = live.reduce((s: number, b: { savings?: number }) => s + (b.savings || 0), 0);
+  const spend = live.reduce((s: number, b: { price?: number }) => s + (b.price || 0), 0);
+  const recent: LinkedBooking[] = live
+    .slice(0, 8)
+    .map((b: Record<string, unknown>) => ({
+      title: String(b.title ?? ''),
+      price: Number(b.price ?? 0),
+      savings: Number(b.savings ?? 0),
+      startDate: String(b.startDate ?? ''),
+      status: String(b.status ?? ''),
+      type: String(b.type ?? ''),
+    }));
+  const billing = state.billing ?? {};
+  return {
+    bookings: live.length,
+    savings,
+    spend,
+    recent,
+    netRequested: Boolean(billing.netRequested),
+    billingMode: billing.mode,
+    netKycStatus: billing.netKyc?.status as LinkedStats['netKycStatus'],
+  };
+}
+
 export function readAppLink(companyId: string): LinkedStats | null {
   try {
     const raw = localStorage.getItem(APP_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    const state = parsed?.state;
+    const state = JSON.parse(raw)?.state;
     if (!state?.company || state.company.id !== companyId) return null;
-    const all = Array.isArray(state.bookings) ? state.bookings : [];
-    const live = all.filter((b: { status?: string }) => b.status !== 'cancelled');
-    const savings = live.reduce((s: number, b: { savings?: number }) => s + (b.savings || 0), 0);
-    const spend = live.reduce((s: number, b: { price?: number }) => s + (b.price || 0), 0);
-    const recent: LinkedBooking[] = live
-      .slice(0, 8)
-      .map((b: Record<string, unknown>) => ({
-        title: String(b.title ?? ''),
-        price: Number(b.price ?? 0),
-        savings: Number(b.savings ?? 0),
-        startDate: String(b.startDate ?? ''),
-        status: String(b.status ?? ''),
-        type: String(b.type ?? ''),
-      }));
-    const billing = state.billing ?? {};
-    return {
-      bookings: live.length,
-      savings,
-      spend,
-      recent,
-      netRequested: Boolean(billing.netRequested),
-      billingMode: billing.mode,
-      netKycStatus: billing.netKyc?.status,
-    };
+    return statsFromState(state);
   } catch {
     return null;
   }
@@ -118,14 +126,33 @@ export function useWorkspace(): WorkspaceSnapshot | null {
   return snap;
 }
 
-/** Live-updating version — re-reads when the app store changes. */
+/**
+ * Live CRM stats for a company. Reads this browser's workspace first (instant
+ * when a rep already has that company loaded), then overlays the authoritative
+ * server workspace by companyId — so the CRM shows a company's REAL spend /
+ * savings / bookings on any device, for any provisioned account, not just the
+ * one currently open in this browser.
+ */
 export function useAppLink(companyId: string): LinkedStats | null {
   const [stats, setStats] = useState<LinkedStats | null>(null);
   useEffect(() => {
-    const read = () => setStats(readAppLink(companyId));
-    read();
-    window.addEventListener('storage', read);
-    return () => window.removeEventListener('storage', read);
+    let cancelled = false;
+    // Fast path: same-browser localStorage (don't clobber a server result with null).
+    const readLocal = () => setStats((prev) => readAppLink(companyId) ?? prev);
+    readLocal();
+    window.addEventListener('storage', readLocal);
+    // Authoritative cross-device read from the shared server workspace.
+    fetchWorkspace(companyId)
+      .then((wp) => {
+        if (cancelled || !wp?.state?.company) return;
+        if (wp.state.company.id && wp.state.company.id !== companyId) return;
+        setStats(statsFromState(wp.state));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      window.removeEventListener('storage', readLocal);
+    };
   }, [companyId]);
   return stats;
 }

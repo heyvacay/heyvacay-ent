@@ -147,7 +147,9 @@ export async function getConnection(
       TableName: INTEGRATIONS_TABLE,
       Key: { pk: key },
     });
-    if (!res.Item) return null;
+    // No row in DDB, but this task may hold a just-written connection in memory
+    // (DDB write lagged or the SDK fell back) — prefer that over "disconnected".
+    if (!res.Item) return mem.get(key) ?? null;
     // Stored flat; `pk` is the only synthetic field.
     const { pk: _pk, ...rest } = res.Item as Record<string, unknown>;
     void _pk;

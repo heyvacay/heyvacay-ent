@@ -119,8 +119,39 @@ export default function ReportsPage() {
   const { state, userById } = useStore();
   const [level, setLevel] = useState<Level>('company');
 
-  const spend6 = state.history.reduce((s, h) => s + h.spend, 0);
-  const save6 = state.history.reduce((s, h) => s + h.savings, 0);
+  // Trailing-6-month spend & savings derived from ACTUAL bookings (by booked
+  // month), so a company with no bookings shows zeros instead of the demo's
+  // seeded history curve. Falls back to stored history only when there are
+  // genuinely no bookings yet (keeps the demo workspace rich).
+  const history6 = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return {
+        key: `${d.getFullYear()}-${d.getMonth()}`,
+        month: d.toLocaleString('en-US', { month: 'short' }),
+        spend: 0,
+        savings: 0,
+      };
+    });
+    const idx = new Map(months.map((m, i) => [m.key, i]));
+    for (const b of state.bookings) {
+      if (b.status === 'cancelled') continue;
+      const d = new Date(b.createdAt || b.startDate);
+      const i = idx.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (i === undefined) continue;
+      months[i].spend += b.price || 0;
+      months[i].savings += b.savings || 0;
+    }
+    const hasBookings = state.bookings.some((b) => b.status !== 'cancelled');
+    if (!hasBookings && state.history.length) {
+      return state.history.map((h) => ({ key: h.month, month: h.month, spend: h.spend, savings: h.savings }));
+    }
+    return months;
+  }, [state.bookings, state.history]);
+
+  const spend6 = history6.reduce((s, h) => s + h.spend, 0);
+  const save6 = history6.reduce((s, h) => s + h.savings, 0);
   const belowMkt = spend6 + save6 > 0 ? save6 / (spend6 + save6) : 0;
   const pointsIssued = state.points
     .filter((p) => p.delta > 0)
@@ -129,7 +160,7 @@ export default function ReportsPage() {
     .filter((e) => e.synced)
     .reduce((s, e) => s + e.amount, 0);
 
-  const savingsSeries = state.history.map((h) => ({
+  const savingsSeries = history6.map((h) => ({
     label: h.month,
     value: h.savings,
     hint: `${h.month}: ${money(h.savings)} saved on ${money(h.spend)} spent`,
@@ -305,8 +336,8 @@ export default function ReportsPage() {
   const downloadPdf = () => {
     savingsReportPdf({
       companyName: state.company.name,
-      customerSince: state.onboarding?.completedAt?.slice(0, 10) ?? state.history[0]?.month,
-      history: state.history,
+      customerSince: state.onboarding?.completedAt?.slice(0, 10) ?? history6[0]?.month,
+      history: history6.map((h) => ({ month: h.month, spend: h.spend, savings: h.savings })),
       byDept: byDept.map((d) => ({ label: d.label, spend: d.spend, savings: d.savings })),
       topSavers: [...byEmployee]
         .sort((a, b) => b.savings - a.savings)

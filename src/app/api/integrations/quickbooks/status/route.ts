@@ -12,11 +12,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'companyId is required.' }, { status: 400 });
   }
   const conn = await getConnection(companyId, 'quickbooks');
+  // A usable connection needs both an active status AND a realm id — without a
+  // realm we can't call the Accounting API, so don't claim "connected" (this was
+  // the source of "shows connected but mapping says not connected").
+  const usable = conn?.status === 'connected' && !!conn?.realmId;
   return NextResponse.json({
     serverConfigured: QUICKBOOKS.configured,
     env: QUICKBOOKS.env,
-    connected: conn?.status === 'connected',
-    status: conn?.status || 'disconnected',
+    connected: usable,
+    status:
+      conn?.status === 'connected' && !conn?.realmId
+        ? 'needs_reconnect'
+        : conn?.status || 'disconnected',
     companyName: conn?.companyName || null,
     realmId: conn?.realmId || null,
     orgId: conn?.realmId || null,

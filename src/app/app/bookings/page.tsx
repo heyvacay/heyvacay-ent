@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
 import {
   Badge,
@@ -25,16 +25,50 @@ const FILTERS: { key: 'all' | BookingStatus; label: string }[] = [
 export default function BookingsPage() {
   const {
     state,
+    activeUser,
+    isSuperAdmin,
+    directReportIds,
     userById,
     approveBooking,
     cancelTrip,
-    companySpend,
-    companySavings,
   } = useStore();
   const [filter, setFilter] = useState<'all' | BookingStatus>('all');
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
 
-  const rows = [...state.bookings]
+  // Whose trips to show: mine, my team's (my reports), or — for a company-wide
+  // (super) admin — everyone's. Mirrors the dashboard's scoping.
+  const teamIds = useMemo(
+    () => new Set([activeUser.id, ...directReportIds(activeUser.id)]),
+    [activeUser.id, directReportIds]
+  );
+  const scopes = useMemo(() => {
+    const base: { key: 'mine' | 'team' | 'company'; label: string }[] = [
+      { key: 'mine', label: 'My trips' },
+      { key: 'team', label: "My team's" },
+    ];
+    if (isSuperAdmin) base.push({ key: 'company', label: "Company's" });
+    return base;
+  }, [isSuperAdmin]);
+  const [scope, setScope] = useState<'mine' | 'team' | 'company'>('mine');
+  const effectiveScope = scopes.some((s) => s.key === scope) ? scope : 'mine';
+
+  const scoped = useMemo(
+    () =>
+      state.bookings.filter((b) =>
+        effectiveScope === 'company'
+          ? true
+          : effectiveScope === 'team'
+            ? teamIds.has(b.travelerId)
+            : b.travelerId === activeUser.id
+      ),
+    [state.bookings, effectiveScope, teamIds, activeUser.id]
+  );
+
+  const live = scoped.filter((b) => b.status !== 'cancelled');
+  const scopedSpend = live.reduce((s, b) => s + b.price, 0);
+  const scopedSavings = live.reduce((s, b) => s + b.savings, 0);
+
+  const rows = [...scoped]
     .filter((b) => (filter === 'all' ? true : b.status === filter))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
@@ -42,13 +76,29 @@ export default function BookingsPage() {
     <div>
       <PageHeader
         title="Bookings"
-        subtitle="Every trip across the company, with what you saved on each."
+        subtitle="Trips, with what you saved on each — filter to yours, your team's, or the whole company."
       />
 
+      <div className="mb-5 flex flex-wrap gap-2">
+        {scopes.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setScope(s.key)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+              effectiveScope === s.key
+                ? 'bg-brand text-slate-900'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total trips" value={state.bookings.length} />
-        <StatCard label="Spend" value={money(companySpend)} />
-        <StatCard accent label="Saved vs market" value={money(companySavings)} />
+        <StatCard label="Trips" value={scoped.length} />
+        <StatCard label="Spend" value={money(scopedSpend)} />
+        <StatCard accent label="Saved vs market" value={money(scopedSavings)} />
       </div>
 
       <div className="mt-6 mb-4 flex flex-wrap gap-2">
