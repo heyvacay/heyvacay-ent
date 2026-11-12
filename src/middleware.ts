@@ -19,9 +19,15 @@ export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
-  const isNova = /^nova\./.test(host);
-
   if (isLocal) return NextResponse.next();
+
+  // The split only activates once a Nova hostname is configured AND live (its
+  // DNS exists). Until then this is a no-op, so /sales keeps serving on the
+  // current host and nobody is redirected to a host that doesn't resolve yet.
+  const novaHost = (process.env.ENT_NOVA_URL || '').trim().toLowerCase();
+  if (!novaHost) return NextResponse.next();
+
+  const isNova = host === novaHost || /^nova\./.test(host);
 
   // Nova host: land reps on the sales console instead of the marketing site.
   if (isNova) {
@@ -33,7 +39,6 @@ export function middleware(req: NextRequest) {
 
   // Customer host: keep Nova off this URL. Send any /sales hit to the Nova host.
   if (pathname === '/sales' || pathname.startsWith('/sales/')) {
-    const novaHost = host.includes('.') ? host.replace(/^[^.]+\./, 'nova.') : `nova.${host}`;
     return NextResponse.redirect(`https://${novaHost}${pathname}${search}`);
   }
 
