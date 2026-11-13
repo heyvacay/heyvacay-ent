@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
-import { dinnerExpired, type RsvpStatus } from '@/lib/events';
+import { dinnerExpired, eventDinners, type Dinner, type RsvpStatus } from '@/lib/events';
 import { shortDate } from '@/lib/format';
 import { Calendar, Check, MapPin } from '@/components/icons';
 
@@ -20,28 +20,43 @@ export function DinnerRsvpPrompt() {
   const { events, setRsvp } = useEvents();
   const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
 
-  // The first event with an open dinner that needs this user's input — either
-  // an RSVP, or (once they're in) a vote on the food genre / restaurant.
+  // The first event+night dinner that needs this user's input — either an RSVP,
+  // or (once they're in) a vote on the food genre / restaurant. Each night of a
+  // multi-day event is checked independently, so a 3-night trip can surface a
+  // separate prompt per night.
   const nowISO = new Date().toISOString();
-  const pendingEvent = events.find((e) => {
-    const d = e.dinner;
-    if (!d || dinnerExpired(d, nowISO) || dismissed[e.id]) return false;
-    const invited = e.attendees.some((a) => a.userId === activeUser.id);
-    if (!invited) return false;
+  const needsInput = (e: (typeof events)[number], d: Dinner): boolean => {
+    if (dinnerExpired(d, nowISO)) return false;
+    if (!e.attendees.some((a) => a.userId === activeUser.id)) return false;
     if (d.phase === 'rsvp' || d.phase === 'join') return d.rsvps[activeUser.id] == null;
     const inParty = d.attendees.some((a) => a.userId === activeUser.id);
     if (!inParty) return false;
     if (d.phase === 'genre') return d.genreVotes[activeUser.id] == null;
     if (d.phase === 'restaurant') return d.restaurantVotes[activeUser.id] == null;
     return false;
-  });
+  };
 
-  if (!pendingEvent || !pendingEvent.dinner) return null;
-  const d = pendingEvent.dinner;
-  const needsRsvp = d.phase === 'rsvp' || d.phase === 'join';
+  let pendingEvent: (typeof events)[number] | undefined;
+  let d: Dinner | undefined;
+  for (const e of events) {
+    for (const dn of eventDinners(e)) {
+      if (dismissed[`${e.id}:${dn.id}`]) continue;
+      if (needsInput(e, dn)) {
+        pendingEvent = e;
+        d = dn;
+        break;
+      }
+    }
+    if (d) break;
+  }
+
+  if (!pendingEvent || !d) return null;
+  const dinner = d;
+  const promptKey = `${pendingEvent.id}:${dinner.id}`;
+  const needsRsvp = dinner.phase === 'rsvp' || dinner.phase === 'join';
 
   const answer = (status: RsvpStatus) => {
-    setRsvp(pendingEvent.id, activeUser.id, activeUser.name, status);
+    setRsvp(pendingEvent!.id, dinner.id, activeUser.id, activeUser.name, status);
   };
 
   return (
@@ -55,13 +70,13 @@ export function DinnerRsvpPrompt() {
             <p className="font-semibold text-slate-900">
               {needsRsvp
                 ? `You're invited to the group dinner for ${pendingEvent.name}`
-                : d.phase === 'genre'
+                : dinner.phase === 'genre'
                   ? `Vote on the food genre for ${pendingEvent.name}'s dinner`
                   : `Vote on the restaurant for ${pendingEvent.name}'s dinner`}
             </p>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" /> {shortDate(d.date)} · {d.time}
+                <Calendar className="h-3.5 w-3.5" /> {shortDate(dinner.date)} · {dinner.time}
               </span>
               <span className="inline-flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5" /> {pendingEvent.city}
@@ -106,7 +121,7 @@ export function DinnerRsvpPrompt() {
             </Link>
           )}
           <button
-            onClick={() => setDismissed((s) => ({ ...s, [pendingEvent.id]: true }))}
+            onClick={() => setDismissed((s) => ({ ...s, [promptKey]: true }))}
             aria-label="Dismiss"
             className="rounded-lg px-2 py-2 text-slate-400 hover:bg-slate-100"
           >

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
-import { isEventActive } from '@/lib/events';
+import { isEventActive, dinnersSummary } from '@/lib/events';
 import { Button, Card, EmptyState, PageHeader } from '@/components/app/ui';
 import { shortDate } from '@/lib/format';
 import { Calendar, MapPin, Sparkles } from '@/components/icons';
@@ -80,17 +80,22 @@ export default function EventsPage() {
                 <span className="absolute left-4 top-4 grid h-9 w-9 place-items-center rounded-xl bg-white/15 text-white ring-1 ring-white/20">
                   <Calendar className="h-5 w-5" />
                 </span>
-                {e.dinner && (
-                  <span
-                    className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      e.dinner.phase === 'booked'
-                        ? 'bg-emerald-400/20 text-emerald-100'
-                        : 'bg-amber-400/20 text-amber-100'
-                    }`}
-                  >
-                    {e.dinner.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
-                  </span>
-                )}
+                {(() => {
+                  const ds = dinnersSummary(e);
+                  if (!ds) return null;
+                  const allBooked = ds.booked === ds.count;
+                  return (
+                    <span
+                      className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        allBooked
+                          ? 'bg-emerald-400/20 text-emerald-100'
+                          : 'bg-amber-400/20 text-amber-100'
+                      }`}
+                    >
+                      {ds.label}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="p-4">
                 <p className="font-display font-bold text-slate-900 group-hover:text-brand-dark">

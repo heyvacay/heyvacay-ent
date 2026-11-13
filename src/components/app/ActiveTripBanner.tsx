@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { useEvents } from '@/lib/eventsStore';
+import { eventDinners } from '@/lib/events';
 import type { Booking } from '@/lib/types';
 import { parseLocal } from '@/lib/format';
 import { Plane, MapPin, Receipt, Sparkles } from '@/components/icons';
@@ -56,15 +57,16 @@ export function ActiveTripBanner() {
   // with a booked restaurant → "ready to expense dinner at <place>?".
   const mealNudge = useMemo(() => {
     for (const ev of events) {
-      const din = ev.dinner;
-      const r = din?.reservation;
-      if (!r || r.date !== todayStr) continue;
-      if (din?.rsvps?.[activeUser.id] === 'no') continue;
-      return {
-        label: `dinner at ${r.restaurantName}`,
-        restaurant: r.restaurantName,
-        time: r.time || '',
-      };
+      for (const din of eventDinners(ev)) {
+        const r = din.reservation;
+        if (!r || r.date !== todayStr) continue;
+        if (din.rsvps?.[activeUser.id] === 'no') continue;
+        return {
+          label: `dinner at ${r.restaurantName}`,
+          restaurant: r.restaurantName,
+          time: r.time || '',
+        };
+      }
     }
     return null;
   }, [events, activeUser.id, todayStr]);

@@ -8,8 +8,11 @@ import {
   FOOD_GENRES,
   ROOM_TIERS,
   dinnerExpired,
+  eventDinners,
+  eventNights,
   tally,
   winner,
+  type Dinner,
   type DinnerCandidate,
   type DinnerPhase,
   type EventAttendee,
@@ -52,7 +55,8 @@ export default function EventDetail({ id }: { id: string }) {
     resolveExtraStay,
     joinEvent,
     cancelEvent,
-    startDinner,
+    addDinner,
+    removeDinner,
     joinDinner,
     setRsvp,
     remindRsvp,
@@ -74,16 +78,23 @@ export default function EventDetail({ id }: { id: string }) {
   const [booking, setBooking] = useState(false);
   const [availNote, setAvailNote] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const bookedRef = useRef(false);
+  const [activeNight, setActiveNight] = useState<string | null>(null);
+  const bookedRef = useRef<Set<string>>(new Set());
 
   const isAttendee = !!e?.attendees.some((a) => a.userId === activeUser.id);
-  const d = e?.dinner;
-  const isHost = d?.hostId === activeUser.id;
+  // An event can run a dinner per night; each is an independent RSVP + vote.
+  const dinners = e ? eventDinners(e) : [];
+  const nights = e ? eventNights(e) : [];
+  const effectiveNight = activeNight ?? dinners[0]?.date ?? nights[0] ?? null;
+  const activeDinner = dinners.find((dn) => dn.date === effectiveNight);
+  const d = activeDinner;
+  const isHost = (activeDinner?.hostId ?? e?.hostId) === activeUser.id;
 
-  // Load candidate restaurants once the genre vote is tallied.
-  const pickRestaurants = async () => {
-    if (!e || !d) return;
-    const g = winner(d.genreVotes) ?? FOOD_GENRES[0];
+  // Load candidate restaurants for a given night's dinner once its genre vote
+  // is tallied.
+  const pickRestaurants = async (dn: Dinner) => {
+    if (!e) return;
+    const g = winner(dn.genreVotes) ?? FOOD_GENRES[0];
     const results = await searchRestaurants(e.city, g);
     const candidates: DinnerCandidate[] = results.slice(0, 6).map((r) => ({
       id: r.id,
@@ -95,31 +106,31 @@ export default function EventDetail({ id }: { id: string }) {
       priceBand: r.priceBand,
       neighborhood: r.neighborhood,
     }));
-    setCandidates(e.id, g, candidates);
+    setCandidates(e.id, dn.id, g, candidates);
   };
 
-  const bookWinner = async () => {
-    if (!e || !d || booking) return;
+  const bookWinner = async (dn: Dinner) => {
+    if (!e || booking) return;
     setBooking(true);
     try {
-      const winnerId = winner(d.restaurantVotes) ?? d.candidates[0]?.id;
-      const rest = d.candidates.find((c) => c.id === winnerId);
+      const winnerId = winner(dn.restaurantVotes) ?? dn.candidates[0]?.id;
+      const rest = dn.candidates.find((c) => c.id === winnerId);
       if (!rest) return;
-      const party = d.attendees.length || 2;
+      const party = dn.attendees.length || 2;
       const avail = await getAvailability({
         restaurantId: rest.id,
-        date: d.date,
-        time: d.time,
+        date: dn.date,
+        time: dn.time,
         partySize: party,
       });
-      let bookTime = d.time;
+      let bookTime = dn.time;
       if (avail && !avail.requestedAvailable) {
-        bookTime = avail.slots[0]?.time || d.time;
-        setAvailNote(`Requested ${d.time} wasn't available — booked the closest open time, ${bookTime}.`);
+        bookTime = avail.slots[0]?.time || dn.time;
+        setAvailNote(`Requested ${dn.time} wasn't available — booked the closest open time, ${bookTime}.`);
       }
       const r = await bookRestaurant({
         restaurantId: rest.id,
-        date: d.date,
+        date: dn.date,
         time: bookTime,
         partySize: party,
         name: e.name,
@@ -127,24 +138,25 @@ export default function EventDetail({ id }: { id: string }) {
       if (r) {
         setReservation(
           e.id,
+          dn.id,
           {
             confirmation: r.confirmation,
             restaurantId: rest.id,
             restaurantName: rest.name,
             time: bookTime,
-            date: d.date,
+            date: dn.date,
             partySize: party,
           },
           activeUser.name
         );
         // Email everyone who's coming the final reservation details.
-        d.attendees.forEach((a) => {
+        dn.attendees.forEach((a) => {
           const email = emailById(a.userId);
           if (email)
             sendEmail('dinnerBooked', email, {
               name: a.name,
               restaurant: rest.name,
-              date: d.date,
+              date: dn.date,
               time: bookTime,
               partySize: party,
               confirmation: r.confirmation,
@@ -156,41 +168,50 @@ export default function EventDetail({ id }: { id: string }) {
     }
   };
 
-  // Auto-book when the host's expiration passes (runs once).
+  // Auto-book any night's dinner once its voting window closes (once each).
   useEffect(() => {
-    if (!d || bookedRef.current) return;
-    if (d.phase === 'restaurant' && dinnerExpired(d, new Date().toISOString())) {
-      bookedRef.current = true;
-      void bookWinner();
+    if (!e) return;
+    for (const dn of eventDinners(e)) {
+      if (
+        dn.phase === 'restaurant' &&
+        !bookedRef.current.has(dn.id) &&
+        dinnerExpired(dn, new Date().toISOString())
+      ) {
+        bookedRef.current.add(dn.id);
+        void bookWinner(dn);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d?.phase]);
+  }, [e?.dinners, e?.dinner]);
 
-  // Auto-start a dinner that was scheduled for "later" once its start day
-  // arrives. Whoever opens the event on/after that day kicks it off (client
-  // prototype — on the real backend a scheduled job would do this).
+  // Auto-start dinners scheduled for "later" once the start day arrives.
+  // Whoever opens the event on/after that day kicks them off (client prototype
+  // — on the real backend a scheduled job would do this). One dinner per
+  // planned night.
   const scheduledStartedRef = useRef(false);
   useEffect(() => {
-    if (!e || e.dinner || scheduledStartedRef.current) return;
+    if (!e || eventDinners(e).length > 0 || scheduledStartedRef.current) return;
     if (e.dinnerPlanMode !== 'later' || !e.dinnerPlanAt) return;
     if (todayISO() < e.dinnerPlanAt) return;
     scheduledStartedRef.current = true;
     const time = '19:00';
     const expiresAt = new Date(Date.now() + 48 * 3600_000).toISOString();
-    startDinner(e.id, e.hostId, e.startDate, time, expiresAt);
+    const plannedNights =
+      e.dinnerNights && e.dinnerNights.length ? e.dinnerNights : [e.startDate];
+    plannedNights.forEach((night) => addDinner(e.id, e.hostId, night, time, expiresAt));
     e.attendees.forEach((a) => {
       const email = emailById(a.userId);
       if (email && a.userId !== e.hostId)
         sendEmail('dinnerInvite', email, {
           name: a.name,
           event: e.name,
-          date: e.startDate,
+          date: plannedNights[0],
           time,
           city: e.city,
         });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e?.id, e?.dinner, e?.dinnerPlanMode, e?.dinnerPlanAt]);
+  }, [e?.id, e?.dinners, e?.dinnerPlanMode, e?.dinnerPlanAt]);
 
   if (!e) {
     return (
@@ -270,15 +291,25 @@ export default function EventDetail({ id }: { id: string }) {
                 Cancelled
               </span>
             )}
-            {d ? (
-              <span
-                className={cn(
-                  'rounded-full px-3 py-1 text-xs font-semibold',
-                  d.phase === 'booked' ? 'bg-emerald-400/20 text-emerald-200' : 'bg-amber-400/20 text-amber-200'
-                )}
-              >
-                {d.phase === 'booked' ? 'Dinner booked' : 'Dinner planning'}
-              </span>
+            {dinners.length > 0 ? (
+              (() => {
+                const bookedCount = dinners.filter((x) => x.phase === 'booked').length;
+                const allBooked = bookedCount === dinners.length;
+                return (
+                  <span
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-semibold',
+                      allBooked ? 'bg-emerald-400/20 text-emerald-200' : 'bg-amber-400/20 text-amber-200'
+                    )}
+                  >
+                    {dinners.length === 1
+                      ? allBooked
+                        ? 'Dinner booked'
+                        : 'Dinner planning'
+                      : `${dinners.length} dinners${bookedCount ? ` · ${bookedCount} booked` : ''}`}
+                  </span>
+                );
+              })()
             ) : (
               e.dinnerPlanMode === 'later' &&
               e.dinnerPlanAt && (
@@ -483,58 +514,86 @@ export default function EventDetail({ id }: { id: string }) {
       )}
 
       {tab === 'dinner' && (
-        <DinnerPanel
-          e={e}
-          d={d}
-          isHost={isHost}
-          isAttendee={isAttendee}
-          activeUserId={activeUser.id}
-          activeUserName={activeUser.name}
-          booking={booking}
-          availNote={availNote}
-          eventAttendees={e.attendees}
-          onStart={(date, time, expiresAt) => {
-            startDinner(e.id, activeUser.id, date, time, expiresAt);
-            // Invite every attendee to RSVP.
-            e.attendees.forEach((a) => {
-              const email = emailById(a.userId);
-              if (email && a.userId !== activeUser.id)
-                sendEmail('dinnerInvite', email, {
-                  name: a.name,
-                  event: e.name,
-                  date,
-                  time,
-                  city: e.city,
-                });
-            });
-          }}
-          onJoin={() => joinDinner(e.id, activeUser.id, activeUser.name)}
-          onRsvp={(status) => setRsvp(e.id, activeUser.id, activeUser.name, status)}
-          onRemind={(pending) => {
-            remindRsvp(e.id, activeUser.name, pending);
-            // Email everyone who hasn't replied yet.
-            const rsvps = e.dinner?.rsvps ?? {};
-            e.attendees
-              .filter((a) => !rsvps[a.userId])
-              .forEach((a) => {
+        <div className="space-y-5">
+          {/* One dinner per night — pick a night to plan or vote on it. */}
+          <DinnerNightSelector
+            nights={nights}
+            dinners={dinners}
+            activeNight={effectiveNight}
+            onSelect={setActiveNight}
+          />
+          <DinnerPanel
+            key={effectiveNight ?? 'none'}
+            e={e}
+            d={activeDinner}
+            defaultDate={effectiveNight ?? e.startDate}
+            multiNight={nights.length > 1}
+            canRemove={!!activeDinner && activeDinner.phase !== 'booked' && isHost}
+            onRemove={() => activeDinner && removeDinner(e.id, activeDinner.id)}
+            isHost={isHost}
+            isAttendee={isAttendee}
+            activeUserId={activeUser.id}
+            activeUserName={activeUser.name}
+            booking={booking}
+            availNote={availNote}
+            eventAttendees={e.attendees}
+            onStart={(date, time, expiresAt) => {
+              addDinner(e.id, activeUser.id, date, time, expiresAt);
+              setActiveNight(date);
+              // Invite every attendee to RSVP.
+              e.attendees.forEach((a) => {
                 const email = emailById(a.userId);
-                if (email) sendEmail('dinnerReminder', email, { name: a.name, event: e.name });
+                if (email && a.userId !== activeUser.id)
+                  sendEmail('dinnerInvite', email, {
+                    name: a.name,
+                    event: e.name,
+                    date,
+                    time,
+                    city: e.city,
+                  });
               });
-          }}
-          onSendDetails={() => sendDinnerDetails(e.id, activeUser.name)}
-          onStartGenre={() => advanceToGenre(e.id)}
-          onVoteGenre={(g) => {
-            voteGenre(e.id, activeUser.id, g);
-            addMessage(e.id, activeUser.id, activeUser.name, `🍽️ voted for ${g}`);
-          }}
-          onPickRestaurants={pickRestaurants}
-          onVoteRestaurant={(rid) => {
-            voteRestaurant(e.id, activeUser.id, rid);
-            const r = d?.candidates.find((c) => c.id === rid);
-            addMessage(e.id, activeUser.id, activeUser.name, `🍽️ voted for ${r?.name ?? 'a restaurant'}`);
-          }}
-          onBook={bookWinner}
-        />
+            }}
+            onJoin={() =>
+              activeDinner && joinDinner(e.id, activeDinner.id, activeUser.id, activeUser.name)
+            }
+            onRsvp={(status) =>
+              activeDinner && setRsvp(e.id, activeDinner.id, activeUser.id, activeUser.name, status)
+            }
+            onRemind={(pending) => {
+              remindRsvp(
+                e.id,
+                activeUser.name,
+                pending,
+                activeDinner ? shortDate(activeDinner.date) : undefined
+              );
+              // Email everyone who hasn't replied yet for this night.
+              const rsvps = activeDinner?.rsvps ?? {};
+              e.attendees
+                .filter((a) => !rsvps[a.userId])
+                .forEach((a) => {
+                  const email = emailById(a.userId);
+                  if (email) sendEmail('dinnerReminder', email, { name: a.name, event: e.name });
+                });
+            }}
+            onSendDetails={() =>
+              activeDinner && sendDinnerDetails(e.id, activeDinner.id, activeUser.name)
+            }
+            onStartGenre={() => activeDinner && advanceToGenre(e.id, activeDinner.id)}
+            onVoteGenre={(g) => {
+              if (!activeDinner) return;
+              voteGenre(e.id, activeDinner.id, activeUser.id, g);
+              addMessage(e.id, activeUser.id, activeUser.name, `🍽️ voted ${g} for ${shortDate(activeDinner.date)} dinner`);
+            }}
+            onPickRestaurants={() => activeDinner && pickRestaurants(activeDinner)}
+            onVoteRestaurant={(rid) => {
+              if (!activeDinner) return;
+              voteRestaurant(e.id, activeDinner.id, activeUser.id, rid);
+              const r = activeDinner.candidates.find((c) => c.id === rid);
+              addMessage(e.id, activeUser.id, activeUser.name, `🍽️ voted for ${r?.name ?? 'a restaurant'} (${shortDate(activeDinner.date)})`);
+            }}
+            onBook={() => activeDinner && bookWinner(activeDinner)}
+          />
+        </div>
       )}
 
       {confirmCancel && (
@@ -585,6 +644,98 @@ export default function EventDetail({ id }: { id: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------------- dinner night selector ---------------- */
+
+/** A short weekday + day label for a night chip, e.g. "Thu 13". */
+function nightLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+}
+
+/**
+ * Night-by-night picker for a multi-day event's dinners. Each night of the trip
+ * is a chip showing whether a dinner is planned (and its status); tapping one
+ * selects it so the group can plan or vote on that specific night. Only shown
+ * when there's more than one night — a single-night event skips straight to the
+ * one dinner.
+ */
+function DinnerNightSelector({
+  nights,
+  dinners,
+  activeNight,
+  onSelect,
+}: {
+  nights: string[];
+  dinners: Dinner[];
+  activeNight: string | null;
+  onSelect: (iso: string) => void;
+}) {
+  if (nights.length <= 1) return null;
+  const plannedCount = dinners.length;
+  return (
+    <Card>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="font-display text-base font-bold text-slate-900">Which night?</h3>
+        <span className="text-xs text-slate-400">
+          {plannedCount} of {nights.length} night{nights.length === 1 ? '' : 's'} planned
+        </span>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        Plan a separate dinner for each night — every one runs its own RSVP and vote.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {nights.map((iso) => {
+          const dn = dinners.find((x) => x.date === iso);
+          const active = iso === activeNight;
+          const status = dn
+            ? dn.phase === 'booked'
+              ? 'Booked'
+              : 'Planning'
+            : 'Add dinner';
+          return (
+            <button
+              key={iso}
+              type="button"
+              onClick={() => onSelect(iso)}
+              className={cn(
+                'flex flex-col items-start gap-0.5 rounded-xl border px-3.5 py-2 text-left transition',
+                active
+                  ? 'border-brand bg-brand/10 ring-1 ring-brand/40'
+                  : 'border-slate-200 hover:border-slate-300'
+              )}
+            >
+              <span className="text-sm font-semibold text-slate-800">{nightLabel(iso)}</span>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 text-[11px] font-semibold',
+                  dn
+                    ? dn.phase === 'booked'
+                      ? 'text-emerald-600'
+                      : 'text-amber-600'
+                    : 'text-slate-400'
+                )}
+              >
+                {dn ? (
+                  dn.phase === 'booked' ? (
+                    <>
+                      <Check className="h-3 w-3" /> {status}
+                    </>
+                  ) : (
+                    status
+                  )
+                ) : (
+                  <>+ {status}</>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
@@ -662,6 +813,10 @@ function DinnerStepper({ current }: { current: number }) {
 function DinnerPanel({
   e,
   d,
+  defaultDate,
+  multiNight,
+  canRemove,
+  onRemove,
   isHost,
   isAttendee,
   activeUserId,
@@ -679,7 +834,11 @@ function DinnerPanel({
   onBook,
 }: {
   e: ReturnType<typeof useEvents>['events'][number];
-  d: ReturnType<typeof useEvents>['events'][number]['dinner'];
+  d: Dinner | undefined;
+  defaultDate: string;
+  multiNight: boolean;
+  canRemove: boolean;
+  onRemove: () => void;
   isHost: boolean;
   isAttendee: boolean;
   activeUserId: string;
@@ -698,7 +857,7 @@ function DinnerPanel({
   onVoteRestaurant: (rid: string) => void;
   onBook: () => void;
 }) {
-  const [date, setDate] = useState(e.startDate);
+  const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState('19:00');
   const [hours, setHours] = useState(2);
 
@@ -712,9 +871,13 @@ function DinnerPanel({
         {/* how it works — the whole flow at a glance */}
         <Card>
           <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-            <Sparkles className="h-5 w-5 text-brand-dark" /> Plan a group dinner
+            <Sparkles className="h-5 w-5 text-brand-dark" />{' '}
+            {multiNight ? `Plan the ${shortDate(defaultDate)} dinner` : 'Plan a group dinner'}
           </h2>
           <p className="mb-4 text-sm text-slate-500">
+            {multiNight
+              ? 'Each night has its own dinner — this one runs its own RSVP and vote. '
+              : ''}
             HeyVacay runs the whole thing in four simple steps — you just kick it off and we handle
             the rest.
           </p>
@@ -816,7 +979,18 @@ function DinnerPanel({
               {yesCount} coming · {maybeCount} maybe · {noCount} can&apos;t make it
             </p>
           </div>
-          <Badge color={d.phase === 'booked' ? 'green' : 'amber'}>{dinnerPhaseLabel(d.phase)}</Badge>
+          <div className="flex items-center gap-2">
+            <Badge color={d.phase === 'booked' ? 'green' : 'amber'}>{dinnerPhaseLabel(d.phase)}</Badge>
+            {canRemove && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="rounded-lg px-2 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-50"
+              >
+                Remove
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 overflow-x-auto border-t border-slate-100 pt-4">

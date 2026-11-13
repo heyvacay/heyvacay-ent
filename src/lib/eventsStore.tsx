@@ -11,6 +11,9 @@ import {
 } from 'react';
 import {
   seedEvents,
+  eventDinners,
+  migrateEvents,
+  type Dinner,
   type DinnerCandidate,
   type DinnerReservation,
   type EventAttendee,
@@ -62,6 +65,8 @@ interface EventsApi {
     dinnerPlanMode?: 'now' | 'later' | 'none';
     /** For 'later': the date planning should kick off (ISO yyyy-mm-dd). */
     dinnerPlanAt?: string;
+    /** Nights (ISO yyyy-mm-dd) to plan a dinner for. Defaults to the first night. */
+    dinnerNights?: string[];
   }) => TravelEvent;
   /** Edit an existing event's core details (name, city, dates, attendees,
    *  hotels, flights, budget). Dinner setup is managed from the Dinner tab. */
@@ -113,19 +118,23 @@ interface EventsApi {
    *  list hides it 48h later. Returns the attendees to notify by email. */
   cancelEvent: (eventId: string, byName: string) => EventAttendee[];
 
-  startDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => void;
-  joinDinner: (eventId: string, userId: string, name: string) => void;
-  /** Record an RSVP (yes adds the person to the dinner party). */
-  setRsvp: (eventId: string, userId: string, name: string, status: RsvpStatus) => void;
+  /** Add a dinner for a specific night; returns its id. An event may hold one
+   *  dinner per night, each with its own RSVP + voting flow. */
+  addDinner: (eventId: string, hostId: string, date: string, time: string, expiresAt: string) => string;
+  /** Remove a night's dinner (before it's booked). */
+  removeDinner: (eventId: string, dinnerId: string) => void;
+  joinDinner: (eventId: string, dinnerId: string, userId: string, name: string) => void;
+  /** Record an RSVP for one night's dinner (yes adds the person to its party). */
+  setRsvp: (eventId: string, dinnerId: string, userId: string, name: string, status: RsvpStatus) => void;
   /** Host nudge: post a reminder naming everyone who hasn't RSVP'd yet. */
-  remindRsvp: (eventId: string, hostName: string, pendingNames: string[]) => void;
-  /** Broadcast the final restaurant details to the group. */
-  sendDinnerDetails: (eventId: string, author: string) => void;
-  advanceToGenre: (eventId: string) => void;
-  voteGenre: (eventId: string, userId: string, genre: string) => void;
-  setCandidates: (eventId: string, winningGenre: string, candidates: DinnerCandidate[]) => void;
-  voteRestaurant: (eventId: string, userId: string, restaurantId: string) => void;
-  setReservation: (eventId: string, reservation: DinnerReservation, author: string) => void;
+  remindRsvp: (eventId: string, hostName: string, pendingNames: string[], date?: string) => void;
+  /** Broadcast the final restaurant details for one night's dinner to the group. */
+  sendDinnerDetails: (eventId: string, dinnerId: string, author: string) => void;
+  advanceToGenre: (eventId: string, dinnerId: string) => void;
+  voteGenre: (eventId: string, dinnerId: string, userId: string, genre: string) => void;
+  setCandidates: (eventId: string, dinnerId: string, winningGenre: string, candidates: DinnerCandidate[]) => void;
+  voteRestaurant: (eventId: string, dinnerId: string, userId: string, restaurantId: string) => void;
+  setReservation: (eventId: string, dinnerId: string, reservation: DinnerReservation, author: string) => void;
 
   reset: () => void;
 }
@@ -159,7 +168,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     if (switching) {
       try {
         const raw = localStorage.getItem(key);
-        setEvents(raw ? (JSON.parse(raw) as TravelEvent[]) : companyId ? [] : seedEvents());
+        setEvents(
+          migrateEvents(raw ? (JSON.parse(raw) as TravelEvent[]) : companyId ? [] : seedEvents())
+        );
       } catch {
         setEvents(companyId ? [] : seedEvents());
       }
@@ -172,8 +183,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       const remote = await fetchEvents<TravelEvent>(companyId);
       if (!live || loadedCompanyRef.current !== key) return;
       if (remote) {
+        const migrated = migrateEvents(remote);
         setEvents((cur) =>
-          JSON.stringify(cur) !== JSON.stringify(remote) ? remote : cur
+          JSON.stringify(cur) !== JSON.stringify(migrated) ? migrated : cur
         );
       }
     })();
@@ -224,14 +236,18 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         : [{ userId: data.hostId, name: data.hostName }];
     const host = attendees.find((a) => a.userId === data.hostId);
 
-    // "Start now" kicks off RSVPs immediately with sensible defaults (dinner on
-    // the trip's first night, 7pm, voting closes in 48h). The host can adjust.
+    // "Start now" kicks off RSVPs immediately with sensible defaults (7pm,
+    // voting closes in 48h) — one dinner per chosen night, each with its own
+    // RSVP + vote. Defaults to the trip's first night. The host can adjust.
     const startNow = data.dinnerPlanMode === 'now';
-    const dinner: TravelEvent['dinner'] = startNow
-      ? {
+    const nights =
+      data.dinnerNights && data.dinnerNights.length ? data.dinnerNights : [data.startDate];
+    const dinners: Dinner[] = startNow
+      ? nights.map((night) => ({
+          id: uid('din'),
           hostId: data.hostId,
           phase: 'rsvp',
-          date: data.startDate,
+          date: night,
           time: '19:00',
           expiresAt: new Date(Date.now() + 48 * 3600_000).toISOString(),
           attendees: host ? [host] : [],
@@ -239,12 +255,14 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           genreVotes: {},
           restaurantVotes: {},
           candidates: [],
-        }
-      : undefined;
+        }))
+      : [];
 
     const dinnerNote =
       data.dinnerPlanMode === 'now'
-        ? ' Group dinner planning has started — RSVP in the Dinner tab.'
+        ? dinners.length > 1
+          ? ` Group dinner planning has started for ${dinners.length} nights — RSVP for each in the Dinner tab.`
+          : ' Group dinner planning has started — RSVP in the Dinner tab.'
         : data.dinnerPlanMode === 'later' && data.dinnerPlanAt
           ? ` Group dinner planning is scheduled to start ${data.dinnerPlanAt}.`
           : '';
@@ -269,7 +287,8 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       smartPlanning: data.smartPlanning,
       dinnerPlanMode: data.dinnerPlanMode,
       dinnerPlanAt: data.dinnerPlanMode === 'later' ? data.dinnerPlanAt : undefined,
-      dinner,
+      dinnerNights: data.dinnerNights,
+      dinners: startNow ? dinners : undefined,
       messages: [
         msg(data.hostId, data.hostName, `Created the "${data.name}" event thread.${dinnerNote}`, true),
       ],
@@ -444,70 +463,103 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     [events, patch]
   );
 
-  const startDinner: EventsApi['startDinner'] = useCallback(
-    (eventId, hostId, date, time, expiresAt) =>
+  // All dinner mutations target one dinner by id within e.dinners, migrating a
+  // legacy single `dinner` into the array on first write.
+  const mapDinner = (e: TravelEvent, dinnerId: string, fn: (d: Dinner) => Dinner): Dinner[] =>
+    eventDinners(e).map((d) => (d.id === dinnerId ? fn(d) : d));
+
+  const addDinner: EventsApi['addDinner'] = useCallback(
+    (eventId, hostId, date, time, expiresAt) => {
+      const id = uid('din');
       patch(eventId, (e) => {
         const host = e.attendees.find((a) => a.userId === hostId);
+        const existing = eventDinners(e);
+        const dn: Dinner = {
+          id,
+          hostId,
+          phase: 'rsvp',
+          date,
+          time,
+          expiresAt,
+          attendees: host ? [host] : [],
+          rsvps: host ? { [hostId]: 'yes' as RsvpStatus } : {},
+          genreVotes: {},
+          restaurantVotes: {},
+          candidates: [],
+        };
         return {
           ...e,
-          dinner: {
-            hostId,
-            phase: 'rsvp',
-            date,
-            time,
-            expiresAt,
-            attendees: host ? [host] : [],
-            rsvps: host ? { [hostId]: 'yes' as RsvpStatus } : {},
-            genreVotes: {},
-            restaurantVotes: {},
-            candidates: [],
-          },
+          dinner: undefined,
+          dinners: [...existing, dn],
           messages: [
             ...e.messages,
-            msg(hostId, host?.name ?? 'Host', `started planning a group dinner for ${date} at ${time}. Please RSVP in the Dinner tab.`, true),
+            msg(
+              hostId,
+              host?.name ?? 'Host',
+              `started planning a group dinner for ${date} at ${time}. Please RSVP in the Dinner tab.`,
+              true
+            ),
           ],
         };
-      }),
+      });
+      return id;
+    },
+    [patch]
+  );
+
+  const removeDinner: EventsApi['removeDinner'] = useCallback(
+    (eventId, dinnerId) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: eventDinners(e).filter((d) => d.id !== dinnerId),
+      })),
     [patch]
   );
 
   const joinDinner: EventsApi['joinDinner'] = useCallback(
-    (eventId, userId, name) =>
-      patch(eventId, (e) =>
-        !e.dinner || e.dinner.attendees.some((a) => a.userId === userId)
-          ? e
-          : { ...e, dinner: { ...e.dinner, attendees: [...e.dinner.attendees, { userId, name }] } }
-      ),
+    (eventId, dinnerId, userId, name) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: mapDinner(e, dinnerId, (d) =>
+          d.attendees.some((a) => a.userId === userId)
+            ? d
+            : { ...d, attendees: [...d.attendees, { userId, name }] }
+        ),
+      })),
     [patch]
   );
 
   const setRsvp: EventsApi['setRsvp'] = useCallback(
-    (eventId, userId, name, status) =>
+    (eventId, dinnerId, userId, name, status) =>
       patch(eventId, (e) => {
-        if (!e.dinner) return e;
-        const rsvps = { ...e.dinner.rsvps, [userId]: status };
-        // "Yes" means you're in the party; anything else removes you from it.
-        const attendees =
-          status === 'yes'
-            ? e.dinner.attendees.some((a) => a.userId === userId)
-              ? e.dinner.attendees
-              : [...e.dinner.attendees, { userId, name }]
-            : e.dinner.attendees.filter((a) => a.userId !== userId);
-        // As soon as someone's in, open genre voting so people can vote right
-        // after they RSVP — no waiting on the host to start it.
-        const phase =
-          e.dinner.phase === 'rsvp' && status === 'yes' ? 'genre' : e.dinner.phase;
-        const messages =
-          phase !== e.dinner.phase
-            ? [...e.messages, msg(e.hostId, 'HeyVacay', 'Dinner voting is open — pick your food genre!', true)]
-            : e.messages;
-        return { ...e, dinner: { ...e.dinner, rsvps, attendees, phase }, messages };
+        let flipped = false;
+        const dinners = mapDinner(e, dinnerId, (d) => {
+          const rsvps = { ...d.rsvps, [userId]: status };
+          // "Yes" means you're in the party; anything else removes you from it.
+          const attendees =
+            status === 'yes'
+              ? d.attendees.some((a) => a.userId === userId)
+                ? d.attendees
+                : [...d.attendees, { userId, name }]
+              : d.attendees.filter((a) => a.userId !== userId);
+          // As soon as someone's in, open genre voting so people can vote right
+          // after they RSVP — no waiting on the host to start it.
+          const phase = d.phase === 'rsvp' && status === 'yes' ? 'genre' : d.phase;
+          if (phase !== d.phase) flipped = true;
+          return { ...d, rsvps, attendees, phase };
+        });
+        const messages = flipped
+          ? [...e.messages, msg(e.hostId, 'HeyVacay', 'Dinner voting is open — pick your food genre!', true)]
+          : e.messages;
+        return { ...e, dinner: undefined, dinners, messages };
       }),
     [patch]
   );
 
   const remindRsvp: EventsApi['remindRsvp'] = useCallback(
-    (eventId, hostName, pendingNames) =>
+    (eventId, hostName, pendingNames, date) =>
       patch(eventId, (e) => ({
         ...e,
         messages: [
@@ -516,8 +568,8 @@ export function EventsProvider({ children }: { children: ReactNode }) {
             'system',
             hostName,
             pendingNames.length
-              ? `⏰ Reminder to RSVP for the group dinner: ${pendingNames.join(', ')}.`
-              : `⏰ Reminder: please RSVP for the group dinner.`,
+              ? `⏰ Reminder to RSVP for the group dinner${date ? ` on ${date}` : ''}: ${pendingNames.join(', ')}.`
+              : `⏰ Reminder: please RSVP for the group dinner${date ? ` on ${date}` : ''}.`,
             true
           ),
         ],
@@ -526,13 +578,14 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   );
 
   const sendDinnerDetails: EventsApi['sendDinnerDetails'] = useCallback(
-    (eventId, author) =>
+    (eventId, dinnerId, author) =>
       patch(eventId, (e) => {
-        const r = e.dinner?.reservation;
-        if (!e.dinner || !r) return e;
+        const r = eventDinners(e).find((d) => d.id === dinnerId)?.reservation;
+        if (!r) return e;
         return {
           ...e,
-          dinner: { ...e.dinner, detailsSent: true },
+          dinner: undefined,
+          dinners: mapDinner(e, dinnerId, (d) => ({ ...d, detailsSent: true })),
           messages: [
             ...e.messages,
             msg(
@@ -548,66 +601,67 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   );
 
   const advanceToGenre: EventsApi['advanceToGenre'] = useCallback(
-    (eventId) =>
-      patch(eventId, (e) => (e.dinner ? { ...e, dinner: { ...e.dinner, phase: 'genre' } } : e)),
+    (eventId, dinnerId) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: mapDinner(e, dinnerId, (d) => ({ ...d, phase: 'genre' })),
+      })),
     [patch]
   );
 
   const voteGenre: EventsApi['voteGenre'] = useCallback(
-    (eventId, userId, genre) =>
-      patch(eventId, (e) =>
-        e.dinner
-          ? { ...e, dinner: { ...e.dinner, genreVotes: { ...e.dinner.genreVotes, [userId]: genre } } }
-          : e
-      ),
+    (eventId, dinnerId, userId, genre) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: mapDinner(e, dinnerId, (d) => ({
+          ...d,
+          genreVotes: { ...d.genreVotes, [userId]: genre },
+        })),
+      })),
     [patch]
   );
 
   const setCandidates: EventsApi['setCandidates'] = useCallback(
-    (eventId, winningGenre, candidates) =>
-      patch(eventId, (e) =>
-        e.dinner
-          ? { ...e, dinner: { ...e.dinner, phase: 'restaurant', winningGenre, candidates } }
-          : e
-      ),
+    (eventId, dinnerId, winningGenre, candidates) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: mapDinner(e, dinnerId, (d) => ({ ...d, phase: 'restaurant', winningGenre, candidates })),
+      })),
     [patch]
   );
 
   const voteRestaurant: EventsApi['voteRestaurant'] = useCallback(
-    (eventId, userId, restaurantId) =>
-      patch(eventId, (e) =>
-        e.dinner
-          ? {
-              ...e,
-              dinner: {
-                ...e.dinner,
-                restaurantVotes: { ...e.dinner.restaurantVotes, [userId]: restaurantId },
-              },
-            }
-          : e
-      ),
+    (eventId, dinnerId, userId, restaurantId) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: mapDinner(e, dinnerId, (d) => ({
+          ...d,
+          restaurantVotes: { ...d.restaurantVotes, [userId]: restaurantId },
+        })),
+      })),
     [patch]
   );
 
   const setReservation: EventsApi['setReservation'] = useCallback(
-    (eventId, reservation, author) =>
-      patch(eventId, (e) =>
-        e.dinner
-          ? {
-              ...e,
-              dinner: { ...e.dinner, phase: 'booked', reservation },
-              messages: [
-                ...e.messages,
-                msg(
-                  'system',
-                  author,
-                  `🍽️ Group dinner booked — ${reservation.restaurantName} on ${reservation.date} at ${reservation.time} for ${reservation.partySize}. Confirmation ${reservation.confirmation}.`,
-                  true
-                ),
-              ],
-            }
-          : e
-      ),
+    (eventId, dinnerId, reservation, author) =>
+      patch(eventId, (e) => ({
+        ...e,
+        dinner: undefined,
+        dinners: mapDinner(e, dinnerId, (d) => ({ ...d, phase: 'booked', reservation })),
+        messages: [
+          ...e.messages,
+          msg(
+            'system',
+            author,
+            `🍽️ Group dinner booked — ${reservation.restaurantName} on ${reservation.date} at ${reservation.time} for ${reservation.partySize}. Confirmation ${reservation.confirmation}.`,
+            true
+          ),
+        ],
+      })),
     [patch]
   );
 
@@ -637,7 +691,8 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         resolveExtraStay,
         joinEvent,
         cancelEvent,
-        startDinner,
+        addDinner,
+        removeDinner,
         joinDinner,
         setRsvp,
         remindRsvp,

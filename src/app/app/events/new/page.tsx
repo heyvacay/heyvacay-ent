@@ -19,6 +19,7 @@ import {
   ROOM_TIERS,
   roomTierRank,
   dinnerScheduleOptions,
+  eventNights,
   type OverTierAction,
   type RoomTier,
 } from '@/lib/events';
@@ -72,6 +73,8 @@ export default function NewEventPage() {
   // Group dinner: start now, schedule for later, or skip.
   const [dinnerMode, setDinnerMode] = useState<'now' | 'later' | 'none'>('now');
   const [dinnerWhen, setDinnerWhen] = useState('');
+  // Which nights of the trip get a dinner (each runs its own RSVP + vote).
+  const [dinnerNights, setDinnerNights] = useState<string[]>([]);
 
   // Prefill the wizard from the event being edited (once).
   const [prefilled, setPrefilled] = useState(false);
@@ -124,6 +127,22 @@ export default function NewEventPage() {
       setDinnerWhen(dinnerOptions[dinnerOptions.length - 1]?.date ?? '');
     }
   }, [dinnerMode, dinnerOptions, dinnerWhen]);
+
+  // The nights of the trip a dinner can be planned for. Default to the first
+  // night; drop any selected nights that fall outside the (possibly changed)
+  // date range so the selection always makes sense.
+  const tripNights = eventNights({ startDate: start, endDate: end });
+  useEffect(() => {
+    setDinnerNights((cur) => {
+      const valid = cur.filter((n) => tripNights.includes(n));
+      return valid.length ? valid : [tripNights[0]];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, end]);
+  const toggleNight = (iso: string) =>
+    setDinnerNights((cur) =>
+      cur.includes(iso) ? cur.filter((n) => n !== iso) : [...cur, iso].sort()
+    );
 
   const dStart = start ? parseISO(start) : undefined;
   const dEnd = end ? parseISO(end) : undefined;
@@ -321,6 +340,12 @@ export default function NewEventPage() {
       smartPlanning: budgetOn && smartPlanning,
       dinnerPlanMode: dinnerMode,
       dinnerPlanAt: dinnerMode === 'later' ? dinnerWhen || undefined : undefined,
+      dinnerNights:
+        dinnerMode === 'none'
+          ? undefined
+          : dinnerNights.length
+            ? [...dinnerNights].sort()
+            : [start],
     });
     // Let everyone who was added know (no-ops without an email provider key).
     activeUsers
@@ -824,12 +849,52 @@ export default function NewEventPage() {
               </div>
 
               {dinnerMode === 'now' && (
-                <p className="flex items-start gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0" />
-                  Planning starts right away — everyone gets an RSVP request, with the dinner
-                  pencilled in for your first night ({shortDate(start)}, 7:00 PM). You can change the
-                  date and time on the event&apos;s Dinner tab.
-                </p>
+                <div className="space-y-3">
+                  {tripNights.length > 1 && (
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="mb-1 text-sm font-semibold text-slate-800">
+                        Which nights get a dinner?
+                      </p>
+                      <p className="mb-3 text-xs text-slate-500">
+                        Pick any nights of the trip — each one runs its own RSVP and vote, so the
+                        group can choose a different spot every night.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {tripNights.map((iso) => {
+                          const on = dinnerNights.includes(iso);
+                          return (
+                            <button
+                              key={iso}
+                              type="button"
+                              onClick={() => toggleNight(iso)}
+                              className={cn(
+                                'inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition',
+                                on
+                                  ? 'border-brand bg-brand/10 text-brand-dark ring-1 ring-brand/40'
+                                  : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                              )}
+                            >
+                              {on && <Check className="h-4 w-4" />}
+                              {new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <p className="flex items-start gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                    Planning starts right away — everyone gets an RSVP request for{' '}
+                    {dinnerNights.length > 1
+                      ? `${dinnerNights.length} nights`
+                      : `${shortDate(dinnerNights[0] ?? start)}, 7:00 PM`}
+                    . You can adjust times, add nights, or remove one on the event&apos;s Dinner tab.
+                  </p>
+                </div>
               )}
 
               {dinnerMode === 'later' && (

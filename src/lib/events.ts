@@ -101,6 +101,8 @@ export type DinnerPhase = 'rsvp' | 'join' | 'genre' | 'restaurant' | 'booked';
 export type RsvpStatus = 'yes' | 'no' | 'maybe';
 
 export interface Dinner {
+  /** Stable id so an event can hold several dinners (one per night). */
+  id: string;
   hostId: string;
   phase: DinnerPhase;
   date: string;
@@ -154,7 +156,20 @@ export interface TravelEvent {
   /** Requests to book a second stay for this event, keyed by user. */
   extraStayRequests?: ExtraStayRequest[];
   messages: EventMessage[];
+  /**
+   * @deprecated Legacy single dinner. New code reads/writes `dinners`; this is
+   * migrated into it on load (see eventDinners / migrateEvents). Kept so old
+   * stored events and the shared server copy still deserialize.
+   */
   dinner?: Dinner;
+  /**
+   * Group dinners for this event — one per night the planner chose. Each is a
+   * fully independent flow (own RSVPs, cuisine + restaurant votes, booking), so
+   * a multi-day event can run a separate dinner, with its own vote, every night.
+   */
+  dinners?: Dinner[];
+  /** Nights (ISO yyyy-mm-dd) picked at creation to plan dinners for. */
+  dinnerNights?: string[];
   /** How the group dinner was set up at event creation:
    *  'now' kicks off RSVPs immediately, 'later' schedules it for dinnerPlanAt,
    *  'none' skips the dinner. Undefined = legacy event (plan from the tab). */
@@ -234,6 +249,58 @@ export function winner(votes: Record<string, string>): string | undefined {
 
 export function dinnerExpired(d: Dinner, nowISO: string): boolean {
   return nowISO >= d.expiresAt;
+}
+
+/**
+ * All of an event's dinners, migrating the legacy single `dinner` into the
+ * array shape so every read site can treat events uniformly as multi-dinner.
+ */
+export function eventDinners(e: TravelEvent): Dinner[] {
+  if (e.dinners && e.dinners.length) return e.dinners;
+  if (e.dinner) return [{ ...e.dinner, id: e.dinner.id || 'd_legacy' }];
+  return [];
+}
+
+/** Migrate a list of events to the `dinners` array shape (clears `dinner`). */
+export function migrateEvents(list: TravelEvent[]): TravelEvent[] {
+  return list.map((e) => {
+    if (e.dinners) return e.dinner ? { ...e, dinner: undefined } : e;
+    if (e.dinner) return { ...e, dinners: eventDinners(e), dinner: undefined };
+    return e;
+  });
+}
+
+/**
+ * The nights of an event as ISO yyyy-mm-dd, from the start date through the end
+ * date inclusive — the candidate evenings a group dinner can be planned for.
+ */
+export function eventNights(e: { startDate: string; endDate: string }): string[] {
+  const out: string[] = [];
+  const start = new Date(`${e.startDate}T00:00:00`);
+  const end = new Date(`${e.endDate}T00:00:00`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return [e.startDate];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out.length ? out : [e.startDate];
+}
+
+/** A one-line label summarizing an event's dinners for list/badge chips. */
+export function dinnersSummary(
+  e: TravelEvent
+): { count: number; booked: number; label: string } | null {
+  const dinners = eventDinners(e);
+  if (!dinners.length) return null;
+  const booked = dinners.filter((d) => d.phase === 'booked').length;
+  const label =
+    dinners.length === 1
+      ? booked === 1
+        ? 'Dinner booked'
+        : 'Dinner planning'
+      : booked === dinners.length
+        ? `${dinners.length} dinners booked`
+        : `${dinners.length} dinners${booked ? ` · ${booked} booked` : ''}`;
+  return { count: dinners.length, booked, label };
 }
 
 /** Seed one in-progress event so the feature is demoable immediately. */
