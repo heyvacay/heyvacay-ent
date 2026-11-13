@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { API_BASE_URL } from '@/lib/config.server';
-import { serviceAuthHeaders } from '@/lib/backendAuth.server';
+import { browseFetchJson } from '@/lib/backendAuth.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -82,13 +81,13 @@ export async function GET(req: Request) {
   if (q.length < 2) return NextResponse.json({ results: [] });
 
   try {
-    const res = await fetch(`${API_BASE_URL}/hotels/global-suggest`, {
+    // Resilient: authenticates as the enterprise service account, and auto-falls
+    // back to an unauthenticated (guest-browse) call if the token is missing /
+    // drifted / rejected, so the city picker never goes dark everywhere at once.
+    const data = (await browseFetchJson('/hotels/global-suggest', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...serviceAuthHeaders() },
-      body: JSON.stringify({ query: q }),
-      cache: 'no-store',
-    });
-    const data = await res.json().catch(() => null);
+      body: { query: q },
+    })) as { results?: SuggestResult[] } | null;
     const raw: SuggestResult[] = Array.isArray(data?.results) ? data.results : [];
 
     const regions = raw

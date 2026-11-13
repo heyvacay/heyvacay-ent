@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { API_BASE_URL } from '@/lib/config.server';
-import { serviceAuthHeaders } from '@/lib/backendAuth.server';
+import { browseFetchJson } from '@/lib/backendAuth.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,11 +10,11 @@ export async function GET(req: Request) {
   if (q.length < 2) return NextResponse.json({ results: [] });
 
   try {
-    const res = await fetch(
-      `${API_BASE_URL}/flights/places?query=${encodeURIComponent(q)}`,
-      { headers: { Accept: 'application/json', ...serviceAuthHeaders() }, cache: 'no-store' }
-    );
-    const data = await res.json().catch(() => null);
+    // Resilient: authenticated first, auto-falls back to guest browse if the
+    // enterprise token is missing/drifted/rejected (see browseFetchJson).
+    const data = (await browseFetchJson(
+      `/flights/places?query=${encodeURIComponent(q)}`
+    )) as { results?: unknown[] } | null;
     const results = Array.isArray(data?.results) ? data.results : [];
     return NextResponse.json({ results });
   } catch {

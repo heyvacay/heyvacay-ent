@@ -31,6 +31,88 @@ export function serviceAuthHeaders(): Record<string, string> {
   };
 }
 
+/** fetch() with an AbortController timeout (ms). */
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Resilient JSON fetch for *browse* endpoints that carry NO pricing — the
+ * city/airport typeahead (suggest/places). These are the surfaces that "break
+ * everywhere at once": the shared backend 401s browse calls unless the caller is
+ * authenticated, so a drifted/expired enterprise service token makes every
+ * suggest return empty and the pickers go dead.
+ *
+ * To keep them always-on, this tries the call authenticated as the enterprise
+ * service account first (unchanged behavior when the token is healthy), and if
+ * that attempt fails — network error, timeout, non-2xx (e.g. 401 from a bad
+ * token), or a 200 with an empty result set — it retries the SAME call
+ * UNAUTHENTICATED (guest browse), which the consumer site uses and which returns
+ * the same place names + ids. Only suggest/places use this; pricing-sensitive
+ * search/booking still always authenticate. Returns parsed JSON, or null if
+ * every attempt fails (the caller then yields an empty list as a last resort).
+ *
+ * NB: the unauth fallback recovers data only when guest browse is enabled on the
+ * backend; the permanent belt-and-suspenders is keeping ENT_BACKEND_SERVICE_TOKEN
+ * in sync with the backend's ENTERPRISE_SERVICE_TOKEN. Every failed attempt is
+ * logged so a recurrence shows up in the ENT logs instead of a silent empty list.
+ */
+export async function browseFetchJson(
+  path: string,
+  init: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number } = {}
+): Promise<unknown | null> {
+  const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
+  const method = init.method ?? 'GET';
+  const timeoutMs = init.timeoutMs ?? 6000;
+  const commonHeaders: Record<string, string> = {
+    Accept: 'application/json',
+    ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+  };
+  const body = init.body != null ? JSON.stringify(init.body) : undefined;
+
+  // Attempt order: authenticated (if a token is configured), then unauthenticated.
+  const attempts: Array<Record<string, string>> = [];
+  const authed = serviceAuthHeaders();
+  if (Object.keys(authed).length > 0) attempts.push(authed);
+  attempts.push({}); // guest-browse fallback
+
+  for (let i = 0; i < attempts.length; i++) {
+    const isLast = i === attempts.length - 1;
+    try {
+      const res = await fetchWithTimeout(
+        url,
+        { method, headers: { ...commonHeaders, ...attempts[i] }, body, cache: 'no-store' },
+        timeoutMs
+      );
+      if (!res.ok) {
+        console.error(`[browseFetch] ${method} ${path} -> ${res.status}${isLast ? '' : ' (retrying unauthenticated)'}`);
+        continue;
+      }
+      const data = await res.json().catch(() => null);
+      // A 200 with an empty results array can itself be an auth/channel symptom,
+      // so treat it as a soft failure and let the unauth attempt run — unless this
+      // was already the last attempt.
+      const looksEmpty =
+        data == null ||
+        (!!data && typeof data === 'object' && 'results' in data &&
+          Array.isArray((data as { results: unknown[] }).results) &&
+          (data as { results: unknown[] }).results.length === 0);
+      if (looksEmpty && !isLast) continue;
+      return data;
+    } catch (e) {
+      console.error(`[browseFetch] ${method} ${path} attempt ${i + 1} failed: ${(e as Error)?.message || e}`);
+      continue;
+    }
+  }
+  return null;
+}
+
 /**
  * Authenticated POST/GET against the backend as the Enterprise service account.
  * Attaches the service token + enterprise channel header. Returns the raw
