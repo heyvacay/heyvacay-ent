@@ -357,8 +357,10 @@ function NewCompanyWizard({
                 <span className="font-semibold text-slate-700">
                   {form.name.trim() || 'this company'}
                 </span>
-                ? Add the champion and anyone else you&apos;ll work with. Mark the
-                primary decision-maker as the champion.
+                ? Add anyone you&apos;ll work with. Mark every decision-maker who
+                should run the account as a <span className="font-semibold text-slate-700">champion</span> —
+                you can flag more than one, and each champion is emailed an admin
+                invite when the account is set up.
               </p>
 
               {/* existing contacts */}

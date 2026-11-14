@@ -47,6 +47,8 @@ const ME_KEY = 'hv_crm_me_v1';
 
 interface CrmApi {
   companies: SalesCompany[];
+  /** True once the local CRM book has loaded — guards "not found" flashes. */
+  hydrated: boolean;
   companyById: (id: string) => SalesCompany | undefined;
   addCompany: (data: {
     name: string;
@@ -204,9 +206,23 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     (async () => {
       const remote = await fetchCrm<SalesCompany, Rep>();
       if (!live || !remote) return;
-      if (Array.isArray(remote.companies) && remote.companies.length)
-        setCompanies(remote.companies.map(hydrateCompany));
-      if (Array.isArray(remote.reps) && remote.reps.length) setReps(remote.reps);
+      // MERGE, don't clobber: adopt the shared server book but KEEP any company
+      // created locally that the server hasn't received yet (its debounced push
+      // may still be in flight). A wholesale replace here was dropping a
+      // just-created company, so navigating to it showed "company not found".
+      if (Array.isArray(remote.companies) && remote.companies.length) {
+        const remoteList = remote.companies.map(hydrateCompany);
+        const remoteIds = new Set(remoteList.map((c) => c.id));
+        setCompanies((local) => [
+          ...local.filter((c) => !remoteIds.has(c.id)),
+          ...remoteList,
+        ]);
+      }
+      if (Array.isArray(remote.reps) && remote.reps.length) {
+        const remoteReps = remote.reps;
+        const remoteNames = new Set(remoteReps.map((r) => r.name));
+        setReps((local) => [...local.filter((r) => !remoteNames.has(r.name)), ...remoteReps]);
+      }
       if (remote.commission && (remote.commission as CommissionState).starRules)
         setCommissionState(remote.commission as CommissionState);
       if (Array.isArray(remote.commissionApprovals))
@@ -329,25 +345,39 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const provisionAccount: CrmApi['provisionAccount'] = useCallback(
     (id, intake) => {
-      // Side effect: email the account owner (the champion) an invite so THEY
-      // can access the account and run their own integration setup. Fired once,
-      // only when provisioning a lead with an owner email on file.
+      // Side effect: email EVERY champion an invite so each of them can access
+      // the account and run their own setup. Fired once, when provisioning a
+      // lead. Recipients = every contact flagged as a champion, plus the intake
+      // champion — deduped by email.
       const target = companies.find((c) => c.id === id);
-      const ownerEmail = (intake?.championEmail ?? '').trim();
-      const ownerName = (intake?.championName ?? '').trim();
-      if (target && target.status === 'lead' && ownerEmail) {
-        try {
+      if (target && target.status === 'lead') {
+        const recipients = new Map<string, string>(); // email(lower) -> display name
+        for (const ct of target.contacts) {
+          const e = (ct.email ?? '').trim();
+          if (ct.champion && e) recipients.set(e.toLowerCase(), ct.name || 'there');
+        }
+        const icEmail = (intake?.championEmail ?? '').trim();
+        if (icEmail) recipients.set(icEmail.toLowerCase(), (intake?.championName ?? '').trim() || 'there');
+        for (const extra of intake?.champions ?? []) {
+          const e = (extra.email ?? '').trim();
+          if (e) recipients.set(e.toLowerCase(), (extra.name ?? '').trim() || 'there');
+        }
+        if (recipients.size > 0) {
           const origin = typeof window !== 'undefined' ? window.location.origin : '';
-          const joinUrl = `${origin}/join?email=${encodeURIComponent(ownerEmail)}&company=${encodeURIComponent(target.id)}`;
-          void sendEmail('invite', ownerEmail, {
-            name: ownerName || 'there',
-            company: target.name,
-            inviter: currentRep,
-            role: 'Account owner (Admin)',
-            joinUrl,
-          });
-        } catch {
-          /* non-fatal — provisioning still proceeds */
+          for (const [email, name] of recipients) {
+            try {
+              const joinUrl = `${origin}/join?email=${encodeURIComponent(email)}&company=${encodeURIComponent(target.id)}`;
+              void sendEmail('invite', email, {
+                name,
+                company: target.name,
+                inviter: currentRep,
+                role: 'Account owner (Admin)',
+                joinUrl,
+              });
+            } catch {
+              /* non-fatal — provisioning still proceeds */
+            }
+          }
         }
       }
       return patch(id, (c) => {
@@ -355,29 +385,27 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         // account. Moving to "onboarding" creates the workspace the rep enters.
         if (c.status !== 'lead') return c;
 
-        // Fold the champion into contacts (flag an existing match, or add one).
+        // Fold the champion(s) into contacts. Multiple champions are supported:
+        // we never unset an existing champion flag — we flag the matched contact
+        // (or append a new one) for the primary champion and each extra champion.
         let contacts = c.contacts;
-        if (intake?.championEmail || intake?.championName) {
-          const email = (intake.championEmail ?? '').trim().toLowerCase();
-          const existing = contacts.find(
-            (ct) => email && ct.email.trim().toLowerCase() === email
-          );
+        const foldChampion = (name?: string, title?: string, email?: string, phone?: string) => {
+          const e = (email ?? '').trim().toLowerCase();
+          const existing = contacts.find((ct) => e && ct.email.trim().toLowerCase() === e);
           if (existing) {
-            contacts = contacts.map((ct) =>
-              ct === existing ? { ...ct, champion: true } : { ...ct, champion: false }
-            );
-          } else if (intake.championName) {
+            contacts = contacts.map((ct) => (ct === existing ? { ...ct, champion: true } : ct));
+          } else if ((name ?? '').trim() || e) {
             contacts = [
-              ...contacts.map((ct) => ({ ...ct, champion: false })),
-              {
-                name: intake.championName,
-                title: intake.championTitle ?? '',
-                email: intake.championEmail ?? '',
-                phone: intake.championPhone,
-                champion: true,
-              },
+              ...contacts,
+              { name: name ?? '', title: title ?? '', email: email ?? '', phone, champion: true },
             ];
           }
+        };
+        if (intake?.championEmail || intake?.championName) {
+          foldChampion(intake.championName, intake.championTitle, intake.championEmail, intake.championPhone);
+        }
+        for (const extra of intake?.champions ?? []) {
+          foldChampion(extra.name, extra.title, extra.email, extra.phone);
         }
 
         // Queue integrations: mark the kickoff step done, and the integrations
@@ -856,6 +884,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         companies,
+        hydrated,
         companyById,
         addCompany,
         updateCompany,

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, PageHeader, ProgressBar, cn } from '@/components/app/ui';
-import { Check, Shield, Users, Wallet, Globe, Lock, ArrowRight } from '@/components/icons';
+import { Check, Shield, Users, Wallet, Globe, Lock, ArrowRight, Sparkles } from '@/components/icons';
 
 /**
  * Guided setup / integration flow. Walks an admin (or a sales agent sitting
@@ -12,7 +12,8 @@ import { Check, Shield, Users, Wallet, Globe, Lock, ArrowRight } from '@/compone
  * step shows live status from the workspace and links to where it's done.
  */
 export default function SetupPage() {
-  const { state, role, viewingAs } = useStore();
+  const { state, role, viewingAs, activeUser, setCompanySetup } = useStore();
+  const setup = state.company.setup ?? {};
 
   if (role !== 'admin') {
     return (
@@ -155,6 +156,50 @@ export default function SetupPage() {
               through these steps together — assign access, confirm policies and budgets, connect
               SSO, then verify each person can sign in and sees the right tools.
             </span>
+          </div>
+        )}
+      </Card>
+
+      {/* Guided-setup control: a rep (while setting the customer up) or an admin
+          can require the account owner to run the self-guided setup on first
+          access, or re-launch it. Required automatically for self-signup. */}
+      <Card className="mb-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-dark">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="font-display text-base font-bold text-slate-900">Self-guided setup</p>
+              <p className="mt-0.5 max-w-xl text-xs text-slate-500">
+                When on, the account owner is walked through a guided setup the first time they sign
+                in — sign-in method (SSO, domain self-join, manual, or from an integration),
+                approvals, departments and admins. {setup.completedAt
+                  ? `Completed${setup.completedBy ? ` by ${setup.completedBy}` : ''}.`
+                  : 'Not completed yet.'}
+              </p>
+            </div>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 self-start">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={!!setup.required}
+              onChange={(e) => setCompanySetup({ required: e.target.checked })}
+            />
+            <span className="relative h-6 w-11 rounded-full bg-slate-200 transition peer-checked:bg-brand after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-5" />
+            <span className="text-sm font-semibold text-slate-700">{setup.required ? 'Required' : 'Off'}</span>
+          </label>
+        </div>
+        {setup.completedAt && (
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <Button
+              variant="outline"
+              onClick={() => setCompanySetup({ required: true, completedAt: undefined, completedBy: undefined })}
+            >
+              <ArrowRight className="h-4 w-4" /> Re-run guided setup
+            </Button>
+            <span className="ml-2 text-xs text-slate-400">Relaunches the walkthrough for {activeUser.name.split(' ')[0]} on the next load.</span>
           </div>
         )}
       </Card>

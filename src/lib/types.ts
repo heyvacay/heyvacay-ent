@@ -29,6 +29,35 @@ export interface AccessControl {
   fullAccessDepartments: string[];
 }
 
+/** How employees get into the account — chosen in the guided setup. */
+export type SignInMethod = 'sso' | 'domain_join' | 'manual' | 'integration';
+
+/**
+ * The account's guided-setup state and the choices captured in it. Lives on the
+ * company workspace so it syncs across the admin's devices.
+ */
+export interface CompanySetup {
+  /** When true, the account admin must complete guided setup on first access.
+   *  Forced true for self-signup; a sales rep can toggle it for a provisioned
+   *  account while they're in it. */
+  required?: boolean;
+  /** ISO timestamp once an admin finishes the guided setup. */
+  completedAt?: string;
+  /** Who finished it (display name), for the audit line. */
+  completedBy?: string;
+  /** How employees sign in / are added. */
+  signInMethod?: SignInMethod;
+  /** Domain self-join: anyone with a matching email domain auto-joins as an
+   *  employee, no manual invite. */
+  domainSelfJoin?: { enabled: boolean; domains: string[] };
+  /** The HR/identity integration chosen to sync the roster (bamboohr, workday…). */
+  rosterIntegration?: string;
+  /** Departments defined during setup (so department heads can be assigned). */
+  departments?: string[];
+  /** Whether pre-trip approval is required by default (captured in setup). */
+  requireApproval?: boolean;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -38,6 +67,8 @@ export interface Company {
   approvalMode?: BookingApprovalMode;
   /** Which roles/departments get full company-wide data visibility. */
   accessControl?: AccessControl;
+  /** Guided-setup state + the sign-in / onboarding choices captured in it. */
+  setup?: CompanySetup;
 }
 
 export interface User {
@@ -47,6 +78,9 @@ export interface User {
   role: Role;
   /** An admin with full, company-wide control (vs. a team-manager admin). */
   superAdmin?: boolean;
+  /** A department head who may set travel rules for their own department. When
+   *  set, this person gets a scoped "set your department's rules" setup. */
+  canSetDepartmentRules?: boolean;
   department: string;
   title: string;
   /** Who this person reports to (another user's id). */

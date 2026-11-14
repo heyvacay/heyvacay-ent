@@ -14,6 +14,7 @@ import type {
   AccessControl,
   AppState,
   Billing,
+  Company,
   Net30KycFields,
   KycStatus,
   Booking,
@@ -106,6 +107,13 @@ function seedAccount(ctx: { id?: string; name: string; domain: string }): AppSta
       id: ctx.id ?? SEED.company.id,
       name: ctx.name,
       domain: ctx.domain || SEED.company.domain,
+      // A freshly-provisioned account requires guided setup on first admin
+      // access; the rep can switch this off from inside the account.
+      setup: {
+        required: true,
+        signInMethod: undefined,
+        domainSelfJoin: { enabled: false, domains: ctx.domain ? [ctx.domain] : [] },
+      },
     },
     bookings: [],
     expenses: [],
@@ -183,6 +191,10 @@ export interface StoreApi {
   ) => void;
   /** Set a user's home city (used to decide if they need a hotel for an event). */
   setHomeCity: (userId: string, city: string, lat?: number, lng?: number) => void;
+  /** Merge a patch into the company's guided-setup config. */
+  setCompanySetup: (patch: Partial<NonNullable<Company['setup']>>) => void;
+  /** Mark guided setup complete (stamps completedAt/completedBy). */
+  completeSetup: (by: string) => void;
   /** Effective booking approval mode for a traveler (employee override ∨ company default). */
   approvalModeFor: (userId: string) => BookingApprovalMode;
   /** Set the company-wide default approval mode. */
@@ -751,6 +763,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       users: s.users.map((u) =>
         u.id === userId ? { ...u, homeCity: city, homeLat: lat, homeLng: lng } : u
       ),
+    }));
+  }, []);
+
+  const setCompanySetup: StoreApi['setCompanySetup'] = useCallback((patch) => {
+    setState((s) => ({
+      ...s,
+      company: { ...s.company, setup: { ...(s.company.setup ?? {}), ...patch } },
+    }));
+  }, []);
+
+  const completeSetup: StoreApi['completeSetup'] = useCallback((by) => {
+    setState((s) => ({
+      ...s,
+      company: {
+        ...s.company,
+        setup: {
+          ...(s.company.setup ?? {}),
+          required: false,
+          completedAt: new Date().toISOString(),
+          completedBy: by,
+        },
+      },
     }));
   }, []);
 
@@ -1893,6 +1927,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     inviteUser,
     updateUser,
     setHomeCity,
+    setCompanySetup,
+    completeSetup,
     approvalModeFor,
     setCompanyApprovalMode,
     guestBookingMode: state.guestBookingMode ?? 'allowed',

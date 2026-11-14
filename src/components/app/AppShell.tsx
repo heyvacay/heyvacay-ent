@@ -11,6 +11,7 @@ import { Logo } from './Logo';
 import { DinnerRsvpPrompt } from './DinnerRsvpPrompt';
 import { AccountingAutoSync } from './AccountingAutoSync';
 import { WelcomeFlow } from './WelcomeFlow';
+import { SetupWizard, DepartmentSetup } from './SetupWizard';
 import { HomeCityGate } from './HomeCityGate';
 import { clearSignedIn } from '@/lib/session';
 import {
@@ -149,6 +150,33 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // On the customer app host (e.g. ent.stage.heyvacay.co) it is hidden, and the
   // /sales routes are redirected to the Nova host by middleware.
   const [novaHost, setNovaHost] = useState(false);
+  // Department-head rules setup: shown once per head, tracked in localStorage.
+  const [deptDone, setDeptDone] = useState(true);
+  const deptSetupKey = () => {
+    try {
+      const active = localStorage.getItem('hv_ent_active_account');
+      const id = active ? JSON.parse(active)?.id : null;
+      return `hv_ent_deptsetup_${id ?? 'default'}_${activeUser.id}`;
+    } catch {
+      return `hv_ent_deptsetup_default_${activeUser.id}`;
+    }
+  };
+  useEffect(() => {
+    try {
+      setDeptDone(localStorage.getItem(deptSetupKey()) === '1');
+    } catch {
+      setDeptDone(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUser.id]);
+  const finishDeptSetup = () => {
+    try {
+      localStorage.setItem(deptSetupKey(), '1');
+    } catch {
+      /* ignore */
+    }
+    setDeptDone(true);
+  };
   useEffect(() => {
     try {
       const h = window.location.hostname;
@@ -486,9 +514,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
         />
       )}
 
+      {/* After the welcome tour, the account admin runs the self-guided setup —
+          only when the account still requires it and it isn't done, and never
+          while a rep is viewing-as (the rep toggles the requirement instead). */}
+      {!welcome && !viewingAs && role === 'admin' &&
+        state.company.setup?.required && !state.company.setup?.completedAt && (
+          <SetupWizard onDone={() => { /* completeSetup already cleared required */ }} />
+        )}
+
+      {/* A department head with rules permission gets a scoped setup to set the
+          travel rules for their own department. Shown once, after any account
+          setup, and never while viewing-as. */}
+      {!welcome && !viewingAs && !deptDone && activeUser.canSetDepartmentRules &&
+        !(role === 'admin' && state.company.setup?.required && !state.company.setup?.completedAt) && (
+          <DepartmentSetup onDone={finishDeptSetup} />
+        )}
+
       {/* After the welcome tour, if the company never set this person's home
           city, ask for it before they use the app (not while viewing-as). */}
-      {!welcome && !viewingAs && !activeUser.homeCity?.trim() && (
+      {!welcome && !viewingAs && !activeUser.homeCity?.trim() &&
+        !(role === 'admin' && state.company.setup?.required && !state.company.setup?.completedAt) && (
         <HomeCityGate
           firstName={(activeUser.name ?? 'there').trim().split(' ')[0] || 'there'}
           onSave={(city, lat, lng) => setHomeCity(activeUser.id, city, lat, lng)}

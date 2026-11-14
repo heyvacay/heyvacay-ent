@@ -120,6 +120,8 @@ export interface AccountIntake {
   championTitle?: string;
   championEmail?: string;
   championPhone?: string;
+  /** Additional champions (beyond the primary) to invite as account admins. */
+  champions?: { name?: string; title?: string; email?: string; phone?: string }[];
   /** Integration keys to queue (quickbooks, bamboohr, workday, …). */
   integrations?: string[];
   /** Target go-live date (YYYY-MM-DD). */

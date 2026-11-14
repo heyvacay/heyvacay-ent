@@ -93,6 +93,7 @@ export default function CompanyDetail({ id }: { id: string }) {
     setCompanyStarRate,
     commissionApprovals,
     currentRep,
+    hydrated,
   } = useCrm();
   const router = useRouter();
   const logoInput = useRef<HTMLInputElement>(null);
@@ -142,6 +143,16 @@ export default function CompanyDetail({ id }: { id: string }) {
   }, [id]);
 
   if (!c) {
+    // Still loading the CRM book: don't flash "not found" before hydration (this
+    // is what made a just-created company look like it vanished).
+    if (!hydrated) {
+      return (
+        <div className="flex items-center gap-3 p-10 text-sm text-slate-400">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-brand-dark" />
+          Loading account…
+        </div>
+      );
+    }
     return (
       <div>
         <Link href="/sales/companies" className="text-sm font-medium text-brand-dark hover:underline">

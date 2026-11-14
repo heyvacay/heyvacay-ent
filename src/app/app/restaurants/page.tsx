@@ -180,11 +180,23 @@ export default function RestaurantsPage() {
             Find a table
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Search by city and cuisine, then filter and reserve — all in one place.
+            Search a specific restaurant by name, or browse by city and cuisine — then reserve.
           </p>
         </div>
         <div className="px-5 pb-5 pt-4 sm:px-7 sm:pb-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          {/* Specific-restaurant search: pick a city, type the name, and we query
+              the full OpenTable directory for that exact place (not just filter). */}
+          <Field label="🔍 Search a specific restaurant">
+            <Input
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && cityQuery.length >= 2) search(nameQuery.trim() || undefined);
+              }}
+              placeholder={cityQuery.length >= 2 ? `e.g. "Franklin Barbecue" in ${cityQuery}` : 'Pick a city first, then type a restaurant name…'}
+            />
+          </Field>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="lg:col-span-2">
               <Field label="City">
                 <CityPicker
