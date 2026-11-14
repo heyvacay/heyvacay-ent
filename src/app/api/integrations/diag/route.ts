@@ -11,6 +11,7 @@ import {
   XERO,
   GUSTO,
   GOOGLE_WS,
+  SLACK,
   INTEGRATIONS_TABLE,
   isLiveBooking,
   API_BASE_URL,
@@ -109,7 +110,9 @@ export function GET() {
     },
     {
       key: 'slack',
-      name: 'Slack — notifications (per-company webhook)',
+      name: SLACK.configured
+        ? 'Slack — notifications (one-click "Add to Slack" app ✓ configured; manual webhook also works)'
+        : 'Slack — notifications (manual webhook works; set SLACK_CLIENT_ID/SECRET for one-click "Add to Slack")',
       configured: true,
       powers: 'Approval requests + trip alerts to a Slack channel',
       verify: '/app/integrations/slack',

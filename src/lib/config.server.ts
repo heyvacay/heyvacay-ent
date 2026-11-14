@@ -296,6 +296,25 @@ export const GOOGLE_WS = {
 };
 
 /**
+ * Slack — ONE shared HeyVacay Slack app so a customer connects with a single
+ * "Add to Slack" click (OAuth, incoming-webhook scope) instead of building their
+ * own app. Secrets: SLACK_CLIENT_ID, SLACK_CLIENT_SECRET. Non-secret:
+ * SLACK_REDIRECT_URI (must EXACTLY match a Redirect URL in the Slack app's OAuth
+ * settings). When unset, the app falls back to the manual "paste a webhook URL"
+ * flow, so Slack still works without the platform app.
+ */
+export const SLACK = {
+  clientId: process.env.SLACK_CLIENT_ID || '',
+  clientSecret: process.env.SLACK_CLIENT_SECRET || '',
+  redirectUri:
+    process.env.SLACK_REDIRECT_URI ||
+    'https://ent.stage.heyvacay.co/api/integrations/slack/callback',
+  get configured(): boolean {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
+/**
  * DynamoDB table holding per-company integration connections (OAuth tokens +
  * account mappings). The ENT ECS task role is granted access to this one table.
  * When unset / unreachable, tokenStore falls back to an in-process map so local

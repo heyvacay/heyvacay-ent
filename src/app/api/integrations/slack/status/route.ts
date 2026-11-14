@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getConnection } from '@/lib/integrations/tokenStore.server';
+import { slackOAuthConfigured } from '@/lib/integrations/slack.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,5 +16,9 @@ export async function GET(req: Request) {
     connected: conn?.status === 'connected',
     webhookHint: masked,
     connectedAt: conn?.connectedAt || null,
+    team: conn?.companyName || conn?.config?.team || null,
+    // When true, the panel offers one-click "Add to Slack" (OAuth); otherwise it
+    // falls back to the manual webhook-paste form.
+    oauthConfigured: slackOAuthConfigured(),
   });
 }

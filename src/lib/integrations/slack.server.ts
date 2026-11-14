@@ -7,6 +7,8 @@ import 'server-only';
  * so this can't be used for SSRF).
  */
 
+import { SLACK } from '@/lib/config.server';
+import { signState, verifyState } from './oauthState.server';
 import {
   getConnection,
   putConnection,
@@ -16,6 +18,84 @@ import {
 
 const PROVIDER = 'slack' as const;
 const SLACK_HOST = 'hooks.slack.com';
+
+/* ---------- OAuth ("Add to Slack") — one shared HeyVacay app ---------- */
+
+/** Whether the platform Slack app is configured (enables one-click install). */
+export function slackOAuthConfigured(): boolean {
+  return SLACK.configured;
+}
+
+/** Build the Slack consent URL for a company (incoming-webhook scope). */
+export function slackAuthorizeUrl(companyId: string, redirectUri: string): string | null {
+  if (!SLACK.configured) return null;
+  const u = new URL('https://slack.com/oauth/v2/authorize');
+  u.searchParams.set('client_id', SLACK.clientId);
+  u.searchParams.set('scope', 'incoming-webhook');
+  u.searchParams.set('redirect_uri', redirectUri);
+  u.searchParams.set('state', signState(companyId, PROVIDER));
+  return u.toString();
+}
+
+interface SlackOAuthResponse {
+  ok?: boolean;
+  error?: string;
+  access_token?: string;
+  team?: { id?: string; name?: string };
+  incoming_webhook?: { url?: string; channel?: string; channel_id?: string; configuration_url?: string };
+}
+
+/**
+ * Exchange the OAuth code for an incoming webhook and store it for the company.
+ * The one-click path: Slack returns the webhook URL for the channel the admin
+ * picked during consent, so there's nothing for them to copy or paste.
+ */
+export async function connectViaOAuth(
+  code: string,
+  state: string,
+  redirectUri: string
+): Promise<{ ok: boolean; companyId?: string; label?: string; error?: string }> {
+  const companyId = verifyState(state, PROVIDER);
+  if (!companyId) return { ok: false, error: 'invalid_state' };
+  if (!SLACK.configured) return { ok: false, companyId, error: 'not_configured' };
+  const form = new URLSearchParams({
+    client_id: SLACK.clientId,
+    client_secret: SLACK.clientSecret,
+    code,
+    redirect_uri: redirectUri,
+  });
+  const res = await fetch('https://slack.com/api/oauth.v2.access', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+    cache: 'no-store',
+  });
+  const data = (await res.json().catch(() => null)) as SlackOAuthResponse | null;
+  if (!data?.ok) return { ok: false, companyId, error: data?.error || `HTTP ${res.status}` };
+  const url = data.incoming_webhook?.url;
+  if (!url || !isValidWebhook(url)) return { ok: false, companyId, error: 'no_webhook' };
+  const team = data.team?.name;
+  const channel = data.incoming_webhook?.channel;
+  const existing = await getConnection(companyId, PROVIDER);
+  const conn: IntegrationConnection = {
+    companyId,
+    provider: PROVIDER,
+    accessToken: data.access_token || '',
+    refreshToken: '',
+    accessExpiresAt: 0,
+    config: { webhookUrl: url, channel: channel || '', team: team || '' },
+    companyName: team || channel || undefined,
+    status: 'connected',
+    connectedAt: existing?.connectedAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await putConnection(conn);
+  await sendToWebhook(
+    url,
+    ':wave: HeyVacay is now connected to this channel — approval requests and trip alerts will post here.'
+  );
+  return { ok: true, companyId, label: team || channel };
+}
 
 export function isValidWebhook(url: string): boolean {
   try {
