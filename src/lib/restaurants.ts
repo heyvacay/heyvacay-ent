@@ -12,6 +12,9 @@ export interface Restaurant {
   city: string;
   neighborhood: string;
   image: string;
+  /** Miles from the searched city centre, when the search was geo-aware. */
+  distanceMi?: number;
+  metro?: string;
 }
 
 export interface AvailabilitySlot {
@@ -46,12 +49,13 @@ export interface ReservationResult {
 export async function searchRestaurants(
   city?: string,
   genre?: string,
-  name?: string
+  name?: string,
+  geo?: { lat?: number; lng?: number }
 ): Promise<Restaurant[]> {
   const res = await fetch('/api/restaurants/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ city, genre, name }),
+    body: JSON.stringify({ city, genre, name, lat: geo?.lat, lng: geo?.lng }),
   });
   const data = await res.json().catch(() => null);
   return Array.isArray(data?.restaurants) ? data.restaurants : [];

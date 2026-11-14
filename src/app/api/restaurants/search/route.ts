@@ -23,17 +23,24 @@ export async function POST(req: Request) {
   const city = typeof body.city === 'string' ? body.city : undefined;
   const genre = typeof body.genre === 'string' ? body.genre : undefined;
   const name = typeof body.name === 'string' ? body.name.trim() : undefined;
+  const lat = typeof body.lat === 'number' ? body.lat : undefined;
+  const lng = typeof body.lng === 'number' ? body.lng : undefined;
   const LIMIT = 150;
 
   if (OPENTABLE.live) {
     try {
-      const live = await searchDirectory(city, genre, name);
+      // Geo-aware: include venues in AND near the city (suburbs / nearby towns).
+      const live = await searchDirectory(city, genre, name, { lat, lng });
       if (live.length) {
-        // Full-city coverage can be hundreds of venues; return the top matches
-        // by rating (then review weight) so the grid stays usable. The name
+        // Closest first (in-city leads, nearby follows), then by rating. The name
         // query already narrowed to the specific restaurant(s) when present.
         const ranked = [...live]
-          .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+          .sort((a, b) => {
+            const da = a.distanceMi ?? Number.POSITIVE_INFINITY;
+            const db = b.distanceMi ?? Number.POSITIVE_INFINITY;
+            if (da !== db) return da - db;
+            return (b.rating ?? 0) - (a.rating ?? 0);
+          })
           .slice(0, LIMIT);
         return NextResponse.json({
           restaurants: ranked,

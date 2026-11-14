@@ -117,6 +117,12 @@ export interface OtRestaurant {
   city: string;
   neighborhood: string;
   image: string;
+  /** Coordinates + metro, for "in and near the city" distance filtering. */
+  lat?: number;
+  lng?: number;
+  metro?: string;
+  /** Miles from the searched city centre (set by searchDirectory when geo-aware). */
+  distanceMi?: number;
 }
 
 interface DirectoryItem {
@@ -127,11 +133,25 @@ interface DirectoryItem {
   state?: string;
   metro_name?: string;
   neighborhood_name?: string;
+  latitude?: number | string;
+  longitude?: number | string;
   aggregate_score?: string | number;
   price_quartile?: string;
   category?: string[];
   profile_photo?: { sizes?: Record<string, { url?: string }> };
   reservation_url?: string;
+}
+
+/** Haversine distance in miles between two lat/lng points. */
+function milesBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 3958.8;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
 // Our normalized food genres (match the mock so voting/filtering is uniform).
@@ -188,6 +208,9 @@ function mapDirectoryItem(it: DirectoryItem): OtRestaurant | null {
     city: it.city || '',
     neighborhood: it.neighborhood_name || it.metro_name || it.city || '',
     image,
+    lat: it.latitude != null ? Number(it.latitude) : undefined,
+    lng: it.longitude != null ? Number(it.longitude) : undefined,
+    metro: it.metro_name || '',
   };
 }
 
@@ -326,23 +349,43 @@ async function loadDirectory(): Promise<OtRestaurant[]> {
 export async function searchDirectory(
   city?: string,
   genre?: string,
-  nameQuery?: string
+  nameQuery?: string,
+  geo?: { lat?: number; lng?: number; radiusMi?: number }
 ): Promise<OtRestaurant[]> {
   const all = await loadDirectory();
   if (!all.length) return [];
   const c = (city || '').trim().toLowerCase();
   const q = (nameQuery || '').trim().toLowerCase();
-  return all.filter((r) => {
-    const cityOk =
-      !c ||
-      r.city.toLowerCase().includes(c) ||
-      c.includes(r.city.toLowerCase()) ||
-      r.neighborhood.toLowerCase().includes(c);
-    const genreOk = !genre || r.genre === genre;
-    const nameOk =
-      !q || r.name.toLowerCase().includes(q) || r.cuisine.toLowerCase().includes(q);
-    return cityOk && genreOk && nameOk;
-  });
+  // "In and near the city": when we know the city's coordinates, include venues
+  // within a radius (default ~30 mi) OR a city/metro-name match. This surfaces
+  // suburbs and neighbouring towns, not just an exact city-name hit.
+  const lat = geo?.lat;
+  const lng = geo?.lng;
+  const radius = geo?.radiusMi ?? 30;
+  const hasGeo = typeof lat === 'number' && typeof lng === 'number';
+  const out = all
+    .map((r) => {
+      const nameMatch =
+        !c ||
+        r.city.toLowerCase().includes(c) ||
+        c.includes(r.city.toLowerCase()) ||
+        r.neighborhood.toLowerCase().includes(c) ||
+        (r.metro || '').toLowerCase().includes(c);
+      let near = false;
+      let dist: number | undefined;
+      if (hasGeo && typeof r.lat === 'number' && typeof r.lng === 'number') {
+        dist = milesBetween(lat as number, lng as number, r.lat, r.lng);
+        near = dist <= radius;
+      }
+      return { r: { ...r, distanceMi: dist }, cityOk: nameMatch || near };
+    })
+    .filter(({ r, cityOk }) => {
+      const genreOk = !genre || r.genre === genre;
+      const nameOk = !q || r.name.toLowerCase().includes(q) || r.cuisine.toLowerCase().includes(q);
+      return (c || hasGeo ? cityOk : true) && genreOk && nameOk;
+    })
+    .map(({ r }) => r);
+  return out;
 }
 
 /** Expose the raw cached directory size (diagnostics). */
