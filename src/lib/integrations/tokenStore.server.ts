@@ -28,6 +28,7 @@ export type IntegrationProvider =
   | 'rippling'
   | 'okta'
   | 'workday'
+  | 'ukg'
   | 'gusto'
   | 'google'
   | 'ramp'

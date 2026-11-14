@@ -61,6 +61,39 @@ export const SETUP_GUIDES: Record<string, SetupGuide> = {
     ],
   },
 
+  ukg: {
+    needs: [
+      'UKG Pro administrator access',
+      'A Web Services service account (username + password)',
+      'Your Customer API Key and data-center Service URL',
+    ],
+    time: '~10 min (one-time, done by your UKG admin)',
+    docLabel: 'UKG Pro — Web Services',
+    docUrl: 'https://developer.ukg.com',
+    steps: [
+      {
+        title: 'Create a Web Services service account',
+        detail:
+          'In UKG Pro go to System Configuration → Security → Web Services. Add a service account (username + password) for the integration. Read-only access to employee data is all HeyVacay needs — it never writes back.',
+      },
+      {
+        title: 'Copy your Customer API Key',
+        detail:
+          'On the same Web Services page (or System Configuration → Security → Service Account Administration), copy your Customer API Key — it usually starts with "US-".',
+      },
+      {
+        title: 'Find your Service URL',
+        detail:
+          'This is your UKG Pro data-center host, e.g. https://service5.ultipro.com (yours may be service4 / servicet, etc.). It\'s shown in your UKG Pro service configuration or admin welcome email.',
+      },
+      {
+        title: 'Paste the four values below',
+        detail:
+          'Service URL, Customer API Key, and the service account username + password. We\'ll pull your employee roster (name, work email, title, department) and import everyone as employees.',
+      },
+    ],
+  },
+
   rippling: {
     needs: ['Rippling admin access'],
     time: '~3 min',
@@ -196,22 +229,47 @@ export const SETUP_GUIDES: Record<string, SetupGuide> = {
   },
 
   slack: {
-    needs: ['Permission to add a Slack app to your workspace'],
-    time: '~3 min',
+    needs: [
+      'Permission to add an app to your Slack workspace',
+      'The channel you want travel alerts posted to',
+    ],
+    time: '~3 min · all you need is an Incoming Webhook URL',
     docLabel: 'Slack: Incoming Webhooks',
     docUrl: 'https://api.slack.com/messaging/webhooks',
     steps: [
       {
-        title: 'Create (or open) a Slack app',
-        detail: 'Go to api.slack.com/apps → Create New App → From scratch, pick your workspace.',
+        title: 'Start a new Slack app',
+        detail:
+          'Go to api.slack.com/apps and click "Create New App". In the pop-up, under "From scratch" choose "Pick features", then Continue. (Ignore "AI agent", "Starter app", "Paste a manifest", and the "With a coding agent" box — you don\'t need those.)',
+      },
+      {
+        title: 'Name it and pick your workspace (Step 1 of 4)',
+        detail:
+          'Name the app e.g. "HeyVacay Enterprise" and choose your Slack workspace, then Continue.',
+      },
+      {
+        title: 'Skip scopes and events (Steps 2 & 3 of 4)',
+        detail:
+          'These screens ask "What it can do / respond to in Slack?" — a notification webhook needs NONE of them. Leave both empty ("No bot scopes/events yet") and just click Continue on each. This is the part that trips people up: you can safely skip it.',
+      },
+      {
+        title: 'Create the app (Step 4 of 4)',
+        detail: 'On "Review your app", click Create. You don\'t need any scopes or events listed.',
       },
       {
         title: 'Turn on Incoming Webhooks',
-        detail: 'In the app, open "Incoming Webhooks", toggle it on, then "Add New Webhook to Workspace" and choose the channel to post to.',
+        detail:
+          'In the app you just made, open "Incoming Webhooks" in the left sidebar and toggle "Activate Incoming Webhooks" to On.',
       },
       {
-        title: 'Copy the webhook URL',
-        detail: 'It starts with https://hooks.slack.com/services/… Paste it below.',
+        title: 'Add a webhook to your channel',
+        detail:
+          'Click "Add New Webhook to Workspace" (at the bottom), choose the channel for travel alerts, and click Allow.',
+      },
+      {
+        title: 'Copy the Webhook URL and paste it below',
+        detail:
+          'Back on the Incoming Webhooks page, copy the Webhook URL for that channel — it starts with https://hooks.slack.com/services/… — and paste it into the field below. That\'s the only value HeyVacay needs.',
       },
     ],
   },

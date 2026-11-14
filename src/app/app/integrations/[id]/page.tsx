@@ -28,7 +28,7 @@ import { NetSuitePanel } from '@/components/app/NetSuitePanel';
 import { ExpensifyPanel } from '@/components/app/ExpensifyPanel';
 import type { ExpenseCategory } from '@/lib/types';
 
-const ROSTER_IDS = ['rippling', 'okta', 'workday', 'gusto', 'google'];
+const ROSTER_IDS = ['rippling', 'okta', 'workday', 'ukg', 'gusto', 'google'];
 const CARD_IDS = ['ramp', 'brex'];
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -39,7 +39,7 @@ const CATEGORIES: ExpenseCategory[] = [
   'Supplies',
   'Other',
 ];
-const HR_IDS = ['workday', 'bamboohr', 'rippling', 'gusto'];
+const HR_IDS = ['workday', 'ukg', 'bamboohr', 'rippling', 'gusto'];
 
 export default function IntegrationDetailPage() {
   const params = useParams<{ id: string }>();

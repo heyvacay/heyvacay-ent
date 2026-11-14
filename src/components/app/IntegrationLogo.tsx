@@ -89,6 +89,7 @@ const BRANDS: Record<string, Brand> = {
   netsuite: { render: () => <Tile bg="#122E4C">N</Tile> },
   // HR / HRIS
   workday: { render: () => <Tile bg="#0875E1">W</Tile> },
+  ukg: { render: () => <Tile bg="#00635B">UKG</Tile> },
   bamboohr: { render: () => <Tile bg="#7AB800">b</Tile> },
   rippling: { render: () => <Tile bg="#11181C" fg="#F7C948">R</Tile> },
   gusto: { render: () => <Tile bg="#F45D48">g</Tile> },

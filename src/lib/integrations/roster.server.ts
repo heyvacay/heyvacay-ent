@@ -173,6 +173,65 @@ const workday: ApiKeyProvider = {
   },
 };
 
+const ukg: ApiKeyProvider = {
+  kind: 'apikey',
+  fields: [
+    { key: 'serviceUrl', label: 'Service URL', placeholder: 'https://service5.ultipro.com' },
+    { key: 'customerApiKey', label: 'Customer API key', type: 'password', placeholder: 'US-xxxxxxxxx' },
+    { key: 'username', label: 'Service account username', placeholder: 'svc-integration' },
+    { key: 'password', label: 'Service account password', type: 'password' },
+  ],
+  help:
+    'In UKG Pro → System Configuration → Security → Web Services, create a service account and note its username/password, then copy your Customer API Key and your data-center Service URL (e.g. https://service5.ultipro.com). Read-only is enough.',
+  async fetch(creds) {
+    const base = (creds.serviceUrl || '').trim().replace(/^(?!https?:\/\/)/, 'https://').replace(/\/+$/, '');
+    if (!base) throw new Error('A UKG Pro Service URL is required.');
+    const auth = Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
+    const headers = {
+      'US-Customer-Api-Key': (creds.customerApiKey || '').trim(),
+      Authorization: `Basic ${auth}`,
+      Accept: 'application/json',
+    };
+    // UKG Pro REST — employee details (paginated). per_page caps at 200.
+    const res = await fetch(`${base}/personnel/v1/employee-details?per_page=200&page=1`, {
+      headers,
+      cache: 'no-store',
+    });
+    if (res.status === 401 || res.status === 403)
+      throw new Error('UKG Pro rejected the credentials (check the Customer API Key and service account).');
+    if (res.status === 404)
+      throw new Error('UKG Pro endpoint not found — double-check the Service URL for your data center.');
+    if (!res.ok) throw new Error(`UKG Pro API ${res.status}`);
+    const data = (await res.json().catch(() => null)) as unknown;
+    // Response may be a bare array or wrapped ({ employeeDetails | data | results }).
+    const arr = Array.isArray(data)
+      ? data
+      : ((data as { employeeDetails?: unknown[]; data?: unknown[]; results?: unknown[] })?.employeeDetails ??
+         (data as { data?: unknown[] })?.data ??
+         (data as { results?: unknown[] })?.results ??
+         []);
+    const people = (arr as Record<string, unknown>[])
+      .map((e) =>
+        person({
+          firstName: pick(e, ['firstName', 'first_name', 'FirstName']),
+          lastName: pick(e, ['lastName', 'last_name', 'LastName']),
+          email: pick(e, ['emailAddress', 'workEmail', 'email', 'EmailAddress']),
+          title: pick(e, ['jobTitle', 'jobDescription', 'title', 'JobTitle']),
+          department: pick(e, [
+            'orgLevel2Description',
+            'orgLevel1Description',
+            'department',
+            'departmentName',
+            'location',
+            'OrgLevel2Description',
+          ]),
+        })
+      )
+      .filter((x): x is NormPerson => !!x);
+    return { people, label: 'UKG Pro' };
+  },
+};
+
 /* ------------------------------------------------------------------ */
 /* OAuth providers                                                     */
 /* ------------------------------------------------------------------ */
@@ -273,6 +332,7 @@ export const ROSTER_PROVIDERS: Record<string, ApiKeyProvider | OAuthProvider> = 
   rippling,
   okta,
   workday,
+  ukg,
   gusto,
   google,
 };

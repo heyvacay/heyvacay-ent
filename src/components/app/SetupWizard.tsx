@@ -75,6 +75,7 @@ const SIGN_IN_OPTIONS: {
 const ROSTER_INTEGRATIONS = [
   { key: 'bamboohr', label: 'BambooHR' },
   { key: 'workday', label: 'Workday' },
+  { key: 'ukg', label: 'UKG Pro' },
   { key: 'gusto', label: 'Gusto' },
   { key: 'google', label: 'Google Workspace' },
   { key: 'rippling', label: 'Rippling' },

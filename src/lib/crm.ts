@@ -136,6 +136,7 @@ export const PROVISION_INTEGRATIONS: { key: string; label: string }[] = [
   { key: 'netsuite', label: 'NetSuite' },
   { key: 'bamboohr', label: 'BambooHR' },
   { key: 'workday', label: 'Workday' },
+  { key: 'ukg', label: 'UKG Pro' },
   { key: 'expensify', label: 'Expensify' },
   { key: 'okta', label: 'Okta SSO (SAML)' },
 ];

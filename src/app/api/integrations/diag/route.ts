@@ -120,6 +120,7 @@ export function GET() {
     { key: 'rippling', name: 'Rippling — roster sync (per-company API key)', configured: true, powers: 'Import employees', verify: '/app/integrations/rippling' },
     { key: 'okta', name: 'Okta — user sync (per-company API token)', configured: true, powers: 'Import users', verify: '/app/integrations/okta' },
     { key: 'workday', name: 'Workday — worker sync (per-company RaaS)', configured: true, powers: 'Import workers', verify: '/app/integrations/workday' },
+    { key: 'ukg', name: 'UKG Pro — roster sync (per-company API key + service account)', configured: true, powers: 'Import employees', verify: '/app/integrations/ukg' },
     { key: 'ramp', name: 'Ramp — card feed (per-company API creds)', configured: true, powers: 'Recent card transactions', verify: '/app/integrations/ramp' },
     { key: 'brex', name: 'Brex — card feed (per-company API token)', configured: true, powers: 'Recent card transactions', verify: '/app/integrations/brex' },
     { key: 'netsuite', name: 'NetSuite — accounting (per-company TBA)', configured: true, powers: 'Map accounts + post journal entries', verify: '/app/integrations/netsuite' },
