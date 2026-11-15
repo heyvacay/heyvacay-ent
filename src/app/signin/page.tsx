@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Logo } from '@/components/app/Logo';
 import { useStore } from '@/lib/store';
 import { markSignedIn } from '@/lib/session';
+import { authLogin, authVerify, authResend, commitRealLogin } from '@/lib/auth/client';
 
 type Account = { key: string; id: string | null; name: string; domain: string };
 const DEMO_KEY = 'hv_ent_demo_v2';
@@ -30,6 +31,12 @@ export default function SignInPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // Real-auth state (demo bypass still works with password "demo").
+  const [realBusy, setRealBusy] = useState(false);
+  const [needsVerify, setNeedsVerify] = useState(false);
+  const [code, setCode] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [resent, setResent] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([
     { key: DEMO_KEY, id: null, name: 'Demo company', domain: '' },
   ]);
@@ -139,32 +146,65 @@ export default function SignInPage() {
     commitLogin(owner?.id ?? 'u_admin', owner?.role ?? 'admin');
   };
 
-  const signIn = (e: React.FormEvent) => {
+  const signIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     const em = email.trim().toLowerCase();
-    const pw = password.trim().toLowerCase();
-    if (pw !== 'demo') {
-      setError('Incorrect password. For the demo, the password is "demo".');
-      return;
-    }
-    if (em === 'demo@demo.com') {
-      enterFullAccess();
-      return;
-    }
-    if (em.endsWith('@demo.com')) {
-      const first = em.split('@')[0];
-      const match = targetUsers().find(
-        (u) => (u.name ?? '').trim().toLowerCase().split(' ')[0] === first
-      );
-      if (match) {
-        commitLogin(match.id, match.role ?? 'employee');
+    const pwRaw = password.trim();
+
+    // Demo bypass (unchanged): password "demo" routes into the demo workspace.
+    if (pwRaw.toLowerCase() === 'demo') {
+      if (em === 'demo@demo.com') {
+        enterFullAccess();
         return;
       }
-      setError(`No demo user named "${first}" in ${target.name}. Try demo@demo.com for the owner.`);
+      if (em.endsWith('@demo.com')) {
+        const first = em.split('@')[0];
+        const match = targetUsers().find(
+          (u) => (u.name ?? '').trim().toLowerCase().split(' ')[0] === first
+        );
+        if (match) {
+          commitLogin(match.id, match.role ?? 'employee');
+          return;
+        }
+        setError(`No demo user named "${first}" in ${target.name}. Try demo@demo.com for the owner.`);
+        return;
+      }
+      setError('Use demo@demo.com for the owner, or firstname@demo.com to view a user.');
       return;
     }
-    setError('Use demo@demo.com for the owner, or firstname@demo.com to view a user.');
+
+    // Real login against the enterprise auth backend.
+    setRealBusy(true);
+    const res = await authLogin(em, pwRaw);
+    setRealBusy(false);
+    if (res.needsVerify) {
+      setNeedsVerify(true);
+      return;
+    }
+    if (res.error || !res.account) {
+      setError(res.error || 'Invalid email or password.');
+      return;
+    }
+    commitRealLogin(res.account, target.id ? target.name : undefined);
+  };
+
+  const submitVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setVerifyBusy(true);
+    const res = await authVerify(email.trim(), code.trim());
+    setVerifyBusy(false);
+    if (res.error || !res.account) {
+      setError(res.error || 'That code is invalid or has expired.');
+      return;
+    }
+    commitRealLogin(res.account, target.id ? target.name : undefined);
+  };
+
+  const resendCode = async () => {
+    await authResend(email.trim());
+    setResent(true);
   };
 
   const SSO = [
@@ -278,6 +318,40 @@ export default function SignInPage() {
             <span className="h-px flex-1 bg-slate-200" /> or work email <span className="h-px flex-1 bg-slate-200" />
           </div>
 
+          {needsVerify ? (
+            <form onSubmit={submitVerify} className="space-y-4">
+              <div className="rounded-lg bg-brand/10 px-3 py-2.5 text-xs text-brand-dark">
+                We emailed a 6-digit code to <span className="font-semibold">{email.trim()}</span>.
+                Enter it to confirm your email and sign in.
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">Verification code</span>
+                <input
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-center text-lg font-semibold tracking-[0.4em] text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                />
+              </label>
+              {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
+              <button
+                type="submit"
+                disabled={verifyBusy || code.length < 6}
+                className="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-navy-deep shadow-sm hover:brightness-95 disabled:opacity-60"
+              >
+                {verifyBusy ? 'Verifying…' : 'Verify & sign in'}
+              </button>
+              <div className="flex items-center justify-between text-xs">
+                <button type="button" onClick={() => { setNeedsVerify(false); setCode(''); setError(''); }} className="font-medium text-slate-400 hover:text-slate-600">
+                  ← Back
+                </button>
+                <button type="button" onClick={resendCode} className="font-semibold text-brand-dark hover:underline">
+                  {resent ? 'Code re-sent ✓' : 'Resend code'}
+                </button>
+              </div>
+            </form>
+          ) : (
           <form onSubmit={signIn} className="space-y-4">
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-700">Work email</span>
@@ -296,7 +370,12 @@ export default function SignInPage() {
               </p>
             )}
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Password</span>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700">Password</span>
+                <Link href="/forgot" className="text-xs font-semibold text-brand-dark hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}
@@ -310,9 +389,10 @@ export default function SignInPage() {
             )}
             <button
               type="submit"
-              className="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-navy-deep shadow-sm hover:brightness-95"
+              disabled={realBusy}
+              className="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-navy-deep shadow-sm hover:brightness-95 disabled:opacity-60"
             >
-              Sign in
+              {realBusy ? 'Signing in…' : 'Sign in'}
             </button>
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
               <span className="font-semibold text-slate-600">Demo:</span> full access{' '}
@@ -320,6 +400,7 @@ export default function SignInPage() {
               <code>danil@demo.com</code>). Password <code>demo</code>.
             </p>
           </form>
+          )}
 
           <p className="mt-4 text-center text-sm text-slate-500">
             New here?{' '}

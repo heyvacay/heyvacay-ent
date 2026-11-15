@@ -10,7 +10,7 @@ import { isWorkEmail, workEmailError } from '@/lib/validate';
 import { money, num, todayISO } from '@/lib/format';
 import type { OnboardingProfile } from '@/lib/types';
 import { pushSignupToCrm } from '@/lib/crmBridge';
-import { EmailVerify } from '@/components/app/EmailVerify';
+import { SignupVerify } from '@/components/app/SignupVerify';
 import { TravelHistoryForm } from '@/components/app/TravelHistoryForm';
 import type { TravelHistory } from '@/lib/travelHistory';
 import { CelebrationOverlay } from '@/components/app/CelebrationOverlay';
@@ -166,7 +166,7 @@ function StepShell({
 /* ---------- the flow ---------- */
 
 export default function SignupPage() {
-  const { completeOnboarding, setRole, setActiveUser } = useStore();
+  const { completeOnboarding, setRole, setActiveUser, state } = useStore();
   const router = useRouter();
 
   const [started, setStarted] = useState(false);
@@ -454,59 +454,64 @@ export default function SignupPage() {
               title="Verify your work email"
               blurb="We sent a code to make sure we're setting up the right account — this becomes the owner login for your company."
             >
-              {emailVerified ? (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                    <Check className="h-4 w-4" /> {form.workEmail} verified.
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Create your password</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      This secures the owner login for {form.companyName || 'your company'}. At
-                      least 8 characters.
-                    </p>
-                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                      <Field label="Password">
-                        <Input
-                          type="password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
-                          autoFocus
-                        />
-                        {password.length > 0 && !pwLongEnough && (
-                          <p className="mt-1 text-xs text-red-600">
-                            Use at least 8 characters.
-                          </p>
-                        )}
-                      </Field>
-                      <Field label="Confirm password">
-                        <Input
-                          type="password"
-                          value={password2}
-                          onChange={(e) => setPassword2(e.target.value)}
-                          placeholder="••••••••"
-                        />
-                        {password2.length > 0 && !pwMatch && (
-                          <p className="mt-1 text-xs text-red-600">Passwords don&apos;t match.</p>
-                        )}
-                      </Field>
-                    </div>
-                    {passwordReady && (
-                      <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-                        <Check className="h-3.5 w-3.5" /> Password set — continue.
-                      </p>
-                    )}
+              <div className="space-y-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Create your password</p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    This secures the owner login for {form.companyName || 'your company'}. At least
+                    8 characters.
+                  </p>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <Field label="Password">
+                      <Input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        autoFocus
+                        disabled={emailVerified}
+                      />
+                      {password.length > 0 && !pwLongEnough && (
+                        <p className="mt-1 text-xs text-red-600">Use at least 8 characters.</p>
+                      )}
+                    </Field>
+                    <Field label="Confirm password">
+                      <Input
+                        type="password"
+                        value={password2}
+                        onChange={(e) => setPassword2(e.target.value)}
+                        placeholder="••••••••"
+                        disabled={emailVerified}
+                      />
+                      {password2.length > 0 && !pwMatch && (
+                        <p className="mt-1 text-xs text-red-600">Passwords don&apos;t match.</p>
+                      )}
+                    </Field>
                   </div>
                 </div>
-              ) : (
-                <EmailVerify
-                  email={form.workEmail}
-                  company={form.companyName}
-                  onVerified={() => setEmailVerified(true)}
-                  cta="Verify email"
-                />
-              )}
+
+                {emailVerified ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                    <Check className="h-4 w-4" /> {form.workEmail} verified — you&apos;re all set.
+                    Continue.
+                  </div>
+                ) : passwordReady ? (
+                  <SignupVerify
+                    email={form.workEmail.trim()}
+                    company={form.companyName}
+                    companyId={state.company.id}
+                    firstName={form.firstName.trim()}
+                    lastName={form.lastName.trim()}
+                    password={password}
+                    onVerified={() => setEmailVerified(true)}
+                  />
+                ) : (
+                  <p className="mt-2 text-xs text-slate-400">
+                    Set your password above, then we&apos;ll email a code to verify{' '}
+                    {form.workEmail || 'your email'}.
+                  </p>
+                )}
+              </div>
             </StepShell>
           )}
 

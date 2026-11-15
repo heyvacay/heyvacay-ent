@@ -328,7 +328,39 @@ export const INTEGRATIONS_TABLE =
 export const WORKSPACE_TABLE =
   process.env.WORKSPACE_DDB_TABLE || 'stage-heyvacay-ent-workspace';
 
+/**
+ * Enterprise identity table — the real credential store (one item per email):
+ * scrypt password hash, email-verification + password-reset tokens, the
+ * workspace (companyId + userId + role) the login resolves to, and basic
+ * lockout counters. The ENT ECS task role is granted Get/Put/Delete/Query on
+ * just this table. When unset / unreachable (local dev, build, missing IAM),
+ * identityStore falls back to an in-process map so nothing crashes.
+ */
+export const IDENTITIES_TABLE =
+  process.env.IDENTITIES_DDB_TABLE || 'stage-heyvacay-ent-identities';
+
 export const AWS_REGION = process.env.AWS_REGION || 'us-west-2';
+
+/**
+ * Secret used to HMAC-sign session tokens (the httpOnly `hv_ent_session`
+ * cookie) and the short-lived verify/reset tokens. Keep this stable per
+ * environment — rotating it invalidates every live session. Defaults to the
+ * enterprise service token (already a per-env secret) so sessions are signed
+ * even before a dedicated secret is wired; set AUTH_SESSION_SECRET for a
+ * purpose-built key.
+ */
+export const AUTH_SESSION_SECRET =
+  process.env.AUTH_SESSION_SECRET ||
+  process.env.ENT_BACKEND_SERVICE_TOKEN ||
+  'hv-ent-auth-session-fallback';
+
+/**
+ * Public base URL of the customer app, used to build absolute links in
+ * transactional emails (verify, password reset, invites). Override per env.
+ */
+export const APP_BASE_URL = (
+  process.env.ENT_APP_BASE_URL || 'https://ent.stage.heyvacay.co'
+).replace(/\/+$/, '');
 
 /**
  * Secret used to HMAC-sign the OAuth `state` parameter so the callback can

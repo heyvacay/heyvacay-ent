@@ -14,6 +14,7 @@ import { WelcomeFlow } from './WelcomeFlow';
 import { SetupWizard, DepartmentSetup } from './SetupWizard';
 import { HomeCityGate } from './HomeCityGate';
 import { clearSignedIn } from '@/lib/session';
+import { authLogout } from '@/lib/auth/client';
 import {
   ChartBar,
   Users,
@@ -458,7 +459,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                       User preferences
                     </Link>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         try {
                           sessionStorage.removeItem('hv_view_as');
                           sessionStorage.removeItem('hv_view_as_ctx');
@@ -466,6 +467,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
                         } catch {
                           /* ignore */
                         }
+                        // Clear the real server session too (best-effort).
+                        await authLogout();
                         window.location.href = '/signin';
                       }}
                       className="block w-full px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"

@@ -291,6 +291,25 @@ export function eventCancelledEmail(d: {
   };
 }
 
+export function passwordResetEmail(d: {
+  name?: string;
+  resetUrl: string;
+}): { subject: string; html: string; text: string } {
+  const hi = d.name ? `Hi ${d.name}, w` : 'W';
+  const body = `
+    <p style="font-size:15px;color:#334155">${hi}e received a request to reset your HeyVacay password. Click below to choose a new one.</p>
+    <div style="margin:18px 0;text-align:center">
+      <a href="${d.resetUrl}" style="display:inline-block;background:${BRAND};color:${NAVY};font-weight:700;text-decoration:none;padding:12px 22px;border-radius:10px">Reset my password</a>
+    </div>
+    <p style="font-size:13px;color:#64748b">This link expires in 60 minutes and can be used once. If you didn't request a reset, you can safely ignore this email — your password won't change.</p>
+    <p style="font-size:12px;color:#94a3b8;margin-top:14px;word-break:break-all">Or paste this link into your browser:<br/>${d.resetUrl}</p>`;
+  return {
+    subject: 'Reset your HeyVacay password',
+    html: wrap('Reset your password', body),
+    text: `Reset your HeyVacay password: ${d.resetUrl} (expires in 60 minutes, single use). If you didn't request this, ignore this email.`,
+  };
+}
+
 export const TEMPLATES = {
   confirmation: confirmationEmail,
   approvalPending: approvalPendingEmail,
@@ -303,6 +322,7 @@ export const TEMPLATES = {
   net30Kyc: net30KycEmail,
   verifyCode: verifyCodeEmail,
   invite: inviteEmail,
+  passwordReset: passwordResetEmail,
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;
