@@ -117,6 +117,13 @@ export function GET() {
       powers: 'Approval requests + trip alerts to a Slack channel',
       verify: '/app/integrations/slack',
     },
+    {
+      key: 'teams',
+      name: 'Microsoft Teams — notifications (per-company Incoming Webhook)',
+      configured: true,
+      powers: 'Approval requests + trip alerts to a Teams channel',
+      verify: '/app/integrations/teams',
+    },
     { key: 'gusto', name: 'Gusto — roster sync (OAuth2)', configured: GUSTO.configured, powers: 'Import employees', verify: '/app/integrations/gusto' },
     { key: 'google', name: 'Google Workspace — user sync (OAuth2)', configured: GOOGLE_WS.configured, powers: 'Import directory users', verify: '/app/integrations/google' },
     // Per-company (admin enters their own credentials in the UI) — always "ready".

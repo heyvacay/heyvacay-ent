@@ -22,6 +22,7 @@ import { QuickBooksPanel } from '@/components/app/QuickBooksPanel';
 import { XeroPanel } from '@/components/app/XeroPanel';
 import { BambooHRPanel } from '@/components/app/BambooHRPanel';
 import { SlackPanel } from '@/components/app/SlackPanel';
+import { TeamsPanel } from '@/components/app/TeamsPanel';
 import { RosterImportPanel } from '@/components/app/RosterImportPanel';
 import { CardFeedPanel } from '@/components/app/CardFeedPanel';
 import { NetSuitePanel } from '@/components/app/NetSuitePanel';
@@ -92,6 +93,7 @@ export default function IntegrationDetailPage() {
   const isXero = integration.id === 'xero';
   const isBambooHR = integration.id === 'bamboohr';
   const isSlack = integration.id === 'slack';
+  const isTeams = integration.id === 'teams';
   const isRoster = ROSTER_IDS.includes(integration.id);
   const isCard = CARD_IDS.includes(integration.id);
   const isNetSuite = integration.id === 'netsuite';
@@ -99,7 +101,7 @@ export default function IntegrationDetailPage() {
   const isRealAccounting = isQuickBooks || isXero;
   // Any integration with its own real panel (owns its connect/disconnect).
   const isRealIntegration =
-    isRealAccounting || isBambooHR || isSlack || isRoster || isCard || isNetSuite || isExpensify;
+    isRealAccounting || isBambooHR || isSlack || isTeams || isRoster || isCard || isNetSuite || isExpensify;
 
   const connect = () => {
     setConnecting(true);
@@ -157,6 +159,7 @@ export default function IntegrationDetailPage() {
       {isXero && <XeroPanel integration={integration} />}
       {isBambooHR && <BambooHRPanel integration={integration} />}
       {isSlack && <SlackPanel integration={integration} />}
+      {isTeams && <TeamsPanel integration={integration} />}
       {isRoster && <RosterImportPanel integration={integration} />}
       {isCard && <CardFeedPanel integration={integration} />}
       {isNetSuite && <NetSuitePanel integration={integration} />}

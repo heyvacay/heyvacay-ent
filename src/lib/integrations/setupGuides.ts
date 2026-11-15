@@ -273,6 +273,37 @@ export const SETUP_GUIDES: Record<string, SetupGuide> = {
       },
     ],
   },
+  teams: {
+    needs: [
+      'Permission to add a Workflow (or connector) to the Teams channel',
+      'The channel you want travel alerts posted to',
+    ],
+    time: '~3 min · all you need is an Incoming Webhook URL',
+    docLabel: 'Microsoft: Post to Teams with Workflows',
+    docUrl: 'https://support.microsoft.com/office/creating-a-workflow-from-a-channel-in-teams-242eb8f2-f328-45be-b81f-9817b51a5f0e',
+    steps: [
+      {
+        title: 'Open the channel’s Workflows',
+        detail:
+          'In Microsoft Teams, go to the channel you want alerts in, click the "…" (More options) next to the channel name, and choose "Workflows". (On older tenants you may instead see "Connectors" — either works; the Workflows path is the current one.)',
+      },
+      {
+        title: 'Pick “Post to a channel when a webhook request is received”',
+        detail:
+          'Search for "webhook" and select the template "Post to a channel when a webhook request is received". Click Next.',
+      },
+      {
+        title: 'Confirm the team and channel',
+        detail:
+          'Check that the team and channel shown are the ones you want HeyVacay to post to, then click "Add workflow".',
+      },
+      {
+        title: 'Copy the Webhook URL and paste it below',
+        detail:
+          'Teams shows a Workflow URL (it contains …logic.azure.com…, or on the legacy connector path …webhook.office.com…). Copy it and paste it into the field below — that’s the only value HeyVacay needs. Click Done.',
+      },
+    ],
+  },
 };
 
 export function guideFor(id: string): SetupGuide | undefined {

@@ -214,6 +214,7 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'okta', name: 'Okta', category: 'Identity', blurb: 'SSO and SCIM provisioning for your whole team.', status: 'available' },
   { id: 'google', name: 'Google Workspace', category: 'Identity', blurb: 'One-click SSO with Google.', status: 'available' },
   { id: 'slack', name: 'Slack', category: 'Comms', blurb: 'Approvals and trip alerts right in Slack.', status: 'available' },
+  { id: 'teams', name: 'Microsoft Teams', category: 'Comms', blurb: 'Approvals and trip alerts right in Microsoft Teams.', status: 'available' },
 ];
 
 /** Integration ids that post expenses to a general ledger. */

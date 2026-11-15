@@ -102,6 +102,7 @@ const BRANDS: Record<string, Brand> = {
   google: { render: () => <GoogleMark /> },
   // Comms
   slack: { render: () => <SlackMark /> },
+  teams: { render: () => <Tile bg="#5059C9">T</Tile> },
   // Infra partners (not cards today, but used where referenced)
   opentable: { render: () => <Tile bg="#DA3743">OT</Tile> },
   openweather: { render: () => <Tile bg="#EB6E4B">OW</Tile> },

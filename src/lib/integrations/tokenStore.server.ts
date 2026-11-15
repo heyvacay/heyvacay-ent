@@ -25,6 +25,7 @@ export type IntegrationProvider =
   | 'netsuite'
   | 'bamboohr'
   | 'slack'
+  | 'teams'
   | 'rippling'
   | 'okta'
   | 'workday'
