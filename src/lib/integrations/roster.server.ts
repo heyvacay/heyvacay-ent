@@ -192,8 +192,10 @@ const ukg: ApiKeyProvider = {
       Authorization: `Basic ${auth}`,
       Accept: 'application/json',
     };
-    // UKG Pro REST — employee details (paginated). per_page caps at 200.
-    const res = await fetch(`${base}/personnel/v1/employee-details?per_page=200&page=1`, {
+    // UKG Pro REST — Get Employee Demographic Details (the documented personnel
+    // endpoint that returns name + work email + job/department). Paginated via
+    // page / per_page (per_page max 100).
+    const res = await fetch(`${base}/personnel/v1/employee-demographic-details?per_page=100&page=1`, {
       headers,
       cache: 'no-store',
     });
