@@ -96,6 +96,7 @@ function ResultsInner() {
   const [results, setResults] = useState<Restaurant[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Restaurant | null>(null);
+  const [preselectTime, setPreselectTime] = useState<string | null>(null);
   const [detailOf, setDetailOf] = useState<Restaurant | null>(null);
 
   // Result-side filters.
@@ -322,6 +323,16 @@ function ResultsInner() {
                     ))}
                   </div>
                 )}
+                <CardSlots
+                  restaurant={r}
+                  date={date}
+                  time={time}
+                  party={party}
+                  onPick={(t) => {
+                    setPreselectTime(t);
+                    setSelected(r);
+                  }}
+                />
                 <div className="mt-auto flex gap-2 pt-4">
                   <Button
                     size="sm"
@@ -331,7 +342,14 @@ function ResultsInner() {
                   >
                     Details &amp; menu
                   </Button>
-                  <Button size="sm" className="flex-1" onClick={() => setSelected(r)}>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setPreselectTime(null);
+                      setSelected(r);
+                    }}
+                  >
                     Reserve
                   </Button>
                 </div>
@@ -359,7 +377,7 @@ function ResultsInner() {
         <BookingModal
           restaurant={selected}
           date={date}
-          time={time}
+          time={preselectTime ?? time}
           party={party}
           city={city}
           userId={activeUser.id}
@@ -376,7 +394,10 @@ function ResultsInner() {
             }
           }}
           onBooked={(r) => saveReservation(scope, r)}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null);
+            setPreselectTime(null);
+          }}
         />
       )}
     </div>
@@ -394,6 +415,84 @@ export default function ResultsPage() {
 function money2(n?: number): string {
   if (n == null) return '';
   return `$${n.toFixed(2).replace(/\.00$/, '')}`;
+}
+
+/**
+ * Real available time slots shown right on the result card — so travelers see
+ * what's bookable before clicking into Reserve. Pulls live availability for the
+ * searched date/party around the searched time; clicking a slot opens the
+ * booking modal pre-set to that time.
+ */
+function CardSlots({
+  restaurant,
+  date,
+  time,
+  party,
+  onPick,
+}: {
+  restaurant: Restaurant;
+  date: string;
+  time: string;
+  party: number;
+  onPick: (time: string) => void;
+}) {
+  const [avail, setAvail] = useState<Availability | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    getAvailability({ restaurantId: restaurant.id, date, time, partySize: party })
+      .then((a) => live && setAvail(a))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [restaurant.id, date, time, party]);
+
+  if (loading) {
+    return <p className="mt-3 text-xs text-slate-400">Checking tables near {to12h(time)}…</p>;
+  }
+
+  const slots: string[] = (() => {
+    if (!avail) return [];
+    const raw = avail.requestedAvailable
+      ? [{ time, available: true }, ...(avail.slots ?? [])]
+      : avail.slots ?? [];
+    const out: string[] = [];
+    for (const s of raw) {
+      if (s.available && !out.includes(s.time)) out.push(s.time);
+      if (out.length >= 5) break;
+    }
+    return out;
+  })();
+
+  if (slots.length === 0) {
+    return (
+      <p className="mt-3 text-xs text-slate-400">
+        No tables near {to12h(time)} — tap Reserve to try other times.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Available {date === todayISO() ? 'today' : ''}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {slots.map((t) => (
+          <button
+            key={t}
+            onClick={() => onPick(t)}
+            className="rounded-lg border border-brand/40 bg-brand/5 px-2.5 py-1 text-xs font-semibold text-brand-dark transition hover:bg-brand hover:text-navy"
+          >
+            {to12h(t)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
