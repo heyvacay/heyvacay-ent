@@ -21,6 +21,7 @@ import { rewardsFor } from '@/lib/rewards';
 import { HvRangeField, HvDateField } from '@/components/datepicker/HvDatePicker';
 import { ActiveTripBanner } from '@/components/app/ActiveTripBanner';
 import { TravelerPicker } from '@/components/app/TravelerPicker';
+import { CheckoutFields, useCheckoutFields, missingRequired } from '@/components/app/CheckoutFields';
 import { OfferBanner } from '@/components/app/OfferBanner';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
 import {
@@ -672,6 +673,8 @@ export default function BookPage() {
   const [results, setResults] = useState<InventoryOption[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const checkoutFieldsList = useCheckoutFields();
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [confirmed, setConfirmed] = useState<{
     opt: InventoryOption;
     pending: boolean;
@@ -802,6 +805,12 @@ export default function BookPage() {
   };
 
   const confirm = (opt: InventoryOption) => {
+    const missing = missingRequired(checkoutFieldsList, customFieldValues);
+    if (missing.length > 0) {
+      setError(`Fill the required trip detail${missing.length === 1 ? '' : 's'}: ${missing.map((f) => f.label).join(', ')}.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     const { pending, points } = sig(opt);
     book({
       opt,
@@ -809,6 +818,7 @@ export default function BookPage() {
       guestName: guestName ?? undefined,
       startDate: start,
       endDate: end,
+      customFields: customFieldValues,
       eventId: eventId || undefined,
       eventName: selectedEvent?.name,
     });
@@ -1511,6 +1521,14 @@ export default function BookPage() {
       )}
 
       {/* flight results */}
+      {!loading && results && results.length > 0 && checkoutFieldsList.length > 0 && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <p className="mb-2 text-sm font-semibold text-slate-800 dark:text-white">Trip details</p>
+          <CheckoutFields values={customFieldValues} onChange={setCustomFieldValues} />
+          <p className="mt-1 text-xs text-slate-400">Required fields marked * are needed to book.</p>
+        </div>
+      )}
+
       {!loading && results && results.length > 0 && type === 'flight' && (
         <div className="mt-6 space-y-3">
           <p className="text-sm text-slate-400">

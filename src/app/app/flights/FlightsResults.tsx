@@ -17,6 +17,8 @@ import {
 } from '@/components/app/ui';
 import { money, num, dateRange } from '@/lib/format';
 import { TravelerPicker } from '@/components/app/TravelerPicker';
+import { CheckoutFields, useCheckoutFields, missingRequired } from '@/components/app/CheckoutFields';
+import type { CheckoutField } from '@/lib/types';
 import { Plane, Check, Shield, Gift, Wallet } from '@/components/icons';
 import { HvLoader } from '@/components/HvLoader';
 import { ConfettiAnimation } from '@/components/app/ConfettiAnimation';
@@ -249,6 +251,8 @@ export default function FlightsResults() {
   const [travelerId, setTravelerId] = useState(params.get('travelerId') || activeUser.id);
   const [guestName, setGuestName] = useState<string | null>(params.get('guestName') || null);
   const [confirmed, setConfirmed] = useState<{ opt: InventoryOption; pending: boolean } | null>(null);
+  const checkoutFieldsList = useCheckoutFields();
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   // Whether the server can issue a real Duffel order (service account wired).
   const [liveBooking, setLiveBooking] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
@@ -339,6 +343,7 @@ export default function FlightsResults() {
       guestName: guestName ?? undefined,
       startDate: departDate,
       endDate: returnDate || departDate,
+      customFields: customFieldValues,
       eventId,
       eventName,
       supplierRef: realRef,
@@ -467,6 +472,9 @@ export default function FlightsResults() {
         <CheckoutPanel
           opt={selected}
           onClose={() => setSelected(null)}
+          checkoutFields={checkoutFieldsList}
+          customValues={customFieldValues}
+          onCustomChange={setCustomFieldValues}
           onConfirm={(extra, fareLabel, seat) => confirm(selected, extra, fareLabel, seat)}
           onLiveConfirmed={(ref, piId) => confirm(selected, 0, '', null, ref, piId)}
           onLiveUnavailable={(msg) => {
@@ -586,6 +594,9 @@ function CheckoutPanel({
   opt,
   onClose,
   onConfirm,
+  checkoutFields,
+  customValues,
+  onCustomChange,
   onLiveConfirmed,
   onLiveUnavailable,
   onFallback,
@@ -606,6 +617,9 @@ function CheckoutPanel({
   opt: InventoryOption;
   onClose: () => void;
   onConfirm: (extra: number, fareLabel: string, seat: string | null) => void;
+  checkoutFields: CheckoutField[];
+  customValues: Record<string, string>;
+  onCustomChange: (values: Record<string, string>) => void;
   onLiveConfirmed: (ref: string, paymentIntentId?: string) => void;
   onLiveUnavailable: (msg: string) => void;
   onFallback: () => void;
@@ -812,7 +826,25 @@ function CheckoutPanel({
             </p>
           )}
 
-          <Button className="w-full" onClick={() => onConfirm(fare.delta + seatFee, fare.label, seat)}>
+          {checkoutFields.length > 0 && (
+            <div>
+              <p className="mb-1 text-sm font-medium text-slate-700">Trip details</p>
+              <CheckoutFields values={customValues} onChange={onCustomChange} />
+              {missingRequired(checkoutFields, customValues).length > 0 && (
+                <p className="mt-1 text-xs font-medium text-amber-600">
+                  Fill the required field
+                  {missingRequired(checkoutFields, customValues).length === 1 ? '' : 's'} marked * to
+                  continue.
+                </p>
+              )}
+            </div>
+          )}
+
+          <Button
+            className="w-full"
+            onClick={() => onConfirm(fare.delta + seatFee, fare.label, seat)}
+            disabled={missingRequired(checkoutFields, customValues).length > 0}
+          >
             {needsApproval ? 'Request this flight' : 'Confirm booking'}
           </Button>
           {needsApproval && (

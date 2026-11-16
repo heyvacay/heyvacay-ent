@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Button, Card, Input, PageHeader, Select, cn } from '@/components/app/ui';
+import { CheckoutFieldsAdmin } from '@/components/app/CheckoutFieldsAdmin';
 import { CityPicker } from '@/components/app/CityPicker';
 import { Plane, Receipt, Shield, Check, Calendar, Users } from '@/components/icons';
 import type {
@@ -692,6 +693,11 @@ export default function PoliciesPage() {
             ))}
           </div>
         </SectionCard>
+
+        {/* Custom checkout fields (project code, trip reason, …) */}
+        <div className="mb-6">
+          <CheckoutFieldsAdmin />
+        </div>
 
         {/* Hotels */}
         <SectionCard

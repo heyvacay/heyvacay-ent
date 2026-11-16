@@ -20,6 +20,7 @@ import type {
   Booking,
   BookingApprovalMode,
   BudgetScope,
+  CheckoutField,
   GuestBookingMode,
   Expense,
   ExpenseStatus,
@@ -272,6 +273,8 @@ export interface StoreApi {
     roomType?: string;
     images?: string[];
     travelerNote?: string;
+    /** Admin-defined custom checkout field values (field id → value). */
+    customFields?: Record<string, string>;
     eventId?: string;
     eventName?: string;
     /** Event allow-listed stay — skip travel policy (no approval / no block). */
@@ -286,6 +289,9 @@ export interface StoreApi {
   /** Company rule: whether booking for a custom/guest name needs approval. */
   guestBookingMode: GuestBookingMode;
   setGuestBookingMode: (mode: GuestBookingMode) => void;
+  /** Admin-defined custom checkout fields (project code, trip reason, …). */
+  checkoutFields: CheckoutField[];
+  setCheckoutFields: (fields: CheckoutField[]) => void;
   cancelBooking: (id: string, note?: string, noteVisible?: boolean) => void;
   /** Manager declines a pending request. A reason is required and always shown
    *  to the traveler, who can then resubmit. */
@@ -756,6 +762,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setCheckoutFields: StoreApi['setCheckoutFields'] = useCallback(
+    (fields) => setState((s) => ({ ...s, checkoutFields: fields })),
+    []
+  );
+
   const setUserApprovalMode: StoreApi['setUserApprovalMode'] = useCallback(
     (userId, mode) =>
       setState((s) => ({
@@ -1140,7 +1151,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const book: StoreApi['book'] = useCallback(
-    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, eventId, eventName, bypassPolicy, supplierRef, stripePaymentIntentId, liveContext }) => {
+    ({ opt, travelerId, guestName, startDate, endDate, roomType, images, travelerNote, customFields, eventId, eventName, bypassPolicy, supplierRef, stripePaymentIntentId, liveContext }) => {
       const { savings, points: pointsEarned } = rewardsFor(opt);
       const guest = guestName?.trim() || undefined;
       // An event allow-listed stay is pre-cleared by an admin: skip the travel
@@ -1190,6 +1201,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         roomType,
         hid: opt.hid,
         travelerNote,
+        customFields:
+          customFields && Object.keys(customFields).length ? customFields : undefined,
         eventId,
         eventName,
         supplierRef,
@@ -2001,6 +2014,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCompanyApprovalMode,
     guestBookingMode: state.guestBookingMode ?? 'allowed',
     setGuestBookingMode,
+    checkoutFields: state.checkoutFields ?? [],
+    setCheckoutFields,
     setUserApprovalMode,
     setDepartmentApprovalMode,
     setBillingMode,

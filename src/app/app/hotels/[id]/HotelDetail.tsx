@@ -22,6 +22,7 @@ import type { ReserveArgs } from '@/components/hotels/RoomCard';
 import { leadRoomPrice } from '@/lib/hotelRooms';
 import { Button, Card, Field, cn } from '@/components/app/ui';
 import { TravelerPicker } from '@/components/app/TravelerPicker';
+import { CheckoutFields, useCheckoutFields, missingRequired } from '@/components/app/CheckoutFields';
 import { StripeCheckout } from '@/components/app/StripeCheckout';
 import { LiveHotelCheckout } from '@/components/app/LiveHotelCheckout';
 import { splitName, buildPrebookPayload, type LiveGuest } from '@/lib/liveBooking';
@@ -91,6 +92,9 @@ export default function HotelDetail({ hid }: { hid: string }) {
   const [selected, setSelected] = useState<ReserveArgs | null>(null);
   const [policyAlert, setPolicyAlert] = useState<string[] | null>(null);
   const [bookNote, setBookNote] = useState('');
+  const checkoutFieldsList = useCheckoutFields();
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  const missingCustom = missingRequired(checkoutFieldsList, customFieldValues);
   // Checkout: payment entry step + a processing overlay (like HeyVacay.co).
   const [payStep, setPayStep] = useState(false);
   // Company card (default) vs the traveler's personal card. Paying personally
@@ -250,6 +254,7 @@ export default function HotelDetail({ hid }: { hid: string }) {
       roomType: selected?.roomTitle,
       images,
       travelerNote: bookNote.trim() || undefined,
+      customFields: customFieldValues,
       eventId,
       eventName,
       bypassPolicy: eventAllow,
@@ -952,6 +957,13 @@ export default function HotelDetail({ hid }: { hid: string }) {
                 </div>
               )}
 
+              {checkoutFieldsList.length > 0 && (
+                <div>
+                  <p className="mb-1 text-sm font-medium text-slate-700">Trip details</p>
+                  <CheckoutFields values={customFieldValues} onChange={setCustomFieldValues} />
+                </div>
+              )}
+
               {tierExceeded && (
                 <div
                   className={cn(
@@ -970,7 +982,17 @@ export default function HotelDetail({ hid }: { hid: string }) {
                   </span>
                 </div>
               )}
-              <Button className="w-full" onClick={reserve} disabled={!price || tierBlocked}>
+              {missingCustom.length > 0 && (
+                <p className="text-xs font-medium text-amber-600">
+                  Fill the required field{missingCustom.length === 1 ? '' : 's'} marked * to continue
+                  {`: ${missingCustom.map((f) => f.label).join(', ')}.`}
+                </p>
+              )}
+              <Button
+                className="w-full"
+                onClick={reserve}
+                disabled={!price || tierBlocked || missingCustom.length > 0}
+              >
                 {tierBlocked
                   ? 'Room not allowed for this event'
                   : needsApproval

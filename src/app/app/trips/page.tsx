@@ -14,6 +14,7 @@ import {
 import { money, num, dateRange, daysUntil, todayISO } from '@/lib/format';
 import { BookingChat } from '@/components/app/BookingChat';
 import { CancelTripModal } from '@/components/app/CancelTripModal';
+import { CustomFieldsSummary } from '@/components/app/CheckoutFields';
 import { Plane, Receipt, Sparkles, MapPin, Calendar } from '@/components/icons';
 import { downloadICS } from '@/lib/ics';
 import type { Booking } from '@/lib/types';
@@ -155,6 +156,7 @@ function DetailsModal({ b, onClose }: { b: Booking; onClose: () => void }) {
             <Row k="Points earned" v={`+${num(b.pointsEarned)}`} tone="brand" />
             <Row k="Status" v={b.status.replace('_', ' ')} />
             {b.eventName && <Row k="Event" v={b.eventName} />}
+            <CustomFieldsSummary values={b.customFields} />
           </div>
           {b.travelerNote && (
             <p className="rounded-lg bg-slate-50 p-2 text-sm text-slate-600">

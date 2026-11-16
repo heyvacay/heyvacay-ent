@@ -16,6 +16,7 @@ import {
 import { money, num, dateRange } from '@/lib/format';
 import { sendEmail } from '@/lib/email';
 import { BookingChat } from '@/components/app/BookingChat';
+import { CustomFieldsSummary } from '@/components/app/CheckoutFields';
 import { getHotelDetail } from '@/lib/search';
 import {
   defaultSelection,
@@ -370,6 +371,10 @@ export default function ApprovalDetail({ id }: { id: string }) {
                     {b.travelerNote}
                   </p>
                 )}
+                <CustomFieldsSummary
+                  values={b.customFields}
+                  className="mt-2 rounded-lg bg-slate-50 p-2"
+                />
                 <p className="mt-1 text-sm text-slate-400">
                   {dateRange(b.startDate, b.endDate)}
                 </p>

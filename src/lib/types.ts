@@ -317,6 +317,9 @@ export interface Booking {
   rejectedAt?: string;
   /** A note the traveler adds when submitting for approval. */
   travelerNote?: string;
+  /** Admin-defined custom checkout field values (field id → entered value),
+   *  e.g. a project code or trip reason captured at booking. */
+  customFields?: Record<string, string>;
   /** Hotel rate was free-cancellation (relevant to the approval window). */
   freeCancellation?: boolean;
   /** Destination label (flight dest city/IATA, or hotel location). */
@@ -629,6 +632,23 @@ export interface Net30Kyc {
   history?: KycStatusEntry[];
 }
 
+/** An admin-defined custom field shown at checkout (e.g. a project code or a
+ *  trip reason). Values are captured onto each booking's `customFields`. */
+export interface CheckoutField {
+  id: string;
+  /** Label shown to the traveler, e.g. "Project code". */
+  label: string;
+  type: 'text' | 'select' | 'number';
+  /** Must be filled before the trip can be booked. */
+  required: boolean;
+  /** Options for a 'select' field. */
+  options?: string[];
+  /** Optional helper/placeholder text. */
+  placeholder?: string;
+  /** Hide without deleting (keeps past bookings' values meaningful). */
+  archived?: boolean;
+}
+
 export interface AppState {
   company: Company;
   users: User[];
@@ -654,6 +674,9 @@ export interface AppState {
   policyChangeRequests?: PolicyChangeRequest[];
   /** Combined flight+hotel trip plans (booked together on approval). */
   tripPlans?: TripPlan[];
+  /** Admin-defined custom fields collected at checkout (project code, trip
+   *  reason, cost center, …). Rendered on every booking flow. */
+  checkoutFields?: CheckoutField[];
   /** who is signed in for the demo */
   activeUserId: string;
 }
