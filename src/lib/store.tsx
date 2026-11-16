@@ -57,13 +57,39 @@ const acctKey = (id?: string | null): string =>
 
 /** Back-fill slices added after a browser last saved its workspace. */
 function mergeLoaded(s: AppState): AppState {
+  // Union the live integrations catalog with the saved one: keep every persisted
+  // integration (and its connection status), but ADD any catalog entries the
+  // seed has that this saved workspace predates — e.g. a newly shipped
+  // integration like Microsoft Teams. Without this, a workspace saved before an
+  // integration existed would never show it, so new deploys look "missing".
+  const savedIntegrations = s.integrations ?? [];
+  const savedIds = new Set(savedIntegrations.map((i) => i.id));
+  const integrations = [
+    ...savedIntegrations,
+    ...SEED.integrations.filter((i) => !savedIds.has(i.id)),
+  ];
   return {
     ...SEED,
     ...s,
-    integrations: s.integrations ?? SEED.integrations,
+    integrations,
     billing: s.billing ?? SEED.billing,
     accountingMap: s.accountingMap ?? SEED.accountingMap,
     history: s.history ?? SEED.history,
+    company: {
+      ...SEED.company,
+      ...s.company,
+      // Backfill the self-guided setup block onto workspaces saved before it
+      // existed (incl. the demo), so account admins still get walked through the
+      // onboarding wizard. A completed setup keeps its completedAt and won't
+      // re-show.
+      setup: s.company?.setup ?? {
+        required: true,
+        domainSelfJoin: {
+          enabled: false,
+          domains: s.company?.domain ? [s.company.domain] : [],
+        },
+      },
+    },
   };
 }
 
