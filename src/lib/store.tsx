@@ -66,6 +66,40 @@ function mergeLoaded(s: AppState): AppState {
   };
 }
 
+/**
+ * When the shared server workspace is adopted, it must NOT clobber records the
+ * current device just created and hasn't synced yet. A freshly-booked trip that
+ * needs approval (status 'pending_approval') is only in local state + the fast
+ * localStorage cache until the debounced push lands; if a slightly-stale remote
+ * arrives first, a wholesale replace would make that trip vanish from both "My
+ * trips" and "Pending approvals". So for the user-append collections, we take
+ * remote as the source of truth for shared edits (e.g. an approval decided
+ * elsewhere, matched by id) but KEEP any local-only records remote hasn't caught
+ * up on. Nothing here hard-deletes, so this can't resurrect a removed record.
+ */
+function reconcileRemote(local: AppState, remote: AppState): AppState {
+  const keepLocalOnly = <T extends { id: string }>(
+    remoteArr: T[] | undefined,
+    localArr: T[] | undefined,
+  ): T[] | undefined => {
+    const r = remoteArr ?? [];
+    const l = localArr ?? [];
+    if (r.length === 0 && l.length === 0) return remoteArr; // preserve original shape (maybe undefined)
+    const remoteIds = new Set(r.map((x) => x.id));
+    const localOnly = l.filter((x) => !remoteIds.has(x.id));
+    // Prepend local-only (most-recently created) so new trips stay at the top.
+    return localOnly.length ? [...localOnly, ...r] : r;
+  };
+  return {
+    ...remote,
+    bookings: keepLocalOnly(remote.bookings, local.bookings) ?? remote.bookings,
+    expenses: keepLocalOnly(remote.expenses, local.expenses) ?? remote.expenses,
+    points: keepLocalOnly(remote.points, local.points) ?? remote.points,
+    policyChangeRequests: keepLocalOnly(remote.policyChangeRequests, local.policyChangeRequests),
+    tripPlans: keepLocalOnly(remote.tripPlans, local.tripPlans),
+  };
+}
+
 /** The demo/experience mode. 'demo' = the rich seeded workspace; 'fresh' = a
  *  brand-new empty company, for walking the true new-user experience. */
 export function readExperience(): 'demo' | 'fresh' {
@@ -440,8 +474,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const remote = await fetchWorkspace(id);
       if (!live || loadedKeyRef.current !== key) return; // account switched meanwhile
       if (remote?.state) {
-        const merged = mergeLoaded(remote.state);
-        setState((cur) => (JSON.stringify(cur) !== JSON.stringify(merged) ? merged : cur));
+        const base = mergeLoaded(remote.state);
+        setState((cur) => {
+          // Adopt remote, but keep local-only records (e.g. a just-created
+          // pending-approval trip) the stale remote hasn't caught up on.
+          const merged = reconcileRemote(cur, base);
+          return JSON.stringify(cur) !== JSON.stringify(merged) ? merged : cur;
+        });
         if (remote.role) setRole((r) => (r !== remote.role ? remote.role : r));
       }
     })();
@@ -472,6 +511,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }, 1200);
     }
   }, [state, role, hydrated, activeAccount]);
+
+  // Flush the latest workspace immediately when the page is hidden/unloaded, so
+  // an action taken right before a hard navigation (e.g. booking a trip that
+  // needs approval, then the confirm page doing a full-page redirect) still
+  // reaches the server instead of being lost with the cancelled 1.2s debounce.
+  // pushWorkspace uses keepalive, so the request survives the unload.
+  const latestSyncRef = useRef({ state, role });
+  latestSyncRef.current = { state, role };
+  useEffect(() => {
+    const flush = () => {
+      const id = activeAccount?.id;
+      if (!id || loadedKeyRef.current !== acctKey(id)) return;
+      if (pushTimerRef.current) {
+        clearTimeout(pushTimerRef.current);
+        pushTimerRef.current = null;
+      }
+      void pushWorkspace(id, latestSyncRef.current.state, latestSyncRef.current.role);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount?.id]);
 
   // The state exposed to the app. The persisted workspace already carries the
   // right company identity; we re-overlay name/domain so CRM renames show live.
