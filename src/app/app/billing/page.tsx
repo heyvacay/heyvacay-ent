@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { Badge, Button, Card, Field, Input, PageHeader, cn } from '@/components/app/ui';
+import { CompanyCardSetup } from '@/components/app/CompanyCardSetup';
 import { Check, Wallet, Shield } from '@/components/icons';
 import type { BillingMode, KycStatus, Net30Kyc, Net30KycFields } from '@/lib/types';
 
@@ -69,6 +70,7 @@ export default function BillingPage() {
     viewingAs,
     setBillingMode,
     linkCard,
+    setCompanyCard,
     requestNet30,
     startNet30Kyc,
     submitNet30Kyc,
@@ -77,7 +79,6 @@ export default function BillingPage() {
     setPersonalCard,
   } = useStore();
   const billing = state.billing ?? { mode: 'employee' as BillingMode };
-  const [card, setCard] = useState({ brand: 'Visa', last4: '' });
   const [pcard, setPcard] = useState({ brand: 'Visa', last4: '' });
   const [reviewNote, setReviewNote] = useState('');
   const [ownerReply, setOwnerReply] = useState('');
@@ -141,30 +142,34 @@ export default function BillingPage() {
               <Wallet className="h-4 w-4 text-brand-dark" /> Company card
             </p>
             {linkedCard ? (
-              <p className="text-sm text-slate-600">
-                {billing.cardBrand} •••• {linkedCard} on file.{' '}
-                <button
-                  onClick={() => linkCard('', '')}
-                  className="text-xs font-medium text-slate-400 hover:text-red-600"
-                >
-                  Remove
-                </button>
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                <Input value={card.brand} onChange={(e) => setCard({ ...card, brand: e.target.value })} placeholder="Visa" />
-                <Input
-                  value={card.last4}
-                  onChange={(e) => setCard({ ...card, last4: e.target.value.replace(/\D/g, '') })}
-                  placeholder="Card number"
-                  inputMode="numeric"
-                />
-                <Button onClick={() => card.last4.length >= 4 && linkCard(card.brand, card.last4.slice(-4))}>
-                  Link card
-                </Button>
+              <div>
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium capitalize">{billing.cardBrand}</span> ••••{' '}
+                  {linkedCard}
+                  {billing.companyCard?.expMonth && billing.companyCard?.expYear
+                    ? ` · exp ${String(billing.companyCard.expMonth).padStart(2, '0')}/${String(
+                        billing.companyCard.expYear,
+                      ).slice(-2)}`
+                    : ''}{' '}
+                  on file.{' '}
+                  <button
+                    onClick={() => (billing.companyCard ? setCompanyCard(null) : linkCard('', ''))}
+                    className="text-xs font-medium text-slate-400 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </p>
+                <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                  {billing.companyCard
+                    ? '✓ Saved with Stripe — bookings auto-charge this card'
+                    : 'Demo card — stored locally, never charged'}
+                </p>
               </div>
+            ) : (
+              <>
+                <CompanyCardSetup />
+              </>
             )}
-            <p className="mt-2 text-xs text-slate-400">Demo only — stored locally, never charged.</p>
           </div>
         )}
       </Card>

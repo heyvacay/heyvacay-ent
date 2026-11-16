@@ -239,6 +239,9 @@ export interface StoreApi {
   setDepartmentApprovalMode: (dept: string, mode: BookingApprovalMode | 'default') => void;
   setBillingMode: (mode: Billing['mode']) => void;
   linkCard: (brand: string, last4: string) => void;
+  /** Save (or clear → null) the real Stripe company card returned by the
+   *  SetupIntent flow. Mirrors brand/last4 for display and sets mode to 'card'. */
+  setCompanyCard: (card: NonNullable<Billing['companyCard']> | null) => void;
   requestNet30: () => void;
   /** Sales-rep only: start Net 30 by sending a KYC form to the account owner. */
   startNet30Kyc: () => void;
@@ -876,6 +879,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...s,
       billing: { ...(s.billing ?? { mode: 'card' }), mode: 'card', cardBrand: brand, cardLast4: last4 },
     }));
+  }, []);
+
+  const setCompanyCard: StoreApi['setCompanyCard'] = useCallback((card) => {
+    setState((s) => {
+      const base = s.billing ?? { mode: 'card' as const };
+      if (!card) {
+        // Clear the saved card; leave the billing mode as-is.
+        const next = { ...base };
+        delete next.companyCard;
+        delete next.cardBrand;
+        delete next.cardLast4;
+        return { ...s, billing: next };
+      }
+      return {
+        ...s,
+        billing: {
+          ...base,
+          mode: 'card',
+          companyCard: card,
+          cardBrand: card.brand,
+          cardLast4: card.last4,
+        },
+      };
+    });
   }, []);
 
   const requestNet30: StoreApi['requestNet30'] = useCallback(() => {
@@ -2019,6 +2046,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUserApprovalMode,
     setDepartmentApprovalMode,
     setBillingMode,
+    setCompanyCard,
     startNet30Kyc,
     submitNet30Kyc,
     setKycStatus,

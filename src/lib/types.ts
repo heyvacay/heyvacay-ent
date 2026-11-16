@@ -568,6 +568,19 @@ export interface Billing {
   mode: BillingMode;
   cardBrand?: string;
   cardLast4?: string;
+  /** A real Stripe-saved company card (off-session chargeable), set via a
+   *  SetupIntent. Present once a card is genuinely saved with Stripe; the
+   *  cardBrand/cardLast4 above mirror it for display + the demo fallback. The
+   *  ids are not secret (they can't charge without our server secret key). */
+  companyCard?: {
+    customerId: string;
+    paymentMethodId: string;
+    brand: string;
+    last4: string;
+    expMonth?: number;
+    expYear?: number;
+    savedAt: string;
+  };
   /** true once an admin has requested Net 30 (routes to the account manager). */
   netRequested?: boolean;
   /** Net-30 underwriting. Only a sales rep can start this; it sends a KYC form
