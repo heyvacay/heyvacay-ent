@@ -56,6 +56,9 @@ export interface CompanySetup {
   departments?: string[];
   /** Whether pre-trip approval is required by default (captured in setup). */
   requireApproval?: boolean;
+  /** Company-wide default ground-transport policy (rideshare vs. rental car).
+   *  'any' lets travelers pick the cheaper option; events can override this. */
+  groundTransport?: import('./rideshare').GroundMode;
 }
 
 export interface Company {

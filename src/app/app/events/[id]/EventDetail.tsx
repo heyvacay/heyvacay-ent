@@ -38,6 +38,7 @@ import { EventChat } from '@/components/app/EventChat';
 import { HotelAllowPicker } from '@/components/app/HotelAllowPicker';
 import { sendEmail } from '@/lib/email';
 import { MapPin, Users, Check, Shield, Plane, Sparkles } from '@/components/icons';
+import { Car as GroundCarIcon } from 'lucide-react';
 
 type Tab = 'overview' | 'chat' | 'dinner';
 
@@ -411,6 +412,18 @@ export default function EventDetail({ id }: { id: string }) {
                       ))}
                     </ul>
                   )}
+                </div>
+                <div>
+                  <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                    <GroundCarIcon className="h-4 w-4 text-brand-dark" /> Ground transport
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    {e.groundTransport === 'rideshare'
+                      ? 'Rideshare only (Uber / Lyft)'
+                      : e.groundTransport === 'rental'
+                        ? 'Rental car only'
+                        : 'Traveler decides (rideshare or rental)'}
+                  </p>
                 </div>
               </div>
             </Card>

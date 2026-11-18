@@ -15,7 +15,9 @@ import { format as fmtDate, parseISO } from 'date-fns';
 import { Button, Card, Field, Input, PageHeader, Badge, cn } from '@/components/app/ui';
 import { money, num, addDays, todayISO, dateRange, uid } from '@/lib/format';
 import { Plane, Building, Shield, ArrowRight, Sparkles, Check } from '@/components/icons';
-import { Train, Car } from 'lucide-react';
+import { Train, Car, CarTaxiFront } from 'lucide-react';
+import { GroundSavings } from '@/components/app/GroundSavings';
+import { tripDays } from '@/lib/rideshare';
 import { rewardsFor } from '@/lib/rewards';
 import { FlightRow, HotelCard, type Sig } from '@/components/app/results';
 import type { InventoryOption, PlannedItem, TripPlan, LiveBookingContext } from '@/lib/types';
@@ -44,6 +46,10 @@ export default function PlanTripPage() {
   // Optional ground legs the traveler wants us to arrange alongside the trip.
   const [addTrain, setAddTrain] = useState(false);
   const [addCar, setAddCar] = useState(false);
+  const [addRide, setAddRide] = useState(false);
+  // Company-wide ground-transport policy: 'rideshare'/'rental' lock the choice,
+  // 'any' lets the traveler decide (and we show the savings comparison).
+  const groundPolicy = state.company.setup?.groundTransport ?? 'any';
   // Package flow: pick the hotel first, then the flight, then review — mirrors
   // the HeyVacay consumer package booking. 'search' before results exist.
   const [step, setStep] = useState<'search' | 'stay' | 'flight' | 'review'>('search');
@@ -151,6 +157,7 @@ export default function PlanTripPage() {
             end?: string;
             addTrain?: boolean;
             addCar?: boolean;
+            addRide?: boolean;
           };
           if (d.origin) setOrigin(d.origin);
           if (d.originText) setOriginText(d.originText);
@@ -160,6 +167,7 @@ export default function PlanTripPage() {
           if (d.end) setEnd(d.end);
           if (d.addTrain) setAddTrain(true);
           if (d.addCar) setAddCar(true);
+          if (d.addRide) setAddRide(true);
         }
       } catch {
         /* ignore corrupt draft */
@@ -203,12 +211,19 @@ export default function PlanTripPage() {
     try {
       localStorage.setItem(
         draftKey,
-        JSON.stringify({ origin, originText, dest, destText, start, end, addTrain, addCar })
+        JSON.stringify({ origin, originText, dest, destText, start, end, addTrain, addCar, addRide })
       );
     } catch {
       /* ignore */
     }
-  }, [draftKey, origin, originText, dest, destText, start, end, addTrain, addCar]);
+  }, [draftKey, origin, originText, dest, destText, start, end, addTrain, addCar, addRide]);
+
+  // Keep the ground selection consistent with company policy: a locked policy
+  // clears the option it forbids so a stale draft can't submit a banned mode.
+  useEffect(() => {
+    if (groundPolicy === 'rideshare' && addCar) setAddCar(false);
+    if (groundPolicy === 'rental' && addRide) setAddRide(false);
+  }, [groundPolicy, addCar, addRide]);
 
   // Flight leg carries its live payload so an approved plan can auto-ticket it.
   const flightLiveContext = (opt: InventoryOption): LiveBookingContext | undefined => {
@@ -359,9 +374,16 @@ export default function PlanTripPage() {
               </div>
             </div>
             <div className="mt-4 border-t border-slate-200 pt-4 dark:border-white/10">
-              <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                Add ground transportation
-              </p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  Add ground transportation
+                </p>
+                {groundPolicy !== 'any' && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                    Policy: {groundPolicy === 'rideshare' ? 'Rideshare only' : 'Rental car only'}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-3">
                 <GroundToggle
                   active={addTrain}
@@ -370,18 +392,35 @@ export default function PlanTripPage() {
                   label="Rail"
                   sub="Train between cities"
                 />
-                <GroundToggle
-                  active={addCar}
-                  onToggle={() => setAddCar((v) => !v)}
-                  Icon={Car}
-                  label="Rental car"
-                  sub="Pick-up at destination"
-                />
+                {groundPolicy !== 'rental' && (
+                  <GroundToggle
+                    active={addRide}
+                    onToggle={() => setAddRide((v) => !v)}
+                    Icon={CarTaxiFront}
+                    label="Rideshare"
+                    sub="Uber / Lyft at destination"
+                  />
+                )}
+                {groundPolicy !== 'rideshare' && (
+                  <GroundToggle
+                    active={addCar}
+                    onToggle={() => setAddCar((v) => !v)}
+                    Icon={Car}
+                    label="Rental car"
+                    sub="Pick-up at destination"
+                  />
+                )}
               </div>
-              {(addTrain || addCar) && (
+              {(addTrain || addCar || addRide) && (
                 <p className="mt-2 text-xs text-slate-400">
                   Our travel team arranges this with the trip and adds it to the approval.
                 </p>
+              )}
+              {/* Savings guidance when the traveler gets to choose. */}
+              {groundPolicy === 'any' && (
+                <div className="mt-3">
+                  <GroundSavings days={tripDays(start, end)} compact />
+                </div>
               )}
             </div>
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -585,6 +624,9 @@ export default function PlanTripPage() {
             {plannedFlight && <ReviewLeg label="Flight" item={plannedFlight} />}
             {plannedHotel && <ReviewLeg label="Hotel" item={plannedHotel} />}
             {addTrain && <ExtraLeg label="Train" note="We'll arrange rail — added to your approval." />}
+            {addRide && (
+              <ExtraLeg label="Rideshare" note="We'll set up Uber / Lyft — added to your approval." />
+            )}
             {addCar && <ExtraLeg label="Rental car" note="We'll arrange a rental — added to your approval." />}
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-brand/20 pt-3">

@@ -153,6 +153,10 @@ export interface TravelEvent {
   budget?: number;
   /** Smart planning: let HeyVacay pick a hotel that fits the budget. */
   smartPlanning?: boolean;
+  /** Ground-transport policy for this event: 'any' lets the traveler pick the
+   *  cheaper of rideshare vs. rental car, 'rideshare' or 'rental' lock it to one.
+   *  Undefined = inherit the company default (company.setup.groundTransport). */
+  groundTransport?: import('./rideshare').GroundMode;
   /** Requests to book a second stay for this event, keyed by user. */
   extraStayRequests?: ExtraStayRequest[];
   messages: EventMessage[];

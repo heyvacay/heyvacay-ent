@@ -61,6 +61,7 @@ interface EventsApi {
     roomTierPolicy?: RoomTierPolicy;
     budget?: number;
     smartPlanning?: boolean;
+    groundTransport?: import('./rideshare').GroundMode;
     /** Group-dinner setup chosen in the create flow. */
     dinnerPlanMode?: 'now' | 'later' | 'none';
     /** For 'later': the date planning should kick off (ISO yyyy-mm-dd). */
@@ -88,6 +89,7 @@ interface EventsApi {
       roomTierPolicy?: RoomTierPolicy;
       budget?: number;
       smartPlanning?: boolean;
+      groundTransport?: import('./rideshare').GroundMode;
       /** Who made the edit, for the event thread note. */
       editorId?: string;
       editorName?: string;
@@ -285,6 +287,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       roomTierPolicy: data.roomTierPolicy,
       budget: data.budget,
       smartPlanning: data.smartPlanning,
+      groundTransport: data.groundTransport,
       dinnerPlanMode: data.dinnerPlanMode,
       dinnerPlanAt: data.dinnerPlanMode === 'later' ? data.dinnerPlanAt : undefined,
       dinnerNights: data.dinnerNights,

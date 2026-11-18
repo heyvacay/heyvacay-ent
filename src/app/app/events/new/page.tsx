@@ -15,6 +15,7 @@ import { format as fmtDate, parseISO } from 'date-fns';
 import { addDays, todayISO, shortDate, dateRange, milesBetween, money } from '@/lib/format';
 import { sendEmail } from '@/lib/email';
 import { Calendar, MapPin, Users, Plane, Check, Sparkles, Wallet } from '@/components/icons';
+import { Car } from 'lucide-react';
 import {
   ROOM_TIERS,
   roomTierRank,
@@ -28,12 +29,14 @@ import {
   budgetGuidance,
   smartPick,
 } from '@/lib/eventPlanning';
+import { GroundSavings, GroundModePicker } from '@/components/app/GroundSavings';
+import { tripDays, type GroundMode } from '@/lib/rideshare';
 
 const STEPS = [
   { key: 'basics', title: 'The basics', sub: 'Name, city and dates' },
   { key: 'who', title: "Who's coming", sub: 'Pick the attendees' },
   { key: 'hotels', title: 'Allowed hotels', sub: 'Pin the properties' },
-  { key: 'flights', title: 'Allowed flights', sub: 'Optional routes' },
+  { key: 'flights', title: 'Flights & ground', sub: 'Routes + transport policy' },
   { key: 'dinner', title: 'Group dinner', sub: 'Plan it now or later' },
   { key: 'review', title: 'Review', sub: 'Create the event' },
 ] as const;
@@ -63,6 +66,10 @@ export default function NewEventPage() {
   const [whitelistOnly, setWhitelistOnly] = useState(false);
   const [routeText, setRouteText] = useState('');
   const [routes, setRoutes] = useState<string[]>([]);
+  // Ground-transport policy for the event. 'any' = inherit company default /
+  // let the traveler pick the cheaper of rideshare vs. rental car.
+  const companyGround = state.company.setup?.groundTransport ?? 'any';
+  const [groundTransport, setGroundTransport] = useState<GroundMode>('any');
   // Room-tier allow-list + budget.
   const [roomTierBase, setRoomTierBase] = useState<RoomTier>('Standard');
   const [overAction, setOverAction] = useState<OverTierAction>('manager');
@@ -102,6 +109,7 @@ export default function NewEventPage() {
         editEvent.allowHotels.map((n) => ({ hid: '', name: n }))
     );
     setWhitelistOnly(!!editEvent.whitelistOnly);
+    setGroundTransport(editEvent.groundTransport ?? 'any');
     setRoutes(editEvent.allowFlights ?? []);
     if (editEvent.roomTierPolicy) {
       setRoomTierBase(editEvent.roomTierPolicy.base);
@@ -309,6 +317,7 @@ export default function NewEventPage() {
         },
         budget: budgetOn ? budgetAmt : undefined,
         smartPlanning: budgetOn && smartPlanning,
+        groundTransport,
         editorId: activeUser.id,
         editorName: activeUser.name,
       });
@@ -338,6 +347,7 @@ export default function NewEventPage() {
       },
       budget: budgetOn ? budgetAmt : undefined,
       smartPlanning: budgetOn && smartPlanning,
+      groundTransport,
       dinnerPlanMode: dinnerMode,
       dinnerPlanAt: dinnerMode === 'later' ? dinnerWhen || undefined : undefined,
       dinnerNights:
@@ -805,6 +815,29 @@ export default function NewEventPage() {
                   ))}
                 </div>
               )}
+
+              {/* Ground-transport policy: rideshare vs. rental car. */}
+              <div className="mt-2 border-t border-slate-200 pt-4 dark:border-white/10">
+                <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+                  Ground transportation
+                </h3>
+                <p className="mb-3 mt-0.5 text-sm text-slate-500">
+                  Set how attendees get around at the destination. Rideshare usually beats a rental
+                  car for business trips with light local driving.
+                </p>
+                <GroundModePicker
+                  value={groundTransport}
+                  onChange={setGroundTransport}
+                  inheritLabel={
+                    companyGround === 'any'
+                      ? 'Traveler decides'
+                      : `Company default (${companyGround === 'rideshare' ? 'Rideshare only' : 'Rental only'})`
+                  }
+                />
+                <div className="mt-3">
+                  <GroundSavings days={tripDays(start, end)} compact />
+                </div>
+              </div>
             </div>
           )}
 
@@ -949,6 +982,17 @@ export default function NewEventPage() {
                   icon={<Plane className="h-4 w-4" />}
                   k="Allowed flights"
                   v={routes.length ? routes.join(', ') : 'No restriction'}
+                />
+                <Row
+                  icon={<Car className="h-4 w-4" />}
+                  k="Ground transport"
+                  v={
+                    groundTransport === 'rideshare'
+                      ? 'Rideshare only'
+                      : groundTransport === 'rental'
+                        ? 'Rental car only'
+                        : 'Traveler decides'
+                  }
                 />
                 <Row
                   icon={<Users className="h-4 w-4" />}
