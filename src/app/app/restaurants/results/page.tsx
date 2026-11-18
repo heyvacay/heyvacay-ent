@@ -292,69 +292,19 @@ function ResultsInner() {
         ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map((r) => (
-            <div
+            <ResultCard
               key={r.id}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="relative h-44 w-full overflow-hidden">
-                <RestaurantImage src={r.image} name={r.name} />
-                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2 py-0.5 text-xs font-bold text-slate-800 shadow-sm">
-                  ★ {r.rating}
-                </span>
-                <span className="absolute right-3 top-3 rounded-full bg-slate-900/70 px-2 py-0.5 text-xs font-semibold text-white">
-                  {'$'.repeat(r.priceBand)}
-                </span>
-              </div>
-              <div className="flex flex-1 flex-col p-4">
-                <p className="font-display text-base font-bold text-slate-900">{r.name}</p>
-                <p className="text-sm text-slate-500">{r.cuisine}</p>
-                <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-400">
-                  <MapPin className="h-3 w-3" /> {r.neighborhood}, {r.city}
-                </p>
-                {highlightsFor(r).length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {highlightsFor(r).map((h) => (
-                      <span
-                        key={h}
-                        className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
-                      >
-                        {h}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <CardSlots
-                  restaurant={r}
-                  date={date}
-                  time={time}
-                  party={party}
-                  onPick={(t) => {
-                    setPreselectTime(t);
-                    setSelected(r);
-                  }}
-                />
-                <div className="mt-auto flex gap-2 pt-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setDetailOf(r)}
-                  >
-                    Details &amp; menu
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setPreselectTime(null);
-                      setSelected(r);
-                    }}
-                  >
-                    Reserve
-                  </Button>
-                </div>
-              </div>
-            </div>
+              r={r}
+              date={date}
+              time={time}
+              party={party}
+              nameSearch={!!nameParam}
+              onDetails={() => setDetailOf(r)}
+              onReserve={(t) => {
+                setPreselectTime(t ?? null);
+                setSelected(r);
+              }}
+            />
           ))}
         </div>
         )}
@@ -418,23 +368,30 @@ function money2(n?: number): string {
 }
 
 /**
- * Real available time slots shown right on the result card — so travelers see
- * what's bookable before clicking into Reserve. Pulls live availability for the
- * searched date/party around the searched time; clicking a slot opens the
- * booking modal pre-set to that time.
+ * A single restaurant result. Fetches live availability for the searched
+ * date/party and shows real bookable time chips before the traveler clicks
+ * Reserve. Availability governs visibility:
+ *  - Browsing a city: a restaurant with NO availability for the date is hidden
+ *    (don't show places that can't be booked).
+ *  - Searching a specific restaurant by name: it is always shown, and if it has
+ *    no availability it says so in red (the traveler asked for this exact place).
  */
-function CardSlots({
-  restaurant,
+function ResultCard({
+  r,
   date,
   time,
   party,
-  onPick,
+  nameSearch,
+  onDetails,
+  onReserve,
 }: {
-  restaurant: Restaurant;
+  r: Restaurant;
   date: string;
   time: string;
   party: number;
-  onPick: (time: string) => void;
+  nameSearch: boolean;
+  onDetails: () => void;
+  onReserve: (time?: string) => void;
 }) {
   const [avail, setAvail] = useState<Availability | null>(null);
   const [loading, setLoading] = useState(true);
@@ -442,17 +399,13 @@ function CardSlots({
   useEffect(() => {
     let live = true;
     setLoading(true);
-    getAvailability({ restaurantId: restaurant.id, date, time, partySize: party })
+    getAvailability({ restaurantId: r.id, date, time, partySize: party })
       .then((a) => live && setAvail(a))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [restaurant.id, date, time, party]);
-
-  if (loading) {
-    return <p className="mt-3 text-xs text-slate-400">Checking tables near {to12h(time)}…</p>;
-  }
+  }, [r.id, date, time, party]);
 
   const slots: string[] = (() => {
     if (!avail) return [];
@@ -467,29 +420,70 @@ function CardSlots({
     return out;
   })();
 
-  if (slots.length === 0) {
-    return (
-      <p className="mt-3 text-xs text-slate-400">
-        No tables near {to12h(time)} — tap Reserve to try other times.
-      </p>
-    );
-  }
+  // Browse mode: once we know it has no tables for the date, drop it entirely.
+  if (!loading && !nameSearch && slots.length === 0) return null;
 
   return (
-    <div className="mt-3">
-      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Available {date === todayISO() ? 'today' : ''}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {slots.map((t) => (
-          <button
-            key={t}
-            onClick={() => onPick(t)}
-            className="rounded-lg border border-brand/40 bg-brand/5 px-2.5 py-1 text-xs font-semibold text-brand-dark transition hover:bg-brand hover:text-navy"
-          >
-            {to12h(t)}
-          </button>
-        ))}
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="relative h-44 w-full overflow-hidden">
+        <RestaurantImage src={r.image} name={r.name} />
+        <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2 py-0.5 text-xs font-bold text-slate-800 shadow-sm">
+          ★ {r.rating}
+        </span>
+        <span className="absolute right-3 top-3 rounded-full bg-slate-900/70 px-2 py-0.5 text-xs font-semibold text-white">
+          {'$'.repeat(r.priceBand)}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <p className="font-display text-base font-bold text-slate-900">{r.name}</p>
+        <p className="text-sm text-slate-500">{r.cuisine}</p>
+        <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-400">
+          <MapPin className="h-3 w-3" /> {r.neighborhood}, {r.city}
+        </p>
+        {highlightsFor(r).length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {highlightsFor(r).map((h) => (
+              <span key={h} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                {h}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* availability */}
+        {loading ? (
+          <p className="mt-3 text-xs text-slate-400">Checking tables near {to12h(time)}…</p>
+        ) : slots.length > 0 ? (
+          <div className="mt-3">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Available {date === todayISO() ? 'today' : ''}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {slots.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => onReserve(t)}
+                  className="rounded-lg border border-brand/40 bg-brand/5 px-2.5 py-1 text-xs font-semibold text-brand-dark transition hover:bg-brand hover:text-navy"
+                >
+                  {to12h(t)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600">
+            No availability for {shortDate(date)} near {to12h(time)}.
+          </p>
+        )}
+
+        <div className="mt-auto flex gap-2 pt-4">
+          <Button size="sm" variant="outline" className="flex-1" onClick={onDetails}>
+            Details &amp; menu
+          </Button>
+          <Button size="sm" className="flex-1" onClick={() => onReserve(undefined)} disabled={!loading && slots.length === 0}>
+            Reserve
+          </Button>
+        </div>
       </div>
     </div>
   );

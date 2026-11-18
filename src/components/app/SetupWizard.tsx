@@ -90,7 +90,8 @@ const INTRO_CARDS: { Icon: typeof Globe; title: string; desc: string }[] = [
 ];
 
 export function SetupWizard({ onDone }: { onDone: () => void }) {
-  const { state, activeUser, setCompanySetup, completeSetup, inviteUser } = useStore();
+  const { state, activeUser, setCompanySetup, completeSetup, inviteUser, setIntegrationStatus } =
+    useStore();
   const company = state.company;
   const firstName = (activeUser.name ?? 'there').trim().split(' ')[0] || 'there';
   const setup = company.setup ?? {};
@@ -193,6 +194,17 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           role: 'Admin',
           joinUrl: `${origin}/join?email=${encodeURIComponent(inv.email)}`,
         });
+      } catch {
+        /* non-fatal */
+      }
+    }
+    // If they chose to sync their team from an integration, flag it as
+    // REQUESTED so it shows up as a pending action (amber/red) on the
+    // Integrations page until it's actually connected — the setup shouldn't just
+    // record the choice, it should create the to-do.
+    if (signIn === 'integration' && rosterIntegration) {
+      try {
+        setIntegrationStatus(rosterIntegration, 'requested');
       } catch {
         /* non-fatal */
       }

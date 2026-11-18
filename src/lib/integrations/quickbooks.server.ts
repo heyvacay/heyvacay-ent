@@ -192,9 +192,19 @@ export async function getValidAccessToken(
     const refreshed = await refreshTokens(conn);
     return { accessToken: refreshed.accessToken, realmId: refreshed.realmId || conn.realmId, conn: refreshed };
   } catch (err) {
-    await patchConnection(companyId, PROVIDER, { status: 'error' });
+    const msg = (err as Error).message || '';
+    // An invalid_grant means the refresh token is dead (sandbox tokens expire in
+    // ~24h of inactivity; production in ~100 days, or the connection was revoked
+    // in Intuit). That can't be "retried" — it needs a fresh OAuth authorization.
+    // Mark it 'revoked' so the UI shows a clean Reconnect button instead of a
+    // Retry that just re-sends the dead token. Other (transient) errors stay
+    // 'error' so a retry can succeed.
+    const invalidGrant = /invalid_grant|invalid refresh token|incorrect or invalid/i.test(msg);
+    await patchConnection(companyId, PROVIDER, { status: invalidGrant ? 'revoked' : 'error' });
     throw new Error(
-      `QuickBooks session expired and could not be refreshed — reconnect required. (${(err as Error).message})`
+      invalidGrant
+        ? 'QuickBooks needs to be reconnected — its authorization expired. (QuickBooks Sandbox refresh tokens last ~24h; Production ~100 days.) Click “Connect QuickBooks” to re-authorize.'
+        : `QuickBooks couldn’t be reached to refresh the session — try again in a moment. (${msg})`
     );
   }
 }

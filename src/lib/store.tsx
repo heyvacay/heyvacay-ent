@@ -161,6 +161,10 @@ function defaultBase(): AppState {
 /** A clean workspace for a newly-entered company: seed structure (users,
  *  policies, access rules) with the company's own identity and zero activity. */
 function seedAccount(ctx: { id?: string; name: string; domain: string }): AppState {
+  // Start from just the owner admin — a brand-new customer must NOT inherit the
+  // demo company's roster, bookings, budgets or history. The owner is renamed to
+  // the champion when the account is provisioned / the admin completes setup.
+  const owner = SEED.users.find((u) => u.id === 'u_admin') ?? SEED.users[0];
   return {
     ...SEED,
     company: {
@@ -176,9 +180,14 @@ function seedAccount(ctx: { id?: string; name: string; domain: string }): AppSta
         domainSelfJoin: { enabled: false, domains: ctx.domain ? [ctx.domain] : [] },
       },
     },
+    users: owner ? [owner] : SEED.users.slice(0, 1),
+    activeUserId: owner?.id ?? SEED.activeUserId,
     bookings: [],
     expenses: [],
     points: [],
+    budgets: [],
+    tripPlans: [],
+    policyChangeRequests: [],
     // A brand-new company has no history yet — don't inherit the demo's seeded
     // 6-month savings curve, or analytics would show spend/savings with zero
     // bookings. Reports derive the monthly series from real bookings anyway.

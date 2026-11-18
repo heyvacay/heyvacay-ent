@@ -10,6 +10,7 @@
 
 import { SEED } from './seed';
 import { todayISO } from './format';
+import { pushWorkspace, type SyncRole } from './workspaceSync';
 import type { AppState, Billing, KycStatus, Role } from './types';
 
 const acctKey = (id: string) => `hv_ent_acct_${id}`;
@@ -33,6 +34,11 @@ function writeAccountState(companyId: string, state: AppState, role: Role = 'adm
   } catch {
     /* ignore */
   }
+  // Push to the shared server workspace too, so an action a rep takes from the
+  // CRM (e.g. approving a company's KYC → Net 30 goes live) actually reaches the
+  // CUSTOMER's device, not just the rep's browser. Best-effort; needs the
+  // workspace DynamoDB table (created by terraform) to persist across devices.
+  void pushWorkspace(companyId, state, role as SyncRole);
 }
 
 /** Load the account, seeding a fresh isolated workspace if none exists yet. */
