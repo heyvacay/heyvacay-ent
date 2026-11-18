@@ -13,12 +13,72 @@ import {
   GOOGLE_WS,
   SLACK,
   INTEGRATIONS_TABLE,
+  WORKSPACE_TABLE,
+  IDENTITIES_TABLE,
+  AWS_REGION,
   isLiveBooking,
   API_BASE_URL,
 } from '@/lib/config.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+/**
+ * Live check that the DynamoDB tables the app depends on actually exist and are
+ * ACTIVE in this environment. This is the ground truth behind "are we using a
+ * database?" — multi-device sync (workspace), durable passwords/sessions
+ * (identities) and OAuth token storage (integrations) all require their table to
+ * exist AND its *_DDB_TABLE env var to be wired onto the task by terraform.
+ */
+async function probeStorage() {
+  const tables: { key: string; name: string; table: string; envVarSet: boolean; powers: string }[] = [
+    {
+      key: 'workspace',
+      name: 'Workspace — shared per-company app state',
+      table: WORKSPACE_TABLE,
+      envVarSet: !!process.env.WORKSPACE_DDB_TABLE,
+      powers: 'Multi-device sync: every device in a company sees the same data',
+    },
+    {
+      key: 'identities',
+      name: 'Identities — accounts, passwords, sessions',
+      table: IDENTITIES_TABLE,
+      envVarSet: !!process.env.IDENTITIES_DDB_TABLE,
+      powers: 'Durable passwords + email verification + password reset',
+    },
+    {
+      key: 'integrations',
+      name: 'Integrations — OAuth tokens (QuickBooks, Xero, …)',
+      table: INTEGRATIONS_TABLE,
+      envVarSet: !!process.env.INTEGRATIONS_DDB_TABLE,
+      powers: 'Keeps each company connected across sessions/devices',
+    },
+  ];
+  let DescribeTableCommand: typeof import('@aws-sdk/client-dynamodb').DescribeTableCommand;
+  let client: import('@aws-sdk/client-dynamodb').DynamoDBClient;
+  try {
+    const mod = await import('@aws-sdk/client-dynamodb');
+    DescribeTableCommand = mod.DescribeTableCommand;
+    client = new mod.DynamoDBClient({ region: AWS_REGION });
+  } catch {
+    return tables.map((t) => ({ ...t, exists: false, status: 'sdk-unavailable' }));
+  }
+  return Promise.all(
+    tables.map(async (t) => {
+      try {
+        const res = await client.send(new DescribeTableCommand({ TableName: t.table }));
+        return { ...t, exists: true, status: res.Table?.TableStatus ?? 'UNKNOWN' };
+      } catch (e) {
+        const name = (e as { name?: string }).name ?? 'error';
+        return {
+          ...t,
+          exists: false,
+          status: name === 'ResourceNotFoundException' ? 'missing (run terraform apply)' : name,
+        };
+      }
+    })
+  );
+}
 
 /**
  * One place to see whether every integration's keys actually reached the running
@@ -28,7 +88,8 @@ export const dynamic = 'force-dynamic';
  * Each `configured:true` means "the key is present and the live path is on";
  * until then the feature runs on its built-in mock/fallback.
  */
-export function GET() {
+export async function GET() {
+  const storage = await probeStorage();
   const integrations = [
     {
       key: 'live_booking',
@@ -140,6 +201,10 @@ export function GET() {
   const connected = integrations.filter((i) => i.configured).length;
   return NextResponse.json({
     apiBase: API_BASE_URL,
+    storage: {
+      ok: storage.every((t) => t.exists),
+      tables: storage,
+    },
     connected,
     total: integrations.length,
     integrations,
