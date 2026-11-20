@@ -21,7 +21,13 @@ import {
   type RsvpStatus,
 } from '@/lib/events';
 import { estimateEventSpend } from '@/lib/eventPlanning';
-import { getAvailability, bookRestaurant, searchRestaurants } from '@/lib/restaurants';
+import {
+  getAvailability,
+  bookRestaurant,
+  searchRestaurants,
+  getRestaurantDetails,
+  type RestaurantDetails,
+} from '@/lib/restaurants';
 import {
   Badge,
   Button,
@@ -873,6 +879,9 @@ function DinnerPanel({
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState('19:00');
   const [hours, setHours] = useState(2);
+  // Restaurant whose full details (menu, reviews, experiences) the voter is
+  // previewing before casting a vote. null = modal closed.
+  const [infoCand, setInfoCand] = useState<DinnerCandidate | null>(null);
 
   if (!d) {
     const scheduled =
@@ -1183,12 +1192,31 @@ function DinnerPanel({
                     <p className="truncate text-sm font-semibold text-slate-800">{c.name}</p>
                     <p className="truncate text-xs text-slate-400">{c.cuisine} · ★ {c.rating}</p>
                     <p className="text-xs text-slate-400">{'$'.repeat(c.priceBand)} · {c.neighborhood}</p>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(ev) => { ev.stopPropagation(); setInfoCand(c); }}
+                      onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); setInfoCand(c); } }}
+                      className="mt-1 inline-block cursor-pointer text-xs font-semibold text-brand-dark hover:underline"
+                    >
+                      View details →
+                    </span>
                   </div>
                   <span className="self-center text-sm font-bold text-brand-dark">{count || ''}</span>
                 </button>
               );
             })}
           </div>
+          {infoCand && (
+            <RestaurantInfoModal
+              candidate={infoCand}
+              city={e.city}
+              canVote={joined}
+              alreadyMine={d.restaurantVotes[activeUserId] === infoCand.id}
+              onVote={() => { onVoteRestaurant(infoCand.id); setInfoCand(null); }}
+              onClose={() => setInfoCand(null)}
+            />
+          )}
           {isHost && (
             <Button className="mt-4" onClick={onBook} disabled={booking || restTally.length === 0}>
               {booking ? 'Booking…' : 'Book winner now'}
@@ -1378,5 +1406,174 @@ function RoomPolicyCard({
         )}
       </div>
     </Card>
+  );
+}
+
+/* ---------------- restaurant detail preview (before voting) ---------------- */
+
+function RestaurantInfoModal({
+  candidate,
+  city,
+  canVote,
+  alreadyMine,
+  onVote,
+  onClose,
+}: {
+  candidate: DinnerCandidate;
+  city: string;
+  canVote: boolean;
+  alreadyMine: boolean;
+  onVote: () => void;
+  onClose: () => void;
+}) {
+  const [details, setDetails] = useState<RestaurantDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    getRestaurantDetails(candidate.id)
+      .then((d) => { if (live) setDetails(d); })
+      .catch(() => { if (live) setDetails(null); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [candidate.id]);
+
+  const rs = details?.reviewSummary;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-xl dark:bg-slate-900 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* hero */}
+        <div className="relative h-44 w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={candidate.image} alt={candidate.name} className="h-44 w-full object-cover sm:rounded-t-2xl" />
+          <button
+            onClick={onClose}
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-5">
+          <h3 className="font-display text-xl font-bold text-slate-900 dark:text-white">{candidate.name}</h3>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {candidate.cuisine} · ★ {candidate.rating} · {'$'.repeat(candidate.priceBand)} · {candidate.neighborhood}, {city}
+          </p>
+
+          {loading && <p className="mt-4 text-sm text-slate-400">Loading details…</p>}
+
+          {/* review summary */}
+          {rs && (rs.overall || rs.count) && (
+            <div className="mt-4 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  ★ {rs.overall?.toFixed(1) ?? candidate.rating} overall
+                </span>
+                {rs.count != null && <span className="text-xs text-slate-400">{rs.count} reviews</span>}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
+                {rs.food != null && <span>Food {rs.food.toFixed(1)}</span>}
+                {rs.service != null && <span>Service {rs.service.toFixed(1)}</span>}
+                {rs.ambience != null && <span>Ambience {rs.ambience.toFixed(1)}</span>}
+                {rs.value != null && <span>Value {rs.value.toFixed(1)}</span>}
+              </div>
+              {rs.recommendPct != null && (
+                <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  {Math.round(rs.recommendPct)}% would recommend
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* menus */}
+          {details?.menus?.length ? (
+            <div className="mt-4">
+              <h4 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">Menu</h4>
+              {details.menus.slice(0, 2).map((m, mi) => (
+                <div key={mi} className="mb-3">
+                  {m.name && <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{m.name}</p>}
+                  {m.groups.slice(0, 3).map((g, gi) => (
+                    <div key={gi} className="mt-1.5">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{g.name}</p>
+                      <ul className="mt-0.5 space-y-1">
+                        {g.items.slice(0, 5).map((it) => (
+                          <li key={it.id} className="flex justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
+                            <span className="min-w-0">
+                              <span className="font-medium">{it.name}</span>
+                              {it.description && <span className="block text-slate-400">{it.description}</span>}
+                            </span>
+                            {it.price != null && <span className="shrink-0 tabular-nums">{money(it.price)}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            !loading && <p className="mt-4 text-sm text-slate-400">No published menu for this venue.</p>
+          )}
+
+          {/* experiences */}
+          {details?.experiences?.length ? (
+            <div className="mt-4">
+              <h4 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">Experiences</h4>
+              <ul className="space-y-1">
+                {details.experiences.slice(0, 3).map((x) => (
+                  <li key={x.id} className="flex justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
+                    <span className="min-w-0">
+                      <span className="font-medium">{x.name}</span>
+                      {x.description && <span className="block text-slate-400">{x.description}</span>}
+                    </span>
+                    {x.price != null && <span className="shrink-0 tabular-nums">{money(x.price)}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* a couple of reviews */}
+          {details?.reviews?.length ? (
+            <div className="mt-4">
+              <h4 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">What diners say</h4>
+              <div className="space-y-2">
+                {details.reviews.slice(0, 2).map((r, ri) => (
+                  <div key={ri} className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-white/5 dark:text-slate-300">
+                    <p className="font-semibold text-slate-700 dark:text-slate-200">
+                      {r.nickname ?? 'Guest'}{r.rating != null && <span className="font-normal text-slate-400"> · ★ {r.rating}</span>}
+                    </p>
+                    {r.text && <p className="mt-0.5">{r.text}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* actions */}
+          <div className="mt-5 flex gap-2">
+            <Button
+              className="flex-1"
+              disabled={!canVote || alreadyMine}
+              onClick={onVote}
+            >
+              {alreadyMine ? 'Your current vote ✓' : canVote ? 'Vote for this spot' : 'Join to vote'}
+            </Button>
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

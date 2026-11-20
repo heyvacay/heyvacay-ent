@@ -23,6 +23,15 @@ const INK = '#0e7490';
 const TRACK = '#f1f5f9';
 
 type Level = 'company' | 'department' | 'employee' | 'transactions' | 'explore';
+
+type RangeKey = '1d' | '1w' | '3m' | '1y' | 'ytd';
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: '1d', label: '1D' },
+  { key: '1w', label: '1W' },
+  { key: '3m', label: '3M' },
+  { key: '1y', label: '1Y' },
+  { key: 'ytd', label: 'YTD' },
+];
 const LEVELS: { value: Level; label: string }[] = [
   { value: 'company', label: 'Company' },
   { value: 'department', label: 'Department' },
@@ -150,9 +159,6 @@ export default function ReportsPage() {
     return months;
   }, [state.bookings, state.history]);
 
-  const spend6 = history6.reduce((s, h) => s + h.spend, 0);
-  const save6 = history6.reduce((s, h) => s + h.savings, 0);
-  const belowMkt = spend6 + save6 > 0 ? save6 / (spend6 + save6) : 0;
   const pointsIssued = state.points
     .filter((p) => p.delta > 0)
     .reduce((s, p) => s + p.delta, 0);
@@ -160,16 +166,65 @@ export default function ReportsPage() {
     .filter((e) => e.synced)
     .reduce((s, e) => s + e.amount, 0);
 
-  const savingsSeries = history6.map((h) => ({
-    label: h.month,
-    value: h.savings,
-    hint: `${h.month}: ${money(h.savings)} saved on ${money(h.spend)} spent`,
-  }));
-
   const liveBookings = useMemo(
     () => state.bookings.filter((b) => b.status !== 'cancelled'),
     [state.bookings]
   );
+
+  // Selectable reporting window: 1 day, 1 week, 3 months, 1 year, year-to-date.
+  const [range, setRange] = useState<RangeKey>('3m');
+  const { rangeStart, rangeLabel } = useMemo(() => {
+    const now = new Date();
+    const d = new Date(now);
+    switch (range) {
+      case '1d': d.setDate(now.getDate() - 1); return { rangeStart: d, rangeLabel: 'last 24 hours' };
+      case '1w': d.setDate(now.getDate() - 7); return { rangeStart: d, rangeLabel: 'last 7 days' };
+      case '3m': d.setMonth(now.getMonth() - 3); return { rangeStart: d, rangeLabel: 'last 3 months' };
+      case '1y': d.setFullYear(now.getFullYear() - 1); return { rangeStart: d, rangeLabel: 'last 12 months' };
+      case 'ytd': return { rangeStart: new Date(now.getFullYear(), 0, 1), rangeLabel: 'year to date' };
+      default: return { rangeStart: d, rangeLabel: '' };
+    }
+  }, [range]);
+
+  const scopedRange = useMemo(
+    () => liveBookings.filter((b) => new Date(b.createdAt || b.startDate) >= rangeStart),
+    [liveBookings, rangeStart]
+  );
+  const spendR = scopedRange.reduce((s, b) => s + (b.price || 0), 0);
+  const saveR = scopedRange.reduce((s, b) => s + (b.savings || 0), 0);
+  const belowMktR = spendR + saveR > 0 ? saveR / (spendR + saveR) : 0;
+
+  // Trend buckets sized to the range: daily for 1d/1w, monthly for 3m/1y/ytd.
+  const rangeSeries = useMemo(() => {
+    const now = new Date();
+    const daily = range === '1d' || range === '1w';
+    const buckets: { label: string; start: Date; end: Date; spend: number; savings: number }[] = [];
+    if (daily) {
+      const days = range === '1d' ? 1 : 7;
+      for (let i = days - 1; i >= 0; i--) {
+        const s = new Date(now); s.setHours(0, 0, 0, 0); s.setDate(now.getDate() - i);
+        const e = new Date(s); e.setDate(s.getDate() + 1);
+        buckets.push({ label: s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), start: s, end: e, spend: 0, savings: 0 });
+      }
+    } else {
+      const monthsBack = range === '3m' ? 3 : range === '1y' ? 12 : now.getMonth() + 1;
+      for (let i = monthsBack - 1; i >= 0; i--) {
+        const s = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const e = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        buckets.push({ label: s.toLocaleString('en-US', { month: 'short' }), start: s, end: e, spend: 0, savings: 0 });
+      }
+    }
+    for (const b of liveBookings) {
+      const d = new Date(b.createdAt || b.startDate);
+      const bk = buckets.find((x) => d >= x.start && d < x.end);
+      if (bk) { bk.spend += b.price || 0; bk.savings += b.savings || 0; }
+    }
+    return buckets.map((x) => ({
+      label: x.label,
+      value: x.savings,
+      hint: `${x.label}: ${money(x.savings)} saved on ${money(x.spend)} spent`,
+    }));
+  }, [range, liveBookings]);
 
   const byDept = useMemo(() => {
     const map = new Map<string, { spend: number; savings: number; trips: number }>();
@@ -421,14 +476,34 @@ export default function ReportsPage() {
       {/* ---------------- Company ---------------- */}
       {level === 'company' && (
         <>
+          {/* Reporting window selector */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-500">Period</span>
+            <div className="inline-flex rounded-xl border border-slate-200 bg-white p-0.5 dark:border-white/10 dark:bg-white/5">
+              {RANGES.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => setRange(r.key)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                    range === r.key
+                      ? 'bg-brand text-navy'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               accent
               label="Saved vs market"
-              value={money(save6)}
-              sub={`${pct(belowMkt)} below market · last 6 mo`}
+              value={money(saveR)}
+              sub={`${pct(belowMktR)} below market · ${rangeLabel}`}
             />
-            <StatCard label="Travel spend" value={money(spend6)} sub="Last 6 months" />
+            <StatCard label="Travel spend" value={money(spendR)} sub={rangeLabel} />
             <StatCard label="Reward points issued" value={num(pointsIssued)} sub="To your team" />
             <StatCard label="Posted to accounting" value={money2(reconciled)} sub="Reconciled expenses" />
           </div>
@@ -436,12 +511,12 @@ export default function ReportsPage() {
           <Card className="mt-6">
             <div className="mb-1 flex items-center justify-between">
               <h2 className="font-display text-lg font-bold text-slate-900">Savings delivered</h2>
-              <span className="text-sm text-slate-400">last 6 months</span>
+              <span className="text-sm text-slate-400">{rangeLabel}</span>
             </div>
             <p className="mb-5 text-sm text-slate-400">
-              Each month&apos;s below-market savings on your managed travel.
+              Below-market savings on your managed travel over the {rangeLabel}.
             </p>
-            <VBars data={savingsSeries} />
+            <VBars data={rangeSeries} />
           </Card>
 
           <Card className="mt-6">

@@ -230,7 +230,7 @@ export const DEFAULT_GL: Record<string, string> = {
   Other: '6900 · Other Expenses',
 };
 
-/** Trailing 6-month spend & savings (~15% below market), ending this month. */
+/** Trailing 6-month spend & savings (~17% below market), ending this month. */
 const HISTORY_SPEND = [410, 560, 520, 720, 910, 672];
 const HISTORY_SAVE = [72, 99, 92, 127, 161, 119];
 const history = Array.from({ length: 6 }).map((_, i) => {

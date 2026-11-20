@@ -197,7 +197,7 @@ export default function SignupPage() {
     setForm((f) => ({ ...f, [k]: v }));
 
   const estimate = useMemo(
-    () => Math.round(form.annualSpend * 0.15),
+    () => Math.round(form.annualSpend * 0.17),
     [form.annualSpend]
   );
 
@@ -675,7 +675,7 @@ export default function SignupPage() {
                   {money(estimate)}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  ~15% below market on {money(form.annualSpend)} of travel — plus{' '}
+                  ~17% below market on {money(form.annualSpend)} of travel — plus{' '}
                   {num(Math.round(estimate * 1.5))} reward points for your team.
                 </p>
               </div>

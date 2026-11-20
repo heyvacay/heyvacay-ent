@@ -80,7 +80,7 @@ export function SignContract({ id }: { id: string }) {
   const t = ct.terms;
   const sig = ct.signatures ?? {};
   const fullyExecuted = Boolean(sig.heyvacay && sig.customer);
-  const estSavings = Math.round(c.annualSpend * 0.15);
+  const estSavings = Math.round(c.annualSpend * 0.17);
 
   return (
     <div className="min-h-screen bg-slate-50 py-10">
@@ -115,7 +115,7 @@ export function SignContract({ id }: { id: string }) {
               ['Term', `${t.termMonths} months`],
               ['Start', t.startDate],
               ['ACV', money(ct.value)],
-              ['Est. savings', `${money(estSavings)} (~15%)`],
+              ['Est. savings', `${money(estSavings)} (~17%)`],
               ['Payment', t.paymentTerms],
               ['Support', t.supportTier],
             ].map(([k, v]) => (

@@ -90,7 +90,7 @@ const INTRO_CARDS: { Icon: typeof Globe; title: string; desc: string }[] = [
 ];
 
 export function SetupWizard({ onDone }: { onDone: () => void }) {
-  const { state, activeUser, setCompanySetup, completeSetup, inviteUser, setIntegrationStatus } =
+  const { state, activeUser, setCompanySetup, setCompanyApprovalMode, completeSetup, inviteUser, setIntegrationStatus } =
     useStore();
   const company = state.company;
   const firstName = (activeUser.name ?? 'there').trim().split(' ')[0] || 'there';
@@ -164,6 +164,11 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
       });
     } else if (step.key === 'approval') {
       setCompanySetup({ requireApproval });
+      // Actually enforce the choice: 'pre_approval' routes every trip to a
+      // manager (so approval-required bookings show in Approvals), 'open' lets
+      // in-policy trips book instantly. Without this the choice was recorded but
+      // never applied, so nothing ever landed in Approvals.
+      setCompanyApprovalMode(requireApproval ? 'pre_approval' : 'open');
     } else if (step.key === 'departments') {
       setCompanySetup({ departments });
     }
@@ -209,6 +214,10 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
         /* non-fatal */
       }
     }
+    // Safety net: make sure the approval rule is applied even if the approval
+    // step's handler was skipped by non-linear navigation.
+    setCompanySetup({ requireApproval });
+    setCompanyApprovalMode(requireApproval ? 'pre_approval' : 'open');
     completeSetup(activeUser.name);
     setDone(true);
   };

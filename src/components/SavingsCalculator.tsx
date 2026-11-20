@@ -6,10 +6,10 @@ import { Sparkles } from '@/components/icons';
 const PRESETS = [100_000, 500_000, 1_000_000, 5_000_000];
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
-/** "See how much you can save" — mirrors the self-signup savings reveal (~15%). */
+/** "See how much you can save" — mirrors the self-signup savings reveal (~17%). */
 export function SavingsCalculator() {
   const [spend, setSpend] = useState(1_000_000);
-  const savings = Math.round(spend * 0.15);
+  const savings = Math.round(spend * 0.17);
 
   return (
     <div className="mx-auto max-w-3xl rounded-3xl border border-brand/20 bg-white p-6 shadow-sm sm:p-10">
@@ -20,7 +20,7 @@ export function SavingsCalculator() {
         See how much you can save
       </h3>
       <p className="mt-2 text-center text-sm text-slate-500">
-        Enter your annual travel spend — companies like yours typically save ~15% with HeyVacay.
+        Enter your annual travel spend — companies like yours typically save ~17% with HeyVacay.
       </p>
 
       <div className="mt-6 flex flex-wrap justify-center gap-2">

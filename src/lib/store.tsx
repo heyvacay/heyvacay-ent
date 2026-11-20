@@ -117,13 +117,53 @@ function reconcileRemote(local: AppState, remote: AppState): AppState {
     // Prepend local-only (most-recently created) so new trips stay at the top.
     return localOnly.length ? [...localOnly, ...r] : r;
   };
-  return {
+  return preserveConfig(local, {
     ...remote,
     bookings: keepLocalOnly(remote.bookings, local.bookings) ?? remote.bookings,
     expenses: keepLocalOnly(remote.expenses, local.expenses) ?? remote.expenses,
     points: keepLocalOnly(remote.points, local.points) ?? remote.points,
     policyChangeRequests: keepLocalOnly(remote.policyChangeRequests, local.policyChangeRequests),
     tripPlans: keepLocalOnly(remote.tripPlans, local.tripPlans),
+  });
+}
+
+/**
+ * Admin-owned *configuration* must not be reverted when we adopt an external
+ * copy of the workspace — a slightly-stale server pull, or (more commonly) a
+ * write the Nova CRM made for an unrelated reason (e.g. sending/approving KYC),
+ * which fires `hv-view-as-change` and makes the customer tab re-read a copy that
+ * predates the admin's latest settings. Root cause of three reported bugs:
+ *   - the guided-setup wizard re-appearing after it was completed,
+ *   - the company "approval required" mode silently reverting (so approval-
+ *     required bookings stopped routing to Approvals),
+ *   - budget edits "not reflecting".
+ * We keep the local value ONLY when the incoming copy is clearly behind (a
+ * completed setup vs. an uncompleted one; a non-empty budget/policy list vs. an
+ * empty one; a stricter approval mode vs. the default). A genuine cross-device
+ * change (which carries real, non-empty values) still wins.
+ */
+function preserveConfig(local: AppState, next: AppState): AppState {
+  const curSetup = local.company?.setup;
+  const nextSetup = next.company?.setup;
+  // A completed setup is sticky: never let an uncompleted copy re-open the wizard.
+  const setup = curSetup?.completedAt && !nextSetup?.completedAt ? curSetup : nextSetup;
+  // Keep a non-default company approval mode if the incoming copy is default/open.
+  const nextMode = next.company?.approvalMode;
+  const curMode = local.company?.approvalMode;
+  const approvalMode =
+    curMode && curMode !== 'open' && (!nextMode || nextMode === 'open') ? curMode : nextMode;
+  const company = { ...next.company, setup, approvalMode };
+  const keepIfIncomingEmpty = <T,>(cur: T[] | undefined, inc: T[] | undefined) =>
+    (inc?.length ?? 0) === 0 && (cur?.length ?? 0) > 0 ? cur : inc;
+  return {
+    ...next,
+    company,
+    budgets: keepIfIncomingEmpty(local.budgets, next.budgets) ?? next.budgets,
+    policies: keepIfIncomingEmpty(local.policies, next.policies) ?? next.policies,
+    departmentApprovalModes:
+      next.departmentApprovalModes && Object.keys(next.departmentApprovalModes).length === 0
+        ? local.departmentApprovalModes
+        : next.departmentApprovalModes,
   };
 }
 
@@ -486,9 +526,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // KYC from the CRM, or another tab/device edited this workspace): adopt
           // the external change, but never clobber our own identical state (no
           // churn / no feedback loop, since our own writes don't fire 'storage').
-          setState((cur) =>
-            JSON.stringify(cur) !== JSON.stringify(nextState) ? nextState : cur
-          );
+          // preserveConfig keeps admin-owned settings (completed setup, approval
+          // mode, budgets, policies) that the external copy is behind on.
+          setState((cur) => {
+            const merged = preserveConfig(cur, nextState);
+            return JSON.stringify(cur) !== JSON.stringify(merged) ? merged : cur;
+          });
           if (parsed.role) setRole((r) => (r !== parsed.role ? (parsed.role as Role) : r));
         }
       } else if (switching) {
