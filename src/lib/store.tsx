@@ -504,6 +504,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const loadedKeyRef = useRef<string | null>(null);
   // Debounce timer for pushing the workspace to the shared server store.
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic revision of the local state (ms epoch, bumped on every save). Any
+  // state we ADOPT from elsewhere (another tab's `storage` event, a view-as/CRM
+  // re-read, or the async server pull) must carry a strictly-newer rev, so a
+  // slightly-stale snapshot can never revert an edit the user just made. This is
+  // the guard that makes "click Save and it sticks" true for budgets, approval
+  // mode, policies — everything.
+  const revRef = useRef<number>(0);
 
   // Read the active account + rep-viewing flag from storage.
   useEffect(() => {
@@ -542,19 +549,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
-        const parsed = JSON.parse(raw) as { state?: AppState; role?: Role };
+        const parsed = JSON.parse(raw) as { state?: AppState; role?: Role; rev?: number };
         const nextState = parsed.state ? mergeLoaded(parsed.state) : base();
         if (switching) {
-          // New account → load it wholesale.
+          // New account → load it wholesale and adopt its revision.
           setState(nextState);
           setRole(parsed.role ?? 'admin');
-        } else {
-          // SAME account, re-fired by an external write (e.g. a Nova rep approved
-          // KYC from the CRM, or another tab/device edited this workspace): adopt
-          // the external change, but never clobber our own identical state (no
-          // churn / no feedback loop, since our own writes don't fire 'storage').
-          // preserveConfig keeps admin-owned settings (completed setup, approval
-          // mode, budgets, policies) that the external copy is behind on.
+          revRef.current = parsed.rev ?? 0;
+        } else if ((parsed.rev ?? 0) > revRef.current) {
+          // SAME account, and the stored copy is strictly NEWER than ours — e.g.
+          // another tab or the Nova CRM wrote it. Adopt it (keeping local-only
+          // records), and move our revision up. A copy that is same-or-older than
+          // ours is ignored, so re-read events can never revert a fresh edit.
+          revRef.current = parsed.rev ?? revRef.current;
           setState((cur) => {
             const merged = preserveConfig(cur, nextState);
             return JSON.stringify(cur) !== JSON.stringify(merged) ? merged : cur;
@@ -611,8 +618,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!hydrated) return;
     const key = acctKey(activeAccount?.id);
     if (loadedKeyRef.current !== key) return; // mid-switch; skip
+    // Stamp this save with a fresh revision so no older snapshot can revert it.
+    const rev = Math.max(Date.now(), revRef.current + 1);
+    revRef.current = rev;
     try {
-      localStorage.setItem(key, JSON.stringify({ state, role }));
+      localStorage.setItem(key, JSON.stringify({ state, role, rev }));
     } catch {
       /* ignore */
     }
