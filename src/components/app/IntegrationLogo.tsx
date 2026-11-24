@@ -113,6 +113,9 @@ const BRANDS: Record<string, Brand> = {
   veryfi: { render: () => <Tile bg="#17A2B8">V</Tile> },
   aerodatabox: { render: () => <Tile bg="#1E40AF">FS</Tile> },
   flight_status: { render: () => <Tile bg="#1E40AF">FS</Tile> },
+  // Ground transport
+  uber: { render: () => <Tile bg="#000000">U</Tile> },
+  lyft: { render: () => <Tile bg="#FF00BF">L</Tile> },
 };
 
 export function IntegrationLogo({

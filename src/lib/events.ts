@@ -157,6 +157,8 @@ export interface TravelEvent {
    *  cheaper of rideshare vs. rental car, 'rideshare' or 'rental' lock it to one.
    *  Undefined = inherit the company default (company.setup.groundTransport). */
   groundTransport?: import('./rideshare').GroundMode;
+  /** Per-event rideshare ride-class policy; undefined = inherit company default. */
+  ridePolicy?: import('./rideshare').RidePolicy;
   /** Requests to book a second stay for this event, keyed by user. */
   extraStayRequests?: ExtraStayRequest[];
   messages: EventMessage[];

@@ -31,6 +31,14 @@ export const ArrowRight = (p: IconProps) => (
   </Base>
 );
 
+export const CarTaxi = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M9 3h6l1 4H8l1-4z" />
+    <path d="M5 11l1.5-4h11L19 11" />
+    <path d="M4 11h16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-1a2 2 0 1 1-4 0H9a2 2 0 1 1-4 0H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z" />
+  </Base>
+);
+
 export const Plane = (p: IconProps) => (
   <Base {...p}>
     <path d="M10.5 13.5 3 11l1-2 8 1 4.5-5c.8-.8 2.2-.9 3 0 .8.8.7 2.1 0 3l-5 4.5 1 8-2 1-2.5-7.5-3 3L6 19l-1.5-.5L4.5 17z" />

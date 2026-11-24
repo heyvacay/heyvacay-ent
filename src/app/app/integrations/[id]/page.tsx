@@ -98,10 +98,11 @@ export default function IntegrationDetailPage() {
   const isCard = CARD_IDS.includes(integration.id);
   const isNetSuite = integration.id === 'netsuite';
   const isExpensify = integration.id === 'expensify';
+  const isRideshare = integration.id === 'uber' || integration.id === 'lyft';
   const isRealAccounting = isQuickBooks || isXero;
   // Any integration with its own real panel (owns its connect/disconnect).
   const isRealIntegration =
-    isRealAccounting || isBambooHR || isSlack || isTeams || isRoster || isCard || isNetSuite || isExpensify;
+    isRealAccounting || isBambooHR || isSlack || isTeams || isRoster || isCard || isNetSuite || isExpensify || isRideshare;
 
   const connect = () => {
     setConnecting(true);
@@ -164,6 +165,28 @@ export default function IntegrationDetailPage() {
       {isCard && <CardFeedPanel integration={integration} />}
       {isNetSuite && <NetSuitePanel integration={integration} />}
       {isExpensify && <ExpensifyPanel integration={integration} />}
+      {isRideshare && (
+        <Card>
+          <h2 className="mb-1 font-display text-lg font-bold text-slate-900 dark:text-white">
+            {integration.name} rides
+          </h2>
+          <p className="text-sm text-slate-500">
+            {integration.id === 'uber' ? 'Uber' : 'Lyft'} ride booking is powered by a HeyVacay
+            platform key (set once in your environment), so every company gets it with no per-account
+            setup. Travelers book from <span className="font-medium">Book a ride</span>, and you set
+            which ride classes are allowed, need approval, or are blocked under{' '}
+            <span className="font-medium">Policies → Rideshare</span>. Until the platform key is
+            connected, rides show live-style estimates and the Book button hands off to the{' '}
+            {integration.id === 'uber' ? 'Uber' : 'Lyft'} app.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button href="/app/rides">Book a ride</Button>
+            <Button variant="outline" href="/app/policies">
+              Ride policy
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* ---- not connected: connect panel ---- */}
       {!isRealIntegration && !connected && (

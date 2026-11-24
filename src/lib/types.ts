@@ -59,6 +59,9 @@ export interface CompanySetup {
   /** Company-wide default ground-transport policy (rideshare vs. rental car).
    *  'any' lets travelers pick the cheaper option; events can override this. */
   groundTransport?: import('./rideshare').GroundMode;
+  /** Company-wide rideshare policy: which ride tiers are allowed / need approval
+   *  / blocked, plus a per-ride fare cap. Events can override. */
+  ridePolicy?: import('./rideshare').RidePolicy;
 }
 
 export interface Company {
@@ -284,7 +287,7 @@ export interface TripPlan {
   reviewNote?: string;
 }
 
-export type BookingType = 'hotel' | 'flight';
+export type BookingType = 'hotel' | 'flight' | 'rideshare';
 export type BookingStatus = 'confirmed' | 'pending_approval' | 'cancelled';
 
 export interface Booking {
@@ -378,6 +381,12 @@ export interface Booking {
   refundStatus?: 'pending' | 'processed';
   /** Free-cancellation deadline captured at booking time (ISO date). */
   cancelDeadline?: string;
+  /** Rideshare (Uber/Lyft) specifics, set when type === 'rideshare'. */
+  rideProvider?: import('./rideshare').RideProvider;
+  /** Deep link to complete/track the ride in the provider app (fallback path). */
+  rideDeepLink?: string;
+  /** Latest provider ride status (processing / accepted / completed / …). */
+  rideStatus?: string;
 }
 
 export interface ChatMessage {
@@ -485,10 +494,11 @@ export interface HotelDetails {
 
 export type OptionDetails = FlightDetails | HotelDetails;
 
-/** A bookable option returned by search. */
+/** A bookable option returned by search. Flights + hotels only — rideshare uses
+ *  its own RideOption shape (see lib/rideshare.ts). */
 export interface InventoryOption {
   id: string;
-  type: BookingType;
+  type: 'hotel' | 'flight';
   title: string;
   detail: string;
   marketPrice: number;
@@ -525,7 +535,8 @@ export type IntegrationCategory =
   | 'HR / HRIS'
   | 'Expense & cards'
   | 'Identity'
-  | 'Comms';
+  | 'Comms'
+  | 'Ground transport';
 
 export type IntegrationStatus = 'available' | 'requested' | 'connected';
 

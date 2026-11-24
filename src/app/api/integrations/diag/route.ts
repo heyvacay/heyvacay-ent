@@ -12,6 +12,8 @@ import {
   GUSTO,
   GOOGLE_WS,
   SLACK,
+  UBER,
+  LYFT,
   INTEGRATIONS_TABLE,
   WORKSPACE_TABLE,
   IDENTITIES_TABLE,
@@ -186,6 +188,8 @@ export async function GET() {
       verify: '/app/integrations/teams',
     },
     { key: 'gusto', name: 'Gusto — roster sync (OAuth2)', configured: GUSTO.configured, powers: 'Import employees', verify: '/app/integrations/gusto' },
+    { key: 'uber', name: 'Uber for Business — ride booking (Guest Rides API)', configured: UBER.configured, powers: 'Book Uber rides on behalf of travelers + ride-class policy', verify: '/app/rides' },
+    { key: 'lyft', name: 'Lyft Business — ride booking (Concierge API)', configured: LYFT.configured, powers: 'Book Lyft rides on behalf of travelers + ride-class policy', verify: '/app/rides' },
     { key: 'google', name: 'Google Workspace — user sync (OAuth2)', configured: GOOGLE_WS.configured, powers: 'Import directory users', verify: '/app/integrations/google' },
     // Per-company (admin enters their own credentials in the UI) — always "ready".
     { key: 'rippling', name: 'Rippling — roster sync (per-company API key)', configured: true, powers: 'Import employees', verify: '/app/integrations/rippling' },

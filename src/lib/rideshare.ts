@@ -150,3 +150,163 @@ export function tripDays(startISO?: string, endISO?: string): number {
   if (!Number.isFinite(ms)) return 1;
   return clampDays(ms / 86_400_000 + 1);
 }
+
+/* ============================================================================
+ * RIDESHARE BOOKING — ride classes, per-class policy, and the normalized option
+ * shape the UI/API share. Built for Uber for Business (Guest Rides API) and Lyft
+ * Business (Concierge API). rideshare.ts stays import-free (types.ts imports it),
+ * so the policy action union is defined locally rather than imported.
+ * ==========================================================================*/
+
+export type RideProvider = 'uber' | 'lyft';
+export const RIDE_PROVIDERS: RideProvider[] = ['uber', 'lyft'];
+export const RIDE_PROVIDER_LABEL: Record<RideProvider, string> = { uber: 'Uber', lyft: 'Lyft' };
+
+/** Four policy tiers that every provider ride class maps onto. */
+export type RideTier = 'standard' | 'xl' | 'premium' | 'luxury';
+export const RIDE_TIERS: RideTier[] = ['standard', 'xl', 'premium', 'luxury'];
+export const RIDE_TIER_LABEL: Record<RideTier, string> = {
+  standard: 'Standard',
+  xl: 'XL / group',
+  premium: 'Premium',
+  luxury: 'Luxury',
+};
+export const RIDE_TIER_SUB: Record<RideTier, string> = {
+  standard: 'UberX, Uber Green, Lyft — everyday rides',
+  xl: 'UberXL, Lyft XL — 5–6 seats',
+  premium: 'Uber Comfort, Lyft Extra Comfort — newer cars, more legroom',
+  luxury: 'Uber Black / Black SUV, Lyft Lux / Lux SUV — premium vehicles',
+};
+
+/** The action applied to a ride class by policy. */
+export type RidePolicyAction = 'allow' | 'approve' | 'block';
+
+export interface RideClass {
+  /** Provider product key (Uber product_id family / Lyft ride_type). For Uber the
+   *  real product_id is resolved per-city from the estimates API; this is the
+   *  stable family key we map policy + display on. */
+  key: string;
+  provider: RideProvider;
+  label: string;
+  tier: RideTier;
+  seats: number;
+}
+
+/** The catalog of ride classes we surface, by provider. Lyft ride_type values are
+ *  the literal API values; Uber keys are the product families (resolved to a live
+ *  product_id at estimate time). */
+export const RIDE_CATALOG: Record<RideProvider, RideClass[]> = {
+  uber: [
+    { key: 'uberx', provider: 'uber', label: 'UberX', tier: 'standard', seats: 4 },
+    { key: 'uber_green', provider: 'uber', label: 'Uber Green', tier: 'standard', seats: 4 },
+    { key: 'uber_comfort', provider: 'uber', label: 'Uber Comfort', tier: 'premium', seats: 4 },
+    { key: 'uberxl', provider: 'uber', label: 'UberXL', tier: 'xl', seats: 6 },
+    { key: 'uber_black', provider: 'uber', label: 'Uber Black', tier: 'luxury', seats: 4 },
+    { key: 'uber_black_suv', provider: 'uber', label: 'Uber Black SUV', tier: 'luxury', seats: 6 },
+  ],
+  lyft: [
+    { key: 'lyft', provider: 'lyft', label: 'Lyft', tier: 'standard', seats: 4 },
+    { key: 'lyft_xl', provider: 'lyft', label: 'Lyft XL', tier: 'xl', seats: 6 },
+    { key: 'lyft_preferred', provider: 'lyft', label: 'Extra Comfort', tier: 'premium', seats: 4 },
+    { key: 'lyft_lux', provider: 'lyft', label: 'Lyft Lux', tier: 'luxury', seats: 4 },
+    { key: 'lyft_luxsuv', provider: 'lyft', label: 'Lux SUV', tier: 'luxury', seats: 6 },
+  ],
+};
+
+export function rideClassesFor(provider: RideProvider): RideClass[] {
+  return RIDE_CATALOG[provider];
+}
+export function findRideClass(provider: RideProvider, key: string): RideClass | undefined {
+  return RIDE_CATALOG[provider].find((c) => c.key === key);
+}
+
+/** Company/event rideshare policy: per-tier action + an optional max fare cap. */
+export interface RidePolicy {
+  /** Action per tier. Missing tier = 'allow'. */
+  tierActions?: Partial<Record<RideTier, RidePolicyAction>>;
+  /** Hard cap per ride (USD). A ride estimated above this needs approval. */
+  maxFare?: number;
+  /** Which provider(s) are allowed. Empty/undefined = both. */
+  providers?: RideProvider[];
+}
+
+/** Sensible default: everyday + group rides book freely, premium needs approval,
+ *  luxury is blocked. Admins can relax or tighten any tier. */
+export const DEFAULT_RIDE_POLICY: RidePolicy = {
+  tierActions: { standard: 'allow', xl: 'allow', premium: 'approve', luxury: 'block' },
+  maxFare: 150,
+};
+
+/** Resolve the effective action for a specific ride (tier + estimated fare). */
+export function evaluateRidePolicy(
+  policy: RidePolicy | undefined,
+  tier: RideTier,
+  fareEstimate?: number,
+  provider?: RideProvider
+): { action: RidePolicyAction; reason?: string } {
+  const p = policy ?? DEFAULT_RIDE_POLICY;
+  if (provider && p.providers && p.providers.length && !p.providers.includes(provider)) {
+    return { action: 'block', reason: `${RIDE_PROVIDER_LABEL[provider]} is not enabled by your company.` };
+  }
+  const tierAction = p.tierActions?.[tier] ?? 'allow';
+  if (tierAction === 'block') return { action: 'block', reason: `${RIDE_TIER_LABEL[tier]} rides are not allowed.` };
+  if (p.maxFare != null && fareEstimate != null && fareEstimate > p.maxFare) {
+    return { action: 'approve', reason: `Over the $${p.maxFare} per-ride cap — needs approval.` };
+  }
+  return { action: tierAction };
+}
+
+/** Normalized ride option returned by the estimate API and rendered by the UI. */
+export interface RideOption {
+  provider: RideProvider;
+  /** Provider product key / ride_type (our catalog key). */
+  classKey: string;
+  label: string;
+  tier: RideTier;
+  seats: number;
+  etaMinutes?: number;
+  fareLow?: number;
+  fareHigh?: number;
+  currency: string;
+  /** Uber upfront-fare id (passed back into the booking call), when present. */
+  fareId?: string;
+  /** Live provider product_id resolved at estimate time (Uber), when present. */
+  productId?: string;
+  /** Whether this came from a live provider call vs. the estimate model. */
+  live: boolean;
+}
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
+/** Simple, documented straight-line estimate used for the fare model fallback and
+ *  the savings calc when no live provider fare is available. Haversine miles. */
+export function milesApart(a: LatLng, b: LatLng): number {
+  const R = 3958.8;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Per-tier fare multiplier over the base UberX/Lyft estimate, for the model. */
+export const RIDE_TIER_MULTIPLIER: Record<RideTier, number> = {
+  standard: 1,
+  xl: 1.6,
+  premium: 1.35,
+  luxury: 2.4,
+};
+
+/** Model fare (USD) for a tier over a distance, when no live fare is available.
+ *  Base ≈ $2.5 base + $1.75/mi + $0.35/min (assume ~2.5 min/mi city). */
+export function modelFare(tier: RideTier, miles: number): number {
+  const base = 2.5 + 1.75 * miles + 0.35 * (miles * 2.5);
+  const withSurge = Math.max(8, base) * RIDE_TIER_MULTIPLIER[tier];
+  return Math.round(withSurge);
+}

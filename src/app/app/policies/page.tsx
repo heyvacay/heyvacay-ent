@@ -5,7 +5,18 @@ import { useStore } from '@/lib/store';
 import { Button, Card, Input, PageHeader, Select, cn } from '@/components/app/ui';
 import { CheckoutFieldsAdmin } from '@/components/app/CheckoutFieldsAdmin';
 import { CityPicker } from '@/components/app/CityPicker';
-import { Plane, Receipt, Shield, Check, Calendar, Users } from '@/components/icons';
+import { Plane, Receipt, Shield, Check, Calendar, Users, CarTaxi } from '@/components/icons';
+import {
+  RIDE_TIERS,
+  RIDE_TIER_LABEL,
+  RIDE_TIER_SUB,
+  RIDE_PROVIDERS,
+  RIDE_PROVIDER_LABEL,
+  DEFAULT_RIDE_POLICY,
+  type RidePolicy,
+  type RidePolicyAction,
+  type RideProvider,
+} from '@/lib/rideshare';
 import type {
   BookingApprovalMode,
   FlightCabinTier,
@@ -253,7 +264,11 @@ export default function PoliciesPage() {
     resolvePolicyChange,
     guestBookingMode,
     setGuestBookingMode,
+    setCompanyRidePolicy,
   } = useStore();
+  const ridePolicy = state.company.setup?.ridePolicy ?? DEFAULT_RIDE_POLICY;
+  const patchRidePolicy = (patch: Partial<RidePolicy>) =>
+    setCompanyRidePolicy({ ...ridePolicy, ...patch });
   const byType = (t: Policy['type']) => state.policies.find((p) => p.type === t);
   const companyMode = state.company.approvalMode ?? 'open';
 
@@ -959,6 +974,87 @@ export default function PoliciesPage() {
                 + {m.name}
               </Button>
             ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          icon={<CarTaxi className="h-4 w-4 text-brand-dark" />}
+          title="Rideshare (Uber & Lyft)"
+          sub="Which ride classes travelers can book, and when a ride needs approval."
+        >
+          <div className="space-y-2">
+            {RIDE_TIERS.map((tier) => {
+              const action: RidePolicyAction = ridePolicy.tierActions?.[tier] ?? 'allow';
+              return (
+                <div
+                  key={tier}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-white/10"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {RIDE_TIER_LABEL[tier]}
+                    </p>
+                    <p className="text-xs text-slate-400">{RIDE_TIER_SUB[tier]}</p>
+                  </div>
+                  <Select
+                    value={action}
+                    onChange={(e) =>
+                      patchRidePolicy({
+                        tierActions: { ...ridePolicy.tierActions, [tier]: e.target.value as RidePolicyAction },
+                      })
+                    }
+                    className="w-40"
+                  >
+                    <option value="allow">Book freely</option>
+                    <option value="approve">Needs approval</option>
+                    <option value="block">Blocked</option>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              Per-ride cap
+              <span className="text-slate-400">$</span>
+              <Input
+                type="number"
+                className="w-28"
+                value={ridePolicy.maxFare ?? ''}
+                placeholder="none"
+                onChange={(e) =>
+                  patchRidePolicy({ maxFare: e.target.value ? Math.max(0, Number(e.target.value)) : undefined })
+                }
+              />
+              <span className="text-xs text-slate-400">rides over this need approval</span>
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-slate-500">Providers:</span>
+            {RIDE_PROVIDERS.map((p) => {
+              const enabled = !ridePolicy.providers || ridePolicy.providers.includes(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => {
+                    const cur = ridePolicy.providers ?? [...RIDE_PROVIDERS];
+                    const next = cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p];
+                    patchRidePolicy({ providers: next.length ? (next as RideProvider[]) : [] });
+                  }}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-sm font-medium transition',
+                    enabled
+                      ? 'border-brand bg-brand/5 text-brand-dark'
+                      : 'border-slate-200 text-slate-400 line-through dark:border-white/10'
+                  )}
+                >
+                  {RIDE_PROVIDER_LABEL[p]}
+                </button>
+              );
+            })}
           </div>
         </SectionCard>
 

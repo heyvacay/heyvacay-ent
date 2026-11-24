@@ -215,6 +215,8 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'google', name: 'Google Workspace', category: 'Identity', blurb: 'One-click SSO with Google.', status: 'available' },
   { id: 'slack', name: 'Slack', category: 'Comms', blurb: 'Approvals and trip alerts right in Slack.', status: 'available' },
   { id: 'teams', name: 'Microsoft Teams', category: 'Comms', blurb: 'Approvals and trip alerts right in Microsoft Teams.', status: 'available' },
+  { id: 'uber', name: 'Uber for Business', category: 'Ground transport', blurb: 'Book Uber rides on policy — set which ride types are allowed, flagged, or blocked.', status: 'available' },
+  { id: 'lyft', name: 'Lyft Business', category: 'Ground transport', blurb: 'Book Lyft rides on policy — ride-class rules, fare caps, and savings vs. rental.', status: 'available' },
 ];
 
 /** Integration ids that post expenses to a general ledger. */

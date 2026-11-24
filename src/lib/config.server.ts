@@ -107,6 +107,39 @@ export const FLIGHT_STATUS = {
   },
 };
 
+/**
+ * Uber for Business — Guest Rides API (book rides on behalf of employees).
+ * Auth is OAuth2 client_credentials against auth.uber.com; the token is cached
+ * (see integrations/uber.server.ts). One HeyVacay-level app powers all customers
+ * (platform key model). Until the keys are set, the ride flow runs on the fare
+ * MODEL (lib/rideshare.ts) and the Book button falls back to a deep link.
+ */
+export const UBER = {
+  tokenUrl: process.env.UBER_TOKEN_URL || 'https://auth.uber.com/oauth/v2/token',
+  base: process.env.UBER_API_BASE?.replace(/\/+$/, '') || 'https://api.uber.com',
+  clientId: process.env.UBER_CLIENT_ID || '',
+  clientSecret: process.env.UBER_CLIENT_SECRET || '',
+  scope: process.env.UBER_SCOPE || 'guests.trips',
+  get configured() {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
+/**
+ * Lyft Business — Concierge API (request rides for a passenger by phone).
+ * OAuth2 two-legged (client_credentials) against api.lyft.com/oauth/token.
+ */
+export const LYFT = {
+  tokenUrl: process.env.LYFT_TOKEN_URL || 'https://api.lyft.com/oauth/token',
+  base: process.env.LYFT_API_BASE?.replace(/\/+$/, '') || 'https://api.lyft.com/v1',
+  clientId: process.env.LYFT_CLIENT_ID || '',
+  clientSecret: process.env.LYFT_CLIENT_SECRET || '',
+  scope: process.env.LYFT_SCOPE || 'rides.request',
+  get configured() {
+    return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
 /** Transactional email (approvals, dinner invites, offers). */
 export const EMAIL = {
   apiKey: process.env.EMAIL_API_KEY || '',

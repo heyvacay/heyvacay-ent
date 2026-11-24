@@ -40,6 +40,12 @@ import { SEED } from './seed';
 import { autoBookOnApproval, type AutoBookResult } from './approvalBooking';
 import { uid, todayISO } from './format';
 import { rewardsFor } from './rewards';
+import {
+  RIDE_PROVIDER_LABEL,
+  type RideProvider,
+  type RidePolicy,
+  type RidePolicyAction,
+} from './rideshare';
 import { sendEmail } from './email';
 import { computeDunning, invoicePeriodPaid, type DunningState } from './dunning';
 import { fetchWorkspace, pushWorkspace } from './workspaceSync';
@@ -364,6 +370,27 @@ export interface StoreApi {
     /** Live supplier payload to really book this on approval (approval path). */
     liveContext?: LiveBookingContext;
   }) => Booking;
+  /** Record a rideshare booking (Uber/Lyft). The caller resolves the policy
+   *  action (allow → confirmed, approve → pending_approval); 'block' never books. */
+  bookRide: (args: {
+    provider: RideProvider;
+    classKey: string;
+    label: string;
+    action: RidePolicyAction;
+    pickupLabel: string;
+    dropoffLabel: string;
+    fareLow?: number;
+    fareHigh?: number;
+    travelerId?: string;
+    eventId?: string;
+    eventName?: string;
+    policyNote?: string;
+    providerRef?: string;
+    providerStatus?: string;
+    deepLink?: string;
+  }) => Booking;
+  /** Set the company-wide rideshare ride-class policy. */
+  setCompanyRidePolicy: (policy: RidePolicy) => void;
   /** Company rule: whether booking for a custom/guest name needs approval. */
   guestBookingMode: GuestBookingMode;
   setGuestBookingMode: (mode: GuestBookingMode) => void;
@@ -1346,6 +1373,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [evaluatePolicies, approvalModeFor, state.activeUserId, state.users, state.company.approvalMode, activeUser.department]
   );
 
+  const bookRide: StoreApi['bookRide'] = useCallback(
+    (a) => {
+      const travelerId = a.travelerId ?? state.activeUserId;
+      const traveler = state.users.find((u) => u.id === travelerId);
+      const needsApproval = a.action === 'approve';
+      const price = a.fareLow ?? a.fareHigh ?? 0;
+      const market = a.fareHigh ?? a.fareLow ?? 0;
+      const booking: Booking = {
+        id: uid('bk'),
+        type: 'rideshare',
+        title: `${a.label} · ${RIDE_PROVIDER_LABEL[a.provider]}`,
+        detail: `${a.pickupLabel} → ${a.dropoffLabel}`,
+        travelerId,
+        bookedById: state.activeUserId,
+        department: traveler?.department ?? activeUser.department,
+        startDate: todayISO(),
+        endDate: todayISO(),
+        marketPrice: market,
+        price,
+        savings: 0,
+        pointsEarned: 0,
+        status: needsApproval ? 'pending_approval' : 'confirmed',
+        createdAt: todayISO(),
+        policyNotes: a.policyNote ? [a.policyNote] : [],
+        destination: a.dropoffLabel,
+        eventId: a.eventId,
+        eventName: a.eventName,
+        supplierRef: a.providerRef,
+        rideProvider: a.provider,
+        rideDeepLink: a.deepLink,
+        rideStatus: a.providerStatus,
+      };
+      setState((s) => ({ ...s, bookings: [booking, ...s.bookings] }));
+      return booking;
+    },
+    [state.activeUserId, state.users, activeUser.department]
+  );
+
+  const setCompanyRidePolicy: StoreApi['setCompanyRidePolicy'] = useCallback(
+    (policy) =>
+      setState((s) => ({
+        ...s,
+        company: { ...s.company, setup: { ...(s.company.setup ?? {}), ridePolicy: policy } },
+      })),
+    []
+  );
+
   const approveBooking: StoreApi['approveBooking'] = useCallback(
     (id, note, noteVisible = true) => {
       setState((s) => {
@@ -2133,6 +2207,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     requestNet30,
     updateBudgetLimit,
     setScopedBudget,
+    bookRide,
+    setCompanyRidePolicy,
     addPolicy,
     togglePolicy,
     updatePolicy,

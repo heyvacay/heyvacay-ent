@@ -33,6 +33,7 @@ import {
   Route,
   Lock,
   Leaf,
+  CarTaxi,
 } from '@/components/icons';
 
 type NavItem = { href: string; label: string; icon: typeof ChartBar };
@@ -70,6 +71,7 @@ const ADMIN_NAV: NavSection[] = [
       { href: '/app/dashboard', label: 'Dashboard', icon: ChartBar },
       { href: '/app/book', label: 'Book travel', icon: MapPin },
       { href: '/app/plan', label: 'Plan a trip', icon: Route },
+      { href: '/app/rides', label: 'Book a ride', icon: CarTaxi },
     ],
   },
   {
@@ -110,6 +112,7 @@ const EMPLOYEE_NAV: NavSection[] = [
     items: [
       { href: '/app/book', label: 'Home', icon: MapPin },
       { href: '/app/plan', label: 'Plan a trip', icon: Route },
+      { href: '/app/rides', label: 'Book a ride', icon: CarTaxi },
       { href: '/app/trips', label: 'My trips', icon: Calendar },
       { href: '/app/events', label: 'Events', icon: Users },
       { href: '/app/restaurants', label: 'Dining', icon: MapPin },
