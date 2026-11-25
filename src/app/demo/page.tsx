@@ -21,10 +21,10 @@ const SLIDES: Slide[] = [
   {
     section: 'Overview',
     title: 'HeyVacay Enterprise',
-    body: 'Corporate travel & expense that is 100% free to the company. We earn a commission on bookings — only when you save. Companies typically cut travel spend ~17% through negotiated rates and policy controls.',
+    body: 'Corporate travel & expense that is 100% free to the company. We earn a commission on bookings — only when you save. Companies typically cut travel spend ~15% through negotiated rates and policy controls.',
     points: [
       'Free forever — no seat fees, no platform fees by default',
-      '~17% below market on flights + hotels',
+      '~15% below market on flights + hotels',
       'Every booking policy-checked, on budget, and rewarded',
     ],
     live: { label: 'Open the marketing site', href: '/' },
@@ -134,8 +134,8 @@ const SLIDES: Slide[] = [
   {
     section: 'Close',
     title: 'How companies save',
-    body: 'Negotiated rates (~17% under market), policy controls that stop overspend before it happens, savings-based rewards that nudge cheaper choices, and zero software cost. That is the pitch.',
-    points: ['~17% below market', 'Overspend blocked up front', 'Free — we win when you save'],
+    body: 'Negotiated rates (~15% under market), policy controls that stop overspend before it happens, savings-based rewards that nudge cheaper choices, and zero software cost. That is the pitch.',
+    points: ['~15% below market', 'Overspend blocked up front', 'Free — we win when you save'],
     live: { label: 'See the savings calculator', href: '/#calculator' },
   },
 ];

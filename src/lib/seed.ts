@@ -149,35 +149,35 @@ const bookings: Booking[] = [
     id: 'bk_1', type: 'flight', title: 'SFO → JFK', detail: 'United · Economy · round trip',
     travelerId: 'u_marcus', bookedById: 'u_dana', department: 'Sales',
     startDate: addDays(T, -18), endDate: addDays(T, -15),
-    marketPrice: 842, price: 611, savings: 231, pointsEarned: 153,
+    marketPrice: 842, price: 716, savings: 126, pointsEarned: 153,
     status: 'confirmed', createdAt: addDays(T, -26),
   },
   {
     id: 'bk_2', type: 'hotel', title: 'The Standard, New York', detail: '3 nights · King · refundable',
     travelerId: 'u_marcus', bookedById: 'u_dana', department: 'Sales',
     startDate: addDays(T, -18), endDate: addDays(T, -15),
-    marketPrice: 1290, price: 1044, savings: 246, pointsEarned: 261,
+    marketPrice: 1290, price: 1096, savings: 194, pointsEarned: 261,
     status: 'confirmed', createdAt: addDays(T, -26),
   },
   {
     id: 'bk_3', type: 'flight', title: 'SEA → AUS', detail: 'Alaska · Economy · round trip',
     travelerId: 'u_priya', bookedById: 'u_priya', department: 'Engineering',
     startDate: addDays(T, 9), endDate: addDays(T, 12),
-    marketPrice: 498, price: 404, savings: 94, pointsEarned: 101,
+    marketPrice: 498, price: 423, savings: 75, pointsEarned: 101,
     status: 'confirmed', createdAt: addDays(T, -4),
   },
   {
     id: 'bk_4', type: 'hotel', title: 'Hotel Van Zandt, Austin', detail: '3 nights · Queen · breakfast',
     travelerId: 'u_priya', bookedById: 'u_priya', department: 'Engineering',
     startDate: addDays(T, 9), endDate: addDays(T, 12),
-    marketPrice: 960, price: 828, savings: 132, pointsEarned: 207,
+    marketPrice: 960, price: 816, savings: 144, pointsEarned: 207,
     status: 'pending_approval', createdAt: addDays(T, -4),
   },
   {
     id: 'bk_5', type: 'flight', title: 'JFK → LHR', detail: 'Delta · Economy · round trip',
     travelerId: 'u_leo', bookedById: 'u_leo', department: 'Engineering',
     startDate: addDays(T, 24), endDate: addDays(T, 30),
-    marketPrice: 1180, price: 905, savings: 275, pointsEarned: 226,
+    marketPrice: 1180, price: 1003, savings: 177, pointsEarned: 226,
     status: 'confirmed', createdAt: addDays(T, -2),
   },
 ];
@@ -232,7 +232,7 @@ export const DEFAULT_GL: Record<string, string> = {
   Other: '6900 · Other Expenses',
 };
 
-/** Trailing 6-month spend & savings (~17% below market), ending this month. */
+/** Trailing 6-month spend & savings (~15% below market), ending this month. */
 const HISTORY_SPEND = [410, 560, 520, 720, 910, 672];
 const HISTORY_SAVE = [72, 99, 92, 127, 161, 119];
 const history = Array.from({ length: 6 }).map((_, i) => {
