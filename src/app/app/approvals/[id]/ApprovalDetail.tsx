@@ -406,22 +406,30 @@ export default function ApprovalDetail({ id }: { id: string }) {
             {(rateRefreshing || (pending && b.type === 'hotel' && matchedCurrent != null)) && (
               <div
                 className={cn(
-                  'mt-4 flex items-start gap-2 rounded-xl p-3 text-sm',
+                  'mt-4 flex items-start gap-2.5 rounded-xl border p-3 text-sm',
                   rateRefreshing
-                    ? 'bg-slate-50 text-slate-600'
+                    ? 'border-blue-200 bg-blue-50 text-blue-800'
                     : rateDelta > 0
-                      ? 'bg-amber-50 text-amber-800'
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
                       : rateDelta < 0
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-slate-50 text-slate-600'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-600'
                 )}
               >
                 {rateRefreshing ? (
                   <>
-                    <span className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
+                    <span className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
                     <span>
-                      Re-checking the current rate with the hotel… showing the requested price{' '}
-                      <span className="font-semibold">{money(b.price)}</span> until it&apos;s back.
+                      <span className="font-semibold text-blue-900">
+                        Checking the live price with the hotel…
+                      </span>{' '}
+                      <span className="inline-flex items-center gap-1 align-middle text-xs font-medium text-blue-700">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                        in progress
+                      </span>
+                      <br />
+                      Confirming the current rate against the requested price{' '}
+                      <span className="font-semibold">{money(b.price)}</span> — just a moment.
                     </span>
                   </>
                 ) : (
